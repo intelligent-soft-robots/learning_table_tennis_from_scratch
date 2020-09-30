@@ -14,7 +14,9 @@ frequency_manager = o80.FrequencyManager(1.0/(period_ms/1000.0))
 
 hysr = HysrOneBall(mujoco_id,
                    real_robot,
+                   None, # no reference posture to go to between episodes
                    target_position,
+                   period_ms,
                    reward_normalization_constant,
                    smash_task,
                    period_ms)
