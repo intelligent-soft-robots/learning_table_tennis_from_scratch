@@ -16,7 +16,7 @@ frequency_manager = o80.FrequencyManager(1.0/(period_ms/1000.0))
 reference_posture = [[20000,12000],[12000,22000],[15000,15000],[15000,15000]]
 swing_posture = [[14000,22000],[14000,22000],[17000,13000],[14000,16000]]
 
-hysr = HysrOneBall(mujoco_id,
+hysr = HysrOneBallBurst(mujoco_id,
                    real_robot,
                    reference_posture,
                    target_position,
@@ -31,15 +31,13 @@ hysr.reset()
 # the robot performs the swing motion
 # manually selected so that sometimes the racket hits the ball,
 # sometimes it does not
-ts = 0.5
-time_switches = []
-while ts<=0.8:
-    time_switches.append(ts)
-    ts+=0.025
+base=0.2
+time_switches = [0.25,0.275,0.3,0.325,0.35,0.375,0.4,0.425]
+time_switches = [base+ts for ts in time_switches]
 
 for episode,time_switch in enumerate(time_switches):
 
-    print("EPISODE",episode,time_switch)
+    print("EPISODE",episode)
     
     running = True
     time_start = time.time()
