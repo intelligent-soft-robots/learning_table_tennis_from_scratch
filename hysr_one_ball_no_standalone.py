@@ -182,20 +182,8 @@ class HysrOneBall:
     
     def close(self):
 
-        # stopping mirroring
-        o80_pam.stop_mirroring(self._mirror_id)
-        # stopping pseudo real robot
-        if self._process_pressures:
-            pam_mujoco.request_stop(self._mujoco_id_pressures)
-        # stopping simulated robot/ball
-        pam_mujoco.request_stop(self._mujoco_id_ball)
-        # waiting for all corresponding processes
-        # to finish
-        if self._process_pressures:
-            self._process_pressures.join()
-        self._process_sim.join()
-        self._process_mirror.join()
-
+        #nothing to do
+        pass
 
 
         
