@@ -45,7 +45,7 @@ class _Observation:
         self.ball_velocity = ball_velocity
 
     
-class HysrOneBall:
+class HysrOneBallBurst:
 
     def __init__(self,
                  mujoco_id,
@@ -85,13 +85,17 @@ class HysrOneBall:
         self._segment_id_ball = mujoco_id+"_ball"
         self._segment_id_mirror_robot = mujoco_id+"_robot"
         self._segment_id_contact_robot = mujoco_id+"_contact_robot"
+        self._segment_id_burst = self._segment_id_mirror_robot 
         self._mujoco_id_ball = self._segment_id_ball+"_mujoco"
         
         # start simulated ball and robot
+        # bursting mode : will run iterations only when
+        # self._ball_communication (see below) 's burst method is called
         self._process_sim = pam_mujoco.start_mujoco.ball_and_robot(self._mujoco_id_ball,
                                                                    self._segment_id_mirror_robot,
                                                                    self._segment_id_contact_robot,
-                                                                   self._segment_id_ball)
+                                                                   self._segment_id_ball,
+                                                                   self._segment_id_burst) 
 
         
         # start pseudo-real robot (pressure controlled)
@@ -100,18 +104,10 @@ class HysrOneBall:
                                                                                 self._segment_id_pressures)
         else:
             self._process_pressures = None
+
+        # to send mirroring commands to simulated robot
+        self._mirroring = o80_pam.o80RobotMirroring(self._segment_id_mirror_robot)
             
-
-        # starting a process that has the simulated robot
-        # mirroring the pseudo-real robot
-        # (uses o80 in the background)
-        self._mirror_id = mujoco_id+"_mirror"
-        mirroring_period_ms = 10
-        self._process_mirror = o80_pam.start_mirroring(self._mirror_id,
-                                                       self._segment_id_mirror_robot,
-                                                       self._segment_id_pressures,
-                                                       mirroring_period_ms)
-
         # to get information regarding the ball
         self._ball_communication = o80_pam.o80Ball(self._segment_id_ball)
         
@@ -146,8 +142,8 @@ class HysrOneBall:
         trajectory_points.append(last_state)
         # setting the ball to the first trajectory point
         self._ball_communication.set(trajectory_points[0].position,
-                                     trajectory_points[0].velocity,
-                                     wait=True)
+                                     trajectory_points[0].velocity)
+        self._mirroring.burst(5)
         # shooting the ball
         self._ball_communication.play_trajectory(trajectory_points)
 
@@ -169,6 +165,33 @@ class HysrOneBall:
     # action assumed to be [(pressure ago, pressure antago), (pressure_ago, pressure_antago), ...]
     def step(self,action):
 
+        print("\nA")
+
+        # read real robot informations
+        (pressures_ago,pressures_antago,
+         joint_positions,joint_velocities) = self._pressure_commands.read()
+
+        print("B")
+        
+        # send mirroring commands to simulated robot
+        self._mirroring.set(joint_positions,joint_velocities)
+
+        print("C",joint_positions,joint_velocities)
+        
+        # run 10 simulation iterations (i.e. 100Hz)
+        self._mirroring.burst(10)
+
+        print("D")
+        
+        # sending pressures to pseudo real robot
+        self._pressure_commands.set(action,duration_ms=None,wait=False)
+
+        print("E")
+        
+        #
+        # generating observations
+        #
+        
         # getting information about simulated ball
         ball_position,ball_velocity = self._ball_communication.get()
 
@@ -181,31 +204,26 @@ class HysrOneBall:
         self._ball_status.update(ball_position,ball_velocity,
                                  racket_contact_information)
 
-        # generating observation
-        pressures_ago,pressures_antago,_,__ = self._pressure_commands.read()
+        # observation instance
         observation = _Observation(pressures_ago,pressures_antago,
                                    self._ball_status.ball_position,
                                    self._ball_status.ball_velocity)
         
-        # sending pressures to pseudo real robot
-        #self._pressure_commands.set(action,duration_ms=self._period_ms,wait=False)
-        self._pressure_commands.set(action,duration_ms=None,wait=False)
 
         reward = 0
         episode_over = self._episode_over()
 
         if episode_over:
-            # computing reward
             if self._smash_task:
                 reward = _reward( self._ball_status.min_distance_ball_target,
                                   self._ball_status.min_distance_ball_racket,
                                   self._ball_status.max_ball_velocity,
-                                  self._c,self._rtt_cap)
+                                  self._c,self._rtt_cap )
             else:
                 reward = _reward( self._ball_status.min_distance_ball_target,
                                   self._ball_status.min_distance_ball_racket,
                                   None,
-                                  self._c,self._rtt_cap)
+                                  self._c,self._rtt_cap )
             
             
         
