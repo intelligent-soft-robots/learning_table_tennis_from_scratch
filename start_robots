@@ -1,0 +1,3 @@
+#! /bin/bash
+
+(pam_mujoco no-graphics accelerated bursting) & (sleep 2 && pam_visualization) & (sleep 4 && o80_pam mujoco no-plotting no-console)

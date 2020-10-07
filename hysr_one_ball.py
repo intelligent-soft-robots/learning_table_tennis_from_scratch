@@ -53,7 +53,7 @@ class HysrOneBall:
 
     def __init__(self,
                  accelerated_time,
-                 o80_pam_time_step,
+                 o80_time_step,
                  mujoco_id,
                  mujoco_time_step,
                  algo_time_step,
@@ -71,7 +71,7 @@ class HysrOneBall:
         self._accelerated_time = accelerated_time
         if accelerated_time:
             self._o80_time_step = o80_time_step
-            self._nb_robot_burst = int(algo_time_step/o80_time_step)
+            self._nb_robot_bursts = int(algo_time_step/o80_time_step)
 
         # pam_mujoco (i.e. simulated ball and robot) should have been
         # started in accelerated time. It burst through algorithm
@@ -108,7 +108,12 @@ class HysrOneBall:
         
         # to send mirroring commands to simulated robot
         self._mirroring = o80_pam.o80RobotMirroring(SEGMENT_ID_ROBOT_MIRROR)
-            
+
+        
+    def get_robot_iteration(self):
+
+        return self._pressure_commands.get_iteration()
+        
         
     def reset(self):
 
@@ -185,7 +190,7 @@ class HysrOneBall:
         # if accelerated times, running the pseudo real robot iterations
         # (note : o80_pam expected to have started in bursting mode)
         if self._accelerated_time:
-            self._pressure_commands.burst(self._robot_nb_bursts)
+            self._pressure_commands.burst(self._nb_robot_bursts)
         
         # sending mirroring state to simulated robot
         self._mirroring.set(joint_positions,joint_velocities)
