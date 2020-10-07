@@ -10,4 +10,4 @@ Assuming dev/setup.bash is being sourced in all new terminal, to run things:
 
 - if running in accelerated time:
     - from a terminal execute the executable start_robots_accelerated
-    - in another terminal, python run ```python hysr_one_ball_random.py accelerated``` or ```python hysr_one_ball_swing.py```
+    - in another terminal, python run ```python hysr_one_ball_random.py accelerated``` or ```python hysr_one_ball_swing.py accelerated```
