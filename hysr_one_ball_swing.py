@@ -1,3 +1,4 @@
+import sys
 import time
 import random
 import o80
@@ -14,7 +15,7 @@ o80_pam_time_step = 0.002
 mujoco_id = "hysr_demo"
 mujoco_time_step = 0.002
 algo_time_step = 0.01
-target_position = [1,4,-0.44]
+target_position = [0.45,2.7,0.17]
 reward_normalization_constant = 1.0
 smash_task = True
 rtt_cap = 0.2
@@ -35,8 +36,7 @@ def execute(accelerated_time):
                        reward_normalization_constant,
                        smash_task,
                        rtt_cap=rtt_cap,
-                       trajectory_index=37)
-
+                       trajectory_index=37) # always plays this trajectory. Set to None for random.
 
     hysr.reset()
     frequency_manager = o80.FrequencyManager(1.0/algo_time_step)
@@ -53,8 +53,6 @@ def execute(accelerated_time):
 
     # converting time switches from seconds to nb of iterations
     iteration_switches = [(1.0/o80_pam_time_step) * ts for ts in time_switches]
-
-
 
     for episode,iteration_switch in enumerate(iteration_switches):
 

@@ -7,6 +7,8 @@ import pam_mujoco
 import context
 
 SEGMENT_ID_BALL = pam_mujoco.segment_ids.ball
+SEGMENT_ID_GOAL = pam_mujoco.segment_ids.goal
+SEGMENT_ID_HIT_POINT = pam_mujoco.segment_ids.hit_point
 SEGMENT_ID_CONTACT_ROBOT = pam_mujoco.segment_ids.contact_robot
 SEGMENT_ID_ROBOT_MIRROR = pam_mujoco.segment_ids.mirroring
 SEGMENT_ID_PSEUDO_REAL_ROBOT = o80_pam.segment_ids.robot
@@ -64,6 +66,10 @@ class HysrOneBall:
                  rtt_cap=0.2,
                  trajectory_index=None):
 
+        # moving the goal to the target position
+        goal = o80_pam.o80Goal(SEGMENT_ID_GOAL)
+        goal.set(target_position,[0,0,0])
+
         # if o80_pam (i.e. the pseudo real robot)
         # has been started in accelerated time,
         # the corresponding o80 backend will burst through
@@ -109,6 +115,9 @@ class HysrOneBall:
         # to send mirroring commands to simulated robot
         self._mirroring = o80_pam.o80RobotMirroring(SEGMENT_ID_ROBOT_MIRROR)
 
+        # to move the hit point marker
+        self._hit_point = o80_pam.o80HitPoint(SEGMENT_ID_HIT_POINT)
+        
         
     def get_robot_iteration(self):
 
@@ -117,13 +126,16 @@ class HysrOneBall:
         
     def reset(self):
 
+        # resetting the hit point 
+        self._hit_point.set([0,0,-0.62],[0,0,0])
+        
         # resetting ball info, e.g. min distance ball/racket, etc
         self._ball_status.reset()
-        
+
         # resetting ball/robot contact information
         pam_mujoco.reset_contact(SEGMENT_ID_CONTACT_ROBOT)
         time.sleep(0.1)
-        
+
         # moving real robot back to reference posture
         if self._reference_posture is not None:
             self._pressure_commands.set(self._reference_posture,
@@ -132,32 +144,32 @@ class HysrOneBall:
                 self._pressure_commands.burst(int(o80_time_step/1500.0)+1)
             else:
                 self._pressure_commands.pulse_and_wait()
-                
+
         # moving simulated robot to reference posture
         (pressures_ago,pressures_antago,
          joint_positions,joint_velocities) = self._pressure_commands.read()
         self._mirroring.set(joint_positions,joint_velocities,nb_iterations=100)
         self._mirroring.burst(100+1)
-        
+
         # getting a new trajectory
         if self._trajectory_index is not None:
             trajectory_points = context.BallTrajectories().get_trajectory(self._trajectory_index)
         else:
             trajectory_index,trajectory_points = context.BallTrajectories().random_trajectory()
-            
+
         # setting the last trajectory point way below the table, to be sure
         # end of episode will be detected
         last_state = context.State([0,0,-10.00],[0,0,0])
         trajectory_points.append(last_state)
-        
+
         # setting the ball to the first trajectory point
         self._ball_communication.set(trajectory_points[0].position,
                                      trajectory_points[0].velocity)
         self._mirroring.burst(5)
-        
+
         # shooting the ball
         self._ball_communication.play_trajectory(trajectory_points)
-
+        
             
     def _episode_over(self):
 
@@ -182,7 +194,7 @@ class HysrOneBall:
 
         # getting information about simulated ball
         ball_position,ball_velocity = self._ball_communication.get()
-        
+
         # sending action pressures to real (or pseudo real) robot.
         # Should start acting now in the background if not accelerated time
         self._pressure_commands.set(action)
@@ -191,14 +203,14 @@ class HysrOneBall:
         # (note : o80_pam expected to have started in bursting mode)
         if self._accelerated_time:
             self._pressure_commands.burst(self._nb_robot_bursts)
-        
+
         # sending mirroring state to simulated robot
         self._mirroring.set(joint_positions,joint_velocities)
 
         # having the simulated robot/ball performing the right number of iterations
         # (note: simulated expected to run accelerated time)
         self._mirroring.burst(self._nb_sim_bursts)
-        
+
         # getting ball/racket contact information
         # note : racket_contact_information is an instance
         #        of context.ContactInformation
@@ -208,6 +220,11 @@ class HysrOneBall:
         self._ball_status.update(ball_position,ball_velocity,
                                  racket_contact_information)
 
+        # moving the hit point to the minimal observed distance
+        # between ball and target (post racket hit)
+        if self._ball_status.min_position_ball_target is not None:
+            self._hit_point.set(self._ball_status.min_position_ball_target,[0,0,0])
+        
         # observation instance
         observation = _Observation(pressures_ago,pressures_antago,
                                    self._ball_status.ball_position,
@@ -216,7 +233,7 @@ class HysrOneBall:
         # checking if episode is over
         episode_over = self._episode_over()
         reward = 0
-
+        
         # if episode over, computing related reward
         if episode_over:
             if self._smash_task:
@@ -230,7 +247,7 @@ class HysrOneBall:
                                   None,
                                   self._c,self._rtt_cap )
             
-            
+                
         # returning
         return observation,reward,episode_over
 

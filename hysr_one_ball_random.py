@@ -18,7 +18,6 @@ smash_task = True
 rtt_cap = 0.2
 nb_episodes = 5
 
-
 def execute(accelerated_time):
 
     hysr = HysrOneBall(accelerated_time,
@@ -36,12 +35,13 @@ def execute(accelerated_time):
     hysr.reset()
     frequency_manager = o80.FrequencyManager(1.0/algo_time_step)
 
-    pressures = [ [ random.randrange(6000,22000),
-                    random.randrange(6000,22000) ]
+    pressures = [ [ random.randrange(14000,20000),
+                    random.randrange(14000,20000) ]
                   for _ in range(4) ]
 
     pressure_max_diff = 300
 
+    
     for _ in range(nb_episodes):
 
         running = True
@@ -54,7 +54,7 @@ def execute(accelerated_time):
                     diff = random.randrange(-pressure_max_diff,
                                             pressure_max_diff)
                     pressure += diff
-                    pressure = max(min(pressure,22000),6000)
+                    pressure = max(min(pressure,20000),14000)
                     pressures[dof][ago] = pressure
 
             observation,reward,reset = hysr.step(pressures)
