@@ -178,9 +178,13 @@ class HysrOneBall:
         # getting a new trajectory
         if self._trajectory_index is not None:
             trajectory_points = context.BallTrajectories().get_trajectory(self._trajectory_index)
+            print([tp.position for tp in trajectory_points])
+            print()
+            print([tp.velocity for tp in trajectory_points])
+            
         else:
             trajectory_index,trajectory_points = context.BallTrajectories().random_trajectory()
-
+            
         # setting the last trajectory point way below the table, to be sure
         # end of episode will be detected
         last_state = context.State([0,0,-10.00],[0,0,0])
