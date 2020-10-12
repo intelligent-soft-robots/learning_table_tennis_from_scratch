@@ -1,3 +1,4 @@
+import pickle
 import time
 import math
 import random
@@ -50,7 +51,13 @@ class _Observation:
         self.ball_position = ball_position
         self.ball_velocity = ball_velocity
 
-    
+
+class Data:
+    def __init__(self,robot,ball):
+        self.robot = robot
+        self.ball = ball
+
+        
 class HysrOneBall:
 
     def __init__(self,
@@ -118,11 +125,28 @@ class HysrOneBall:
         # to move the hit point marker
         self._hit_point = o80_pam.o80HitPoint(SEGMENT_ID_HIT_POINT)
         
+
+    def dump_data(self,
+                  episode,
+                  start_robot_iteration,
+                  start_ball_iteration):
+
+        path = "/tmp/hysr_one_ball_"+str(episode)+".pkl"
+        data_robot = self._pressure_commands.get_data(start_robot_iteration)
+        data_ball = self._ball_communication.get_data(start_ball_iteration)
+        pickle.dump(Data(data_robot,data_ball),open(path,"wb"))
+
         
     def get_robot_iteration(self):
 
         return self._pressure_commands.get_iteration()
-        
+
+
+    
+    def get_ball_iteration(self):
+
+        return self._ball_communication.get_iteration()
+    
         
     def reset(self):
 

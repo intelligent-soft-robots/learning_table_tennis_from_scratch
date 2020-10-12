@@ -58,14 +58,16 @@ def execute(accelerated_time):
 
         print("EPISODE",episode,iteration_switch)
 
-        start_iteration = hysr.get_robot_iteration()
+        start_robot_iteration = hysr.get_robot_iteration()
+        start_ball_iteration = hysr.get_ball_iteration()
+        
         running = True
 
         while running:
 
             current_iteration = hysr.get_robot_iteration()
 
-            if  (current_iteration - start_iteration) < iteration_switch :
+            if  (current_iteration - start_robot_iteration) < iteration_switch :
                 pressures = reference_posture
             else:
                 pressures = swing_posture
@@ -85,7 +87,8 @@ def execute(accelerated_time):
 
         hysr.reset()
         frequency_manager = o80.FrequencyManager(1.0/algo_time_step)
-
+        hysr.dump_data(episode,start_robot_iteration,start_ball_iteration)
+        
     hysr.close()
 
 
