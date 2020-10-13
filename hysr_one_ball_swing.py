@@ -2,9 +2,8 @@ import sys
 import time
 import random
 import o80
+import context
 from hysr_one_ball import HysrOneBall
-
-
 
 
 # default frequency for real/dummy robot
@@ -26,6 +25,10 @@ swing_posture = [[14000,22000],[14000,22000],[17000,13000],[14000,16000]]
 
 def execute(accelerated_time):
 
+    trajectory_index = 49
+    print("using ball trajectory file: ",
+          context.BallTrajectories().get_file_name(trajectory_index))
+    
     hysr = HysrOneBall(accelerated_time,
                        o80_pam_time_step,
                        mujoco_id,
@@ -36,7 +39,7 @@ def execute(accelerated_time):
                        reward_normalization_constant,
                        smash_task,
                        rtt_cap=rtt_cap,
-                       trajectory_index=37) # always plays this trajectory. Set to None for random.
+                       trajectory_index=trajectory_index) # always plays this trajectory. Set to None for random.
 
     hysr.reset()
     frequency_manager = o80.FrequencyManager(1.0/algo_time_step)
@@ -87,7 +90,6 @@ def execute(accelerated_time):
 
         hysr.reset()
         frequency_manager = o80.FrequencyManager(1.0/algo_time_step)
-        hysr.dump_data(episode,start_robot_iteration,start_ball_iteration)
         
     hysr.close()
 
