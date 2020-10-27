@@ -3,6 +3,7 @@ import time
 import random
 import o80
 import context
+from lightargs import BrightArgs
 from hysr_one_ball import HysrOneBall
 
 
@@ -97,7 +98,7 @@ def _configure():
     config = BrightArgs(str("hysr dummy demo using swing motion.\n"+
                             "to be started after start_robots or start_robots_accelerated.\n"+
                             "(in same folder)"))
-    config.add_operation("accelerated_time",
+    config.add_operation("accelerated",
                          "if used, start_robot_accelerated must have been started.")
     change_all=False
     finished  = config.dialog(change_all,sys.argv[1:])
@@ -106,10 +107,12 @@ def _configure():
     return config
 
 
+def _run():
+    config = _configure()
+    if config is None:
+        return
+    execute(config.accelerated)
+    
+
 if __name__ == "__main__":
-
-    accelerated = False
-    if("accelerated" in sys.argv):
-        accelerated = True
-
-    execute(accelerated)
+    _run()

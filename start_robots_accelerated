@@ -1,3 +1,6 @@
 #! /bin/bash
 
-(pam_mujoco no-graphics accelerated bursting) & (sleep 2 && pam_visualization) & (sleep 4 && o80_pam mujoco accelerated bursting no-plotting no-console)
+(o80_mujoco --no_graphics --accelerated --bursting_mode) & \
+    (pam_mujoco --accelerated --bursting_mode) & \
+    (pam_visualization -mujoco_id pam_robot_mujoco)
+
