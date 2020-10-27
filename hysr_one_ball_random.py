@@ -2,6 +2,7 @@ import sys
 import random
 import o80
 from hysr_one_ball import HysrOneBall
+from lightargs import BrightArgs,Set,Range,Positive
 
 
 # default frequency for real/dummy robot
@@ -9,7 +10,7 @@ from hysr_one_ball import HysrOneBall
 # default frequency for mujoco robot
 o80_pam_time_step = 0.002
 
-mujoco_id = "hysr_demo"
+mujoco_id = "hysr_on_ball_random"
 mujoco_time_step = 0.002
 algo_time_step = 0.01
 target_position = [1,4,-0.44]

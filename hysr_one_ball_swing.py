@@ -93,6 +93,18 @@ def execute(accelerated_time):
         
     hysr.close()
 
+def _configure():
+    config = BrightArgs(str("hysr dummy demo using swing motion.\n"+
+                            "to be started after start_robots or start_robots_accelerated.\n"+
+                            "(in same folder)"))
+    config.add_operation("accelerated_time",
+                         "if used, start_robot_accelerated must have been started.")
+    change_all=False
+    finished  = config.dialog(change_all,sys.argv[1:])
+    if not finished:
+        return None
+    return config
+
 
 if __name__ == "__main__":
 

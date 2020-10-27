@@ -279,8 +279,3 @@ class HysrOneBall:
     def close(self):
         pass
 
-
-
-        
-
-        
