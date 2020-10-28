@@ -14,56 +14,72 @@ SEGMENT_ID_CONTACT_ROBOT = pam_mujoco.segment_ids.contact_robot
 SEGMENT_ID_ROBOT_MIRROR = pam_mujoco.segment_ids.mirroring
 SEGMENT_ID_PSEUDO_REAL_ROBOT = o80_pam.segment_ids.robot
 
-def _reward( min_distance_ball_target,
-             min_distance_ball_racket, # None if ball hit racket
-             max_ball_velocity, # None if should not be taken into account (return task)
-             c,rtt_cap ): 
 
-    # returning r_hit
+def _hit_reward(self,min_distance_ball_racket):
+    return -min_distance_ball_racket
+    return None
 
-    if min_distance_ball_racket is not None:
-        return -min_distance_ball_racket
-    
-    # returning r_tt
 
+def _return_task_reward( min_distance_ball_target,
+                         c,
+                         rtt_cap ):
     reward = 1.- c * min_distance_ball_target ** 0.75
-    
-    # - return task
-    if max_ball_velocity is None: 
-        reward = max(reward,rtt_cap)
-        return reward
+    reward = max(reward,rtt_cap)
+    return reward
 
-    # - smash task
+
+def _smash_task_reward( min_distance_ball_target,
+                        max_ball_velocity,
+                        c,
+                        rtt_cap ):
+    reward = 1.- c * min_distance_ball_target ** 0.75
     reward = reward * max_ball_velocity
     reward = max(reward,rtt_cap)
     return reward
-            
+
+
+def _reward(smash, 
+            min_distance_ball_racket,
+            min_distance_ball_target,
+            c,
+            rtt_cap):
+    
+    if min_distance_ball_racket is not None:
+        return _hit_reward(min_distance_ball_racket)
+
+    if smash:
+        return _smash_reward( min_distance_ball_target,
+                              max_ball_velocity,
+                              c,
+                              rtt_cap )
+    
+    else:
+        return _return_task_reward( min_distance_ball_target,
+                                    c,
+                                    rtt_cap )
 
 class _Observation:
 
     def __init__(self,
+                 joint_positions,
+                 joint_velocities,
                  pressures_ago,
                  pressures_antago,
                  ball_position,
                  ball_velocity):
+        self.joint_positions = joint_positions
+        self.joint_velocities = joint_velocities
         self.pressures_ago = pressures_ago
         self.pressures_antago = pressures_antago
         self.ball_position = ball_position
         self.ball_velocity = ball_velocity
 
 
-class Data:
-    def __init__(self,robot,ball):
-        self.robot = robot
-        self.ball = ball
-
-        
 class HysrOneBall:
 
     def __init__(self,
                  accelerated_time,
                  o80_time_step,
-                 mujoco_id,
                  mujoco_time_step,
                  algo_time_step,
                  reference_posture,
@@ -126,26 +142,18 @@ class HysrOneBall:
         self._hit_point = o80_pam.o80HitPoint(SEGMENT_ID_HIT_POINT)
         
 
-    def dump_data(self,
-                  episode,
-                  start_robot_iteration,
-                  start_ball_iteration):
-
-        path = "/tmp/hysr_one_ball_"+str(episode)+".pkl"
-        data_robot = self._pressure_commands.get_data(start_robot_iteration)
-        data_ball = self._ball_communication.get_data(start_ball_iteration)
-        pickle.dump(Data(data_robot,data_ball),open(path,"wb"))
-
-        
     def get_robot_iteration(self):
-
         return self._pressure_commands.get_iteration()
-
 
     
     def get_ball_iteration(self):
-
         return self._ball_communication.get_iteration()
+
+
+    def get_current_desired_pressures(self):
+        (pressures_ago,pressures_antago,
+         _,__) = self._pressure_commands.read(desired=True)
+        return pressures_ago,pressures_antago
     
         
     def reset(self):
@@ -193,22 +201,34 @@ class HysrOneBall:
 
         # shooting the ball
         self._ball_communication.play_trajectory(trajectory_points)
+
+        # returning an observation
+        return self._create_observation()
         
             
     def _episode_over(self):
-
         over = False
-        
         # ball falled below the table
         # note : all prerecorded trajectories are added a last ball position
         # with z = -10.0, to insure this always occurs.
         # see: function reset
         if self._ball_status.ball_position[2] < -0.5:
             over = True
-
         return over
 
     
+    def create_observation(self):
+        # reading current real (or pseudo real) robot state
+        (pressures_ago,pressures_antago,
+         joint_positions,joint_velocities) = self._pressure_commands.read()
+        # getting information about simulated ball
+        ball_position,ball_velocity = self._ball_communication.get()
+        return _Observation( joint_positions,joint_velocities,
+                             pressures_ago,pressures_antago,
+                             ball_status.ball_position,
+                             ball_status.ball_velocity )
+
+        
     # action assumed to be [(pressure ago, pressure antago), (pressure_ago, pressure_antago), ...]
     def step(self,action):
 
@@ -250,7 +270,8 @@ class HysrOneBall:
             self._hit_point.set(self._ball_status.min_position_ball_target,[0,0,0])
         
         # observation instance
-        observation = _Observation(pressures_ago,pressures_antago,
+        observation = _Observation(joint_positions,joint_velocities,
+                                   pressures_ago,pressures_antago,
                                    self._ball_status.ball_position,
                                    self._ball_status.ball_velocity)
 
@@ -260,16 +281,11 @@ class HysrOneBall:
         
         # if episode over, computing related reward
         if episode_over:
-            if self._smash_task:
-                reward = _reward( self._ball_status.min_distance_ball_target,
-                                  self._ball_status.min_distance_ball_racket,
-                                  self._ball_status.max_ball_velocity,
-                                  self._c,self._rtt_cap )
-            else:
-                reward = _reward( self._ball_status.min_distance_ball_target,
-                                  self._ball_status.min_distance_ball_racket,
-                                  None,
-                                  self._c,self._rtt_cap )
+            reward = _reward( self._smash_task,
+                              self._ball_status.min_distance_ball_target,
+                              self._ball_status.min_distance_ball_racket,
+                              self._ball_status.max_ball_velocity,
+                              self._c,self._rtt_cap )
             
                 
         # returning

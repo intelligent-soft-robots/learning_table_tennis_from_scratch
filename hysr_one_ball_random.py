@@ -10,20 +10,18 @@ from lightargs import BrightArgs,Set,Range,Positive
 # default frequency for mujoco robot
 o80_pam_time_step = 0.002
 
-mujoco_id = "hysr_on_ball_random"
 mujoco_time_step = 0.002
 algo_time_step = 0.01
-target_position = [1,4,-0.44]
+target_position = (1.6,3.5,+1.5)
 reward_normalization_constant = 1.0
 smash_task = True
 rtt_cap = 0.2
-nb_episodes = 5
+nb_episodes = 3
 
 def execute(accelerated_time):
 
     hysr = HysrOneBall(accelerated_time,
                        o80_pam_time_step,
-                       mujoco_id,
                        mujoco_time_step,
                        algo_time_step,
                        None, # no reference posture to go to between episodes

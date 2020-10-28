@@ -12,7 +12,6 @@ from hysr_one_ball import HysrOneBall
 # default frequency for mujoco robot
 o80_pam_time_step = 0.002
 
-mujoco_id = "hysr_demo"
 mujoco_time_step = 0.002
 algo_time_step = 0.01
 target_position = [0.45,2.7,0.17]
@@ -32,7 +31,6 @@ def execute(accelerated_time):
     
     hysr = HysrOneBall(accelerated_time,
                        o80_pam_time_step,
-                       mujoco_id,
                        mujoco_time_step,
                        algo_time_step,
                        None, # no reference posture to go to between episodes
