@@ -1,6 +1,6 @@
 # Instructions
 
-- install the treep project "PAM_MUJOCO" following these [instructions](https://github.com/intelligent-soft-robots/intelligent-soft-robots.github.io/wiki).
+- install the required packages. See these [instructions](https://github.com/intelligent-soft-robots/intelligent-soft-robots.github.io/wiki/01_installation-from-debian)
 
 Assuming dev/setup.bash is being sourced in all new terminal, to run things:
 
