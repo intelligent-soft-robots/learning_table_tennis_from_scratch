@@ -58,19 +58,29 @@ def _reward(smash,
                                     c,
                                     rtt_cap )
 
+    
+def _convert_pressures_in(pressures):
+    # convert pressure from [ago1, antago1, ago2, antago2, ...]
+    # to [(ago1, antago1), (ago2, antago2), ...]
+    return list(zip(pressures[::2],pressures[1::2]))
+
+
+def _convert_pressures_out(pressures_ago,pressures_antago):
+    pressures = list(zip(pressures_ago,pressures_antago))
+    return [p for sublist in pressures for p in sublist]
+
+
 class _Observation:
 
     def __init__(self,
                  joint_positions,
                  joint_velocities,
-                 pressures_ago,
-                 pressures_antago,
+                 pressures,
                  ball_position,
                  ball_velocity):
         self.joint_positions = joint_positions
         self.joint_velocities = joint_velocities
-        self.pressures_ago = pressures_ago
-        self.pressures_antago = pressures_antago
+        self.pressures = pressures
         self.ball_position = ball_position
         self.ball_velocity = ball_velocity
 
@@ -229,7 +239,7 @@ class HysrOneBall:
                              ball_status.ball_velocity )
 
         
-    # action assumed to be [(pressure ago, pressure antago), (pressure_ago, pressure_antago), ...]
+    # action assumed to be np.array(ago1,antago1,ago2,antago2,...)
     def step(self,action):
 
         # reading current real (or pseudo real) robot state
@@ -241,7 +251,7 @@ class HysrOneBall:
 
         # sending action pressures to real (or pseudo real) robot.
         # Should start acting now in the background if not accelerated time
-        self._pressure_commands.set(action)
+        self._pressure_commands.set(_convert_pressures_in(list(action)))
 
         # if accelerated times, running the pseudo real robot iterations
         # (note : o80_pam expected to have started in bursting mode)
@@ -271,7 +281,8 @@ class HysrOneBall:
         
         # observation instance
         observation = _Observation(joint_positions,joint_velocities,
-                                   pressures_ago,pressures_antago,
+                                   convert_pressures_out(pressures_ago,
+                                                         pressures_antago),
                                    self._ball_status.ball_position,
                                    self._ball_status.ball_velocity)
 

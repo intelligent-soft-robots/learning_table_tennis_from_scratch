@@ -92,22 +92,6 @@ class HysrOneBallEnv(gym.GoalEnv):
                    self._config.pressure_min)
 
     
-    def _convert_observation(self,observation):
-        # convert observation as returned by HysrOneBall
-        # to gym observation space
-        pressures = [None]*self._config.nb_dofs*2
-        for dof in range(self._config.nb_dofs):
-            pressures[2*dof]=observation_.pressures_ago[dof]
-            pressures[2*dof+1]=observation_.pressures_antago[dof]
-        return {
-            "robot" : { "position":np.array(observation_.joint_positions),
-                        "velocity":np.array(observation_.joint_velocities),
-                        "pressures":np.array(pressure) },
-            "ball" : { "position":np.array(observation_.ball_position),
-                       "velocity":np.array(observation_.ball_velocity) }
-        }
-        
-        
     def step(self,action):
 
         # preparing action in a format suitable
@@ -128,8 +112,14 @@ class HysrOneBallEnv(gym.GoalEnv):
         observation,reward,episode_over = self._hysr.step(action)
 
         # formatting observation in a format suitable for gym
-        observation = self._convert_observation(observation)
-            
+        observation = {
+            "robot" : { "position":np.array(observation_.joint_positions),
+                        "velocity":np.array(observation_.joint_velocities),
+                        "pressures":np.array(observation.pressure) },
+            "ball" : { "position":np.array(observation_.ball_position),
+                       "velocity":np.array(observation_.ball_velocity) }
+        }
+        
         return observation,reward,episode_over,None
 
 
