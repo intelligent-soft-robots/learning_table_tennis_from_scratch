@@ -1,10 +1,12 @@
+#!/usr/bin/env python3
+
 import sys
 import time
 import random
 import o80
 import context
 from lightargs import BrightArgs
-from hysr_one_ball import HysrOneBall
+from learning_table_tennis_from_scratch.hysr_one_ball import HysrOneBall
 
 
 # default frequency for real/dummy robot
@@ -74,6 +76,9 @@ def execute(accelerated_time):
             else:
                 pressures = swing_posture
 
+            # converting to flat list
+            
+            
             observation,reward,reset = hysr.step(pressures)
 
             if not accelerated_time:

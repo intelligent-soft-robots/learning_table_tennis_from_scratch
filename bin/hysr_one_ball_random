@@ -1,7 +1,9 @@
+#!/usr/bin/env python3
+
 import sys
 import random
 import o80
-from hysr_one_ball import HysrOneBall
+from learning_table_tennis_from_scratch.hysr_one_ball import HysrOneBall
 from lightargs import BrightArgs,Set,Range,Positive
 
 
@@ -56,7 +58,9 @@ def execute(accelerated_time):
                     pressure = max(min(pressure,20000),14000)
                     pressures[dof][ago] = pressure
 
-            observation,reward,reset = hysr.step(pressures)
+
+            pressures_ = [p for sublist in pressures for p in sublist]
+            observation,reward,reset = hysr.step(pressures_)
 
             if not accelerated_time:
                 waited = frequency_manager.wait()

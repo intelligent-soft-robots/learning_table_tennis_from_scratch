@@ -1,6 +1,7 @@
 import math
 import gym
-from hysr_one_ball import HysrOneBall
+import numpy as np
+from .hysr_one_ball import HysrOneBall
 
 
 class Config:
@@ -19,7 +20,7 @@ class Config:
         self.pressure_change_range = (-500,500)
         self.reward_normalization_constant = 1.0
         self.smash_task = True
-        self.rtt_cap = 0.2
+        self.rtt_cap = -0.2
         self.nb_dofs = 4
         self.world_boundaries = { "min":(0.0,-1.0,+0.17), # x,y,z
                                   "max":(1.6,3.5,+1.5) }   
@@ -28,49 +29,51 @@ class Config:
 class HysrOneBallEnv(gym.GoalEnv):
     
     def __init__(self,
-                 config):
+                 config=None):
 
-        self._config = config
+        if config is None:
+            self._config = Config()
+        else:
+            self._config = config
         
-        self._hysr = HysrOneBall(config.accelerated_time,
-                                 config.o80_pam_time_step,
-                                 mujoco_id,
-                                 config.mujoco_time_step,
-                                 algo_time_step,
-                                 config.reference_posture, # no reference posture to go to between episodes
-                                 config.target_position,
-                                 config.reward_normalization_constant,
-                                 config.smash_task,
-                                 rtt_cap=config.rtt_cap)
+        self._hysr = HysrOneBall(self._config.accelerated_time,
+                                 self._config.o80_pam_time_step,
+                                 self._config.mujoco_time_step,
+                                 self._config.algo_time_step,
+                                 self._config.reference_posture,
+                                 self._config.target_position,
+                                 self._config.reward_normalization_constant,
+                                 self._config.smash_task,
+                                 rtt_cap=self._config.rtt_cap)
         
-        self.action_space = gym.spaces.Box(low=config.min_pressure,
-                                           high=config.max_pressure,
-                                           shape=(config.nb_dofs*2,),
+        self.action_space = gym.spaces.Box(low=self._config.pressure_min,
+                                           high=self._config.pressure_max,
+                                           shape=(self._config.nb_dofs*2,),
                                            dtype=np.float)
 
         self._robot_space = gym.spaces.Dict(
             {
-                "position"=gym.spaces.Box(low=-math.pi,
+                "position":gym.spaces.Box(low=-math.pi,
                                           high=+math.pi,
-                                          shape=(config.nb_dofs*2,),
+                                          shape=(self._config.nb_dofs*2,),
                                           dtype=np.float),
-                "velocity"=gym.spaces.Box(low=-10.0,
+                "velocity":gym.spaces.Box(low=0.0,
                                           high=+10.0,
-                                          shape=(config.nb_dofs*2,),
+                                          shape=(self._config.nb_dofs*2,),
                                           dtype=np.float),
-                "pressures"=gym.spaces.Box(low=config.pressure_change_range[0],
-                                           high=oconfig.pressure_change_range[0],
-                                           shape=(config.nb_dofs*2,),
+                "pressures":gym.spaces.Box(low=self._config.pressure_change_range[0],
+                                           high=self._config.pressure_change_range[0],
+                                           shape=(self._config.nb_dofs*2,),
                                            dtype=np.int)
             } )
             
         self._ball_space = gym.spaces.Dict(
             {
-                "position"==gym.spaces.Box(low=min(config.world_boundaries["min"]),
-                                           high=max(config.world_boundaries["max"]),
+                "position":gym.spaces.Box(low=min(self._config.world_boundaries["min"]),
+                                           high=max(self._config.world_boundaries["max"]),
                                            shape=(3,),
                                            dtype=np.float),
-                "velocity"==gym.spaces.Box(low=-10.0,
+                "velocity":gym.spaces.Box(low=-10.0,
                                            high=+10.0,
                                            shape=(3,),
                                            dtype=np.float),

@@ -15,15 +15,14 @@ SEGMENT_ID_ROBOT_MIRROR = pam_mujoco.segment_ids.mirroring
 SEGMENT_ID_PSEUDO_REAL_ROBOT = o80_pam.segment_ids.robot
 
 
-def _hit_reward(self,min_distance_ball_racket):
+def _no_hit_reward(min_distance_ball_racket):
     return -min_distance_ball_racket
-    return None
 
 
 def _return_task_reward( min_distance_ball_target,
                          c,
                          rtt_cap ):
-    reward = 1.- c * min_distance_ball_target ** 0.75
+    reward = 1.- c * (min_distance_ball_target ** 0.75)
     reward = max(reward,rtt_cap)
     return reward
 
@@ -32,7 +31,7 @@ def _smash_task_reward( min_distance_ball_target,
                         max_ball_velocity,
                         c,
                         rtt_cap ):
-    reward = 1.- c * min_distance_ball_target ** 0.75
+    reward = 1.- c * (min_distance_ball_target ** 0.75)
     reward = reward * max_ball_velocity
     reward = max(reward,rtt_cap)
     return reward
@@ -41,17 +40,24 @@ def _smash_task_reward( min_distance_ball_target,
 def _reward(smash, 
             min_distance_ball_racket,
             min_distance_ball_target,
+            max_ball_velocity,
             c,
             rtt_cap):
-    
-    if min_distance_ball_racket is not None:
-        return _hit_reward(min_distance_ball_racket)
 
+    # i.e. the ball did not hit the racket,
+    # so computing a reward based on the minimum
+    # distance between the racket and the ball
+    if min_distance_ball_racket is not None:
+        return _no_hit_reward(min_distance_ball_racket)
+
+    # the ball did hit the racket, so computing
+    # a reward based on the ball / target
+    
     if smash:
-        return _smash_reward( min_distance_ball_target,
-                              max_ball_velocity,
-                              c,
-                              rtt_cap )
+        return _smash_task_reward( min_distance_ball_target,
+                                   max_ball_velocity,
+                                   c,
+                                   rtt_cap )
     
     else:
         return _return_task_reward( min_distance_ball_target,
@@ -96,7 +102,7 @@ class HysrOneBall:
                  target_position,
                  reward_normalization_constant,
                  smash_task,
-                 rtt_cap=0.2,
+                 rtt_cap=-0.2,
                  trajectory_index=None):
 
         # moving the goal to the target position
@@ -152,6 +158,17 @@ class HysrOneBall:
         self._hit_point = o80_pam.o80HitPoint(SEGMENT_ID_HIT_POINT)
         
 
+    def _create_observation(self):
+        (pressures_ago,pressures_antago,
+         joint_positions,joint_velocities) = self._pressure_commands.read()
+        observation = _Observation(joint_positions,joint_velocities,
+                                   _convert_pressures_out(pressures_ago,
+                                                          pressures_antago),
+                                   self._ball_status.ball_position,
+                                   self._ball_status.ball_velocity)
+        return observation
+    
+        
     def get_robot_iteration(self):
         return self._pressure_commands.get_iteration()
 
@@ -281,20 +298,20 @@ class HysrOneBall:
         
         # observation instance
         observation = _Observation(joint_positions,joint_velocities,
-                                   convert_pressures_out(pressures_ago,
-                                                         pressures_antago),
+                                   _convert_pressures_out(pressures_ago,
+                                                          pressures_antago),
                                    self._ball_status.ball_position,
                                    self._ball_status.ball_velocity)
 
         # checking if episode is over
         episode_over = self._episode_over()
-        reward = 0
-        
+        reward = None
+
         # if episode over, computing related reward
         if episode_over:
             reward = _reward( self._smash_task,
-                              self._ball_status.min_distance_ball_target,
                               self._ball_status.min_distance_ball_racket,
+                              self._ball_status.min_distance_ball_target,
                               self._ball_status.max_ball_velocity,
                               self._c,self._rtt_cap )
             
