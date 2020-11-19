@@ -2,7 +2,7 @@ import math
 import gym
 import numpy as np
 from .hysr_one_ball import HysrOneBall
-
+from collections import OrderedDict
 
 class Config:
 
@@ -50,45 +50,39 @@ class HysrOneBallEnv(gym.GoalEnv):
                                            high=self._config.pressure_max,
                                            shape=(self._config.nb_dofs*2,),
                                            dtype=np.float)
-
-        self._robot_space = gym.spaces.Dict(
-            {
-                "position":gym.spaces.Box(low=-math.pi,
+        
+        self._robot_space_position = gym.spaces.Box(low=-math.pi,
                                           high=+math.pi,
                                           shape=(self._config.nb_dofs*2,),
-                                          dtype=np.float),
-                "velocity":gym.spaces.Box(low=0.0,
+                                          dtype=np.float)
+        
+        self._robot_space_velocity = gym.spaces.Box(low=0.0,
                                           high=+10.0,
                                           shape=(self._config.nb_dofs*2,),
-                                          dtype=np.float),
-                "pressures":gym.spaces.Box(low=self._config.pressure_change_range[0],
-                                           high=self._config.pressure_change_range[0],
+                                          dtype=np.float)
+        
+        self._robot_space_pressure = gym.spaces.Box(low=self._config.pressure_change_range[0],
+                                           high=self._config.pressure_change_range[1],
                                            shape=(self._config.nb_dofs*2,),
                                            dtype=np.int)
-            } )
-            
-        self._ball_space = gym.spaces.Dict(
-            {
-                "position":gym.spaces.Box(low=min(self._config.world_boundaries["min"]),
+        
+        self._ball_space_position = gym.spaces.Box(low=min(self._config.world_boundaries["min"]),
                                            high=max(self._config.world_boundaries["max"]),
                                            shape=(3,),
-                                           dtype=np.float),
-                "velocity":gym.spaces.Box(low=-10.0,
+                                           dtype=np.float)
+
+        self._ball_space_velocity = gym.spaces.Box(low=-10.0,
                                            high=+10.0,
                                            shape=(3,),
-                                           dtype=np.float),
+                                           dtype=np.float)
 
-            } )
-
-
-        self.observation_space = gym.spaces.Dict(
-            {
-                "robot":self._robot_space,
-                "ball":self._ball_space
-            } )
-            
-
-       
+        self.observation_space = gym.spaces.Tuple(
+            ( self._robot_space_position,
+              self._robot_space_velocity,
+              self._robot_space_pressure,
+              self._ball_space_position,
+              self._ball_space_velocity ) )
+        
     def _bound_pressure(self,value):
         return max(min(value,
                        self._config.pressure_max),
@@ -115,13 +109,22 @@ class HysrOneBallEnv(gym.GoalEnv):
         observation,reward,episode_over = self._hysr.step(action)
 
         # formatting observation in a format suitable for gym
-        observation = {
-            "robot" : { "position":np.array(observation_.joint_positions),
-                        "velocity":np.array(observation_.joint_velocities),
-                        "pressures":np.array(observation.pressure) },
-            "ball" : { "position":np.array(observation_.ball_position),
-                       "velocity":np.array(observation_.ball_velocity) }
-        }
+        observation = (
+            np.array(observation_.joint_positions),
+            np.array(observation_.joint_velocities),
+            np.array(observation.pressure),
+            np.array(observation_.ball_position),
+            np.array(observation_.ball_velocity) )
+            
+        
+        def commented():
+            observation = {
+                "robot" : { "position":np.array(observation_.joint_positions),
+                            "velocity":np.array(observation_.joint_velocities),
+                            "pressures":np.array(observation.pressure) },
+                "ball" : { "position":np.array(observation_.ball_position),
+                           "velocity":np.array(observation_.ball_velocity) }
+            }
         
         return observation,reward,episode_over,None
 

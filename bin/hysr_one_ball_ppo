@@ -7,8 +7,10 @@ import learning_table_tennis_from_scratch
 from stable_baselines.common.policies import MlpPolicy
 from stable_baselines.common import make_vec_env
 from stable_baselines import PPO2
+from stable_baselines.common.env_checker import check_env
 
 env = make_vec_env('hysroneball-v0')
+check_env(env)
 
 model = PPO2(MlpPolicy, env, verbose=1)
 model.learn(total_timesteps=25000)
