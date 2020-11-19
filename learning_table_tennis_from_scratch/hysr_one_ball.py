@@ -197,12 +197,13 @@ class HysrOneBall:
 
         # moving real robot back to reference posture
         if self._reference_posture is not None:
-            self._pressure_commands.set(self._reference_posture,
-                                        duration_ms=1500,wait=False)
             if self._accelerated_time:
+                self._pressure_commands.set(self._reference_posture,
+                                            duration_ms=1500,wait=False)
                 self._pressure_commands.burst(int(o80_time_step/1500.0)+1)
             else:
-                self._pressure_commands.pulse_and_wait()
+                self._pressure_commands.set(self._reference_posture,
+                                            duration_ms=1500,wait=True)
 
         # moving simulated robot to reference posture
         (pressures_ago,pressures_antago,
@@ -224,6 +225,8 @@ class HysrOneBall:
         # setting the ball to the first trajectory point
         self._ball_communication.set(trajectory_points[0].position,
                                      trajectory_points[0].velocity)
+        self._ball_status.ball_position = trajectory_points[0].position
+        self._ball_status.ball_velocity = trajectory_points[0].velocity
         self._mirroring.burst(5)
 
         # shooting the ball
@@ -249,11 +252,10 @@ class HysrOneBall:
         (pressures_ago,pressures_antago,
          joint_positions,joint_velocities) = self._pressure_commands.read()
         # getting information about simulated ball
-        ball_position,ball_velocity = self._ball_communication.get()
         return _Observation( joint_positions,joint_velocities,
                              pressures_ago,pressures_antago,
-                             ball_status.ball_position,
-                             ball_status.ball_velocity )
+                             self._ball_status.ball_position,
+                             self._ball_status.ball_velocity )
 
         
     # action assumed to be np.array(ago1,antago1,ago2,antago2,...)
