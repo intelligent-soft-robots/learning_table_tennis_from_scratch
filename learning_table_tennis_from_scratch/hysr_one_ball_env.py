@@ -26,6 +26,54 @@ class Config:
                                   "max":(1.6,3.5,+1.5) }   
     
 
+class _ObservationSpace:
+
+    # the model does not support gym Dict or Tuple spaces
+    # which is very inconvenient. This class implements
+    # something similar to a Dict space, but which can
+    # be casted to a box space.
+
+    class Box:
+        def __init__(self,low,high,size):
+            self.low = low
+            self.high = high
+            self.size = size
+        def normalize(self,value):
+            return (value-self.low)/(self.high-self.low)
+        def denormalize(self,value):
+            return self.low + value*(self.high-self.low)
+        
+    def __init__(self):
+        self._obs_boxes = OrderedDict()
+        self._values = OrderedDict()
+        
+    def add_box(self,name,low,high,size):
+        self._obs_boxes[name]=ObservationSpace(low,high,
+                                           size,dtype)
+        self._values[name]=np.zeros(size)
+
+    def get_gym_box(self):
+        size = sum([b.size for b in self._obs_boxes.values()])
+        return gym.spaces.Box(low=0.0,high=1.0,
+                              shape=(size,),
+                              dtype=np.float)
+
+    def set_values(self,name,values):
+        normalize = self._obs_boxes[name].normalize
+        values = np.array(map(normalize,values))
+        self._values[name]=values
+
+    def get_normalized_values(self):
+        size = sum([b.size for b in self._obs_boxes.values()])
+        values = list(self._values.items())
+        return np.concatenate(*values)
+            
+        
+
+
+    
+        
+        
 class HysrOneBallEnv(gym.GoalEnv):
     
     def __init__(self,
@@ -45,43 +93,27 @@ class HysrOneBallEnv(gym.GoalEnv):
                                  self._config.reward_normalization_constant,
                                  self._config.smash_task,
                                  rtt_cap=self._config.rtt_cap)
-        
-        self.action_space = gym.spaces.Box(low=self._config.pressure_min,
-                                           high=self._config.pressure_max,
-                                           shape=(self._config.nb_dofs*2,),
-                                           dtype=np.float)
-        
-        self._robot_space_position = gym.spaces.Box(low=-math.pi,
-                                          high=+math.pi,
-                                          shape=(self._config.nb_dofs*2,),
-                                          dtype=np.float)
-        
-        self._robot_space_velocity = gym.spaces.Box(low=0.0,
-                                          high=+10.0,
-                                          shape=(self._config.nb_dofs*2,),
-                                          dtype=np.float)
-        
-        self._robot_space_pressure = gym.spaces.Box(low=self._config.pressure_change_range[0],
-                                           high=self._config.pressure_change_range[1],
-                                           shape=(self._config.nb_dofs*2,),
-                                           dtype=np.int)
-        
-        self._ball_space_position = gym.spaces.Box(low=min(self._config.world_boundaries["min"]),
-                                           high=max(self._config.world_boundaries["max"]),
-                                           shape=(3,),
-                                           dtype=np.float)
 
-        self._ball_space_velocity = gym.spaces.Box(low=-10.0,
-                                           high=+10.0,
-                                           shape=(3,),
-                                           dtype=np.float)
+        self._obs_boxes = _ObservationSpace()
+        
+        self._obs_boxes.add_box("robot_position",-math.pi,+math.pi,
+                            self._config.nb_dofs*2)
+        self._obs_boxes.add_box("robot_velocity",0.0,10.0,
+                            self._config.nb_dofs*2)
+        self._obs_boxes.add_box("robot_pressure",
+                            self._config.pressure_change_range[0],
+                            self._config.pressure_change_range[1],
+                            self._config.nb_dofs*2)
+        
+        self._obs_boxes.add_box("ball_position",
+                            min(self._config.world_boundaries["min"]),
+                            max(self._config.world_boundaries["max"]),
+                            3)
+        self._obs_boxes.add_box("ball_velocity",
+                            -10.0,+10.0,3)
 
-        self.observation_space = gym.spaces.Tuple(
-            ( self._robot_space_position,
-              self._robot_space_velocity,
-              self._robot_space_pressure,
-              self._ball_space_position,
-              self._ball_space_velocity ) )
+        self.observation_space = self._obs_boxes.get_gym_box()
+
         
     def _bound_pressure(self,value):
         return max(min(value,
@@ -109,22 +141,12 @@ class HysrOneBallEnv(gym.GoalEnv):
         observation,reward,episode_over = self._hysr.step(action)
 
         # formatting observation in a format suitable for gym
-        observation = (
-            np.array(observation_.joint_positions),
-            np.array(observation_.joint_velocities),
-            np.array(observation.pressure),
-            np.array(observation_.ball_position),
-            np.array(observation_.ball_velocity) )
-            
-        
-        def commented():
-            observation = {
-                "robot" : { "position":np.array(observation_.joint_positions),
-                            "velocity":np.array(observation_.joint_velocities),
-                            "pressures":np.array(observation.pressure) },
-                "ball" : { "position":np.array(observation_.ball_position),
-                           "velocity":np.array(observation_.ball_velocity) }
-            }
+        self._obs_boxes.set_values("robot_position",observation_.joint_positions)
+        self._obs_boxes.set_values("robot_velocity",observation_.joint_velocities)
+        self._obs_boxes.set_values("robot_pressure",observation_.pressure)
+        self._obs_boxes.set_values("ball_position",observation_.ball_position)
+        self._obs_boxes.set_values("ball_velocity",observation_.ball_velocity)
+        observation = self._obs_boxes.get_normalized_values()
         
         return observation,reward,episode_over,None
 
