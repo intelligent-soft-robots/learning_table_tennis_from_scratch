@@ -1,4 +1,3 @@
-import pickle
 import time
 import math
 import random
@@ -6,6 +5,8 @@ import o80
 import o80_pam
 import pam_mujoco
 import context
+import pam_interface
+import numpy as np
 
 SEGMENT_ID_BALL = pam_mujoco.segment_ids.ball
 SEGMENT_ID_GOAL = pam_mujoco.segment_ids.goal
@@ -98,12 +99,13 @@ class HysrOneBall:
                  o80_time_step,
                  mujoco_time_step,
                  algo_time_step,
-                 reference_posture,
                  target_position,
                  reward_normalization_constant,
                  smash_task,
                  rtt_cap=-0.2,
-                 trajectory_index=None):
+                 trajectory_index=None,
+                 reference_posture=None,
+                 pam_config=None):
 
         # moving the goal to the target position
         goal = o80_pam.o80Goal(SEGMENT_ID_GOAL)
@@ -128,10 +130,6 @@ class HysrOneBall:
         # played each time
         self._trajectory_index = trajectory_index
         
-        # the posture in which the robot will reset itself
-        # upon reset
-        self._reference_posture = reference_posture
-
         # the robot will interpolate between current and
         # target posture over this duration
         self._period_ms = algo_time_step
@@ -146,6 +144,17 @@ class HysrOneBall:
         
         # to send pressure commands to the real or pseudo-real robot
         self._pressure_commands = o80_pam.o80Pressures(SEGMENT_ID_PSEUDO_REAL_ROBOT)
+
+        # the posture in which the robot will reset itself
+        # upon reset
+        self._reference_posture = reference_posture
+        if self._reference_posture is not None:
+            joint_controller_config = o80_pam.JointPositionControllerConfig(self._pressure_commands,
+                                                                            pam_config)
+            self._joint_controller = o80_pam.JointPositionController(joint_controller_config,
+                                                                     self._accelerated_time)
+
+
         
         # will encapsulate all information
         # about the ball (e.g. min distance with racket, etc)
@@ -157,7 +166,20 @@ class HysrOneBall:
         # to move the hit point marker
         self._hit_point = o80_pam.o80HitPoint(SEGMENT_ID_HIT_POINT)
         
+        # tracking if this is the first step of the episode
+        # (a step sets it to false, reset sets it back to true)
+        self._first_episode_step = True
 
+        # when starting, the real robot and the pseudo robot
+        # may not be aligned, which may result in graphical issues
+        self._align_robots()
+
+        
+    def _ms_to_nb_bursts(self,time_ms):
+        time_sec = float(time_ms) / 1000.0
+        return int( (time_sec/self._o80_time_step)+0.5)
+
+    
     def _create_observation(self):
         (pressures_ago,pressures_antago,
          joint_positions,joint_velocities) = self._pressure_commands.read()
@@ -182,9 +204,46 @@ class HysrOneBall:
          _,__) = self._pressure_commands.read(desired=True)
         return pressures_ago,pressures_antago
     
+
+    def _align_robots(self,step=0.01):
+
+        _,__,target_positions,target_velocities = self._pressure_commands.read()
+        positions,velocities = self._mirroring.get()
+
+        def _one_step(arg):
+            target,current=arg
+            diff = target-current
+            if(abs(diff)<step):
+                current=target
+                return True,current
+            else:
+                if diff>0:
+                    current+=step
+                else:
+                    current-=step
+                return False,current
         
+        over=[False]*len(target_positions)
+
+        while not all(over):
+
+            p = list(map(_one_step,zip(target_positions,positions)))
+            v = list(map(_one_step,zip(target_velocities,velocities)))
+
+            positions = [p_[1] for p_ in p]
+            velocities = [v_[1] for v_ in v]
+
+            over = [p_[0] for p_ in p]
+            
+            self._mirroring.set(positions,velocities,nb_iterations=1,burst=1)
+        
+        
+    
     def reset(self):
 
+        # resetting first episode step
+        self._first_episode_step = True
+        
         # resetting the hit point 
         self._hit_point.set([0,0,-0.62],[0,0,0])
         
@@ -196,21 +255,12 @@ class HysrOneBall:
         time.sleep(0.1)
 
         # moving real robot back to reference posture
+        # (and mirroring this)
         if self._reference_posture is not None:
-            if self._accelerated_time:
-                self._pressure_commands.set(self._reference_posture,
-                                            duration_ms=1500,wait=False)
-                self._pressure_commands.burst(int(o80_time_step/1500.0)+1)
-            else:
-                self._pressure_commands.set(self._reference_posture,
-                                            duration_ms=1500,wait=True)
-
-        # moving simulated robot to reference posture
-        (pressures_ago,pressures_antago,
-         joint_positions,joint_velocities) = self._pressure_commands.read()
-        self._mirroring.set(joint_positions,joint_velocities,nb_iterations=100)
-        self._mirroring.burst(100+1)
-
+            for _,positions,velocities,__ in self._joint_controller.go_to(self._reference_posture):
+                if positions is not None:
+                    self._mirroring.set(positions,velocities,nb_iterations=1,burst=1)
+                
         # getting a new trajectory
         if self._trajectory_index is not None:
             trajectory_points = context.BallTrajectories().get_trajectory(self._trajectory_index)
@@ -269,14 +319,15 @@ class HysrOneBall:
         ball_position,ball_velocity = self._ball_communication.get()
 
         # sending action pressures to real (or pseudo real) robot.
-        # Should start acting now in the background if not accelerated time
-        self._pressure_commands.set(_convert_pressures_in(list(action)))
-
-        # if accelerated times, running the pseudo real robot iterations
-        # (note : o80_pam expected to have started in bursting mode)
         if self._accelerated_time:
-            self._pressure_commands.burst(self._nb_robot_bursts)
-
+            # if accelerated times, running the pseudo real robot iterations
+            # (note : o80_pam expected to have started in bursting mode)
+            self._pressure_commands.set(_convert_pressures_in(list(action)),
+                                        burst=self._nb_robot_bursts)
+        else:
+            # Should start acting now in the background if not accelerated time
+            self._pressure_commands.set(_convert_pressures_in(list(action)),burst=False)
+        
         # sending mirroring state to simulated robot
         self._mirroring.set(joint_positions,joint_velocities)
 
@@ -307,7 +358,7 @@ class HysrOneBall:
 
         # checking if episode is over
         episode_over = self._episode_over()
-        reward = None
+        reward = 0
 
         # if episode over, computing related reward
         if episode_over:
@@ -316,8 +367,12 @@ class HysrOneBall:
                               self._ball_status.min_distance_ball_target,
                               self._ball_status.max_ball_velocity,
                               self._c,self._rtt_cap )
+
+        # next step can not be the first one
+        # (reset will set this back to True)
+        self._first_episode_step = False
+
             
-                
         # returning
         return observation,reward,episode_over
 

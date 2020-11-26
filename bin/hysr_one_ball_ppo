@@ -12,7 +12,7 @@ from stable_baselines.common.env_checker import check_env
 env = make_vec_env('hysroneball-v0')
 #check_env(env)
 
-model = PPO2(MlpPolicy, env, verbose=1)
-model.learn(total_timesteps=25000)
+model = PPO2(MlpPolicy, env, verbose=1, tensorboard_log="/tmp/ppo2")
+model.learn(total_timesteps=1000000)
 model.save("ppo2_hysr_one_ball")
 
