@@ -4,6 +4,7 @@ import random
 import o80
 import o80_pam
 import pam_mujoco
+from pam_mujoco import mirroring
 import context
 import pam_interface
 import numpy as np
@@ -107,6 +108,8 @@ class HysrOneBall:
                  reference_posture=None,
                  pam_config=None):
 
+
+      
         # moving the goal to the target position
         goal = o80_pam.o80Goal(SEGMENT_ID_GOAL)
         goal.set(target_position,[0,0,0])
@@ -123,6 +126,7 @@ class HysrOneBall:
         # pam_mujoco (i.e. simulated ball and robot) should have been
         # started in accelerated time. It burst through algorithm
         # time steps
+        self._mujoco_time_step = mujoco_time_step
         self._nb_sim_bursts = int(algo_time_step/mujoco_time_step)
         
         # if a number, the same trajectory will be played
@@ -146,15 +150,8 @@ class HysrOneBall:
         self._pressure_commands = o80_pam.o80Pressures(SEGMENT_ID_PSEUDO_REAL_ROBOT)
 
         # the posture in which the robot will reset itself
-        # upon reset
+        # upon reset (may be None if no posture reset)
         self._reference_posture = reference_posture
-        if self._reference_posture is not None:
-            joint_controller_config = o80_pam.JointPositionControllerConfig(self._pressure_commands,
-                                                                            pam_config)
-            self._joint_controller = o80_pam.JointPositionController(joint_controller_config,
-                                                                     self._accelerated_time)
-
-
         
         # will encapsulate all information
         # about the ball (e.g. min distance with racket, etc)
@@ -172,14 +169,17 @@ class HysrOneBall:
 
         # when starting, the real robot and the pseudo robot
         # may not be aligned, which may result in graphical issues
-        self._align_robots()
+        mirroring.align_robots(self._pressure_commands,
+                               self._mirroring)
+
+        # will be used to move the robot to reference posture
+        # between episodes
+        self._pam_config = pam_config
+        self._max_pressures = [(18000,18000)]*4
+                                 
 
         
-    def _ms_to_nb_bursts(self,time_ms):
-        time_sec = float(time_ms) / 1000.0
-        return int( (time_sec/self._o80_time_step)+0.5)
-
-    
+        
     def _create_observation(self):
         (pressures_ago,pressures_antago,
          joint_positions,joint_velocities) = self._pressure_commands.read()
@@ -203,44 +203,21 @@ class HysrOneBall:
         (pressures_ago,pressures_antago,
          _,__) = self._pressure_commands.read(desired=True)
         return pressures_ago,pressures_antago
+
+    
+    def get_current_pressures(self):
+        (pressures_ago,pressures_antago,
+         _,__) = self._pressure_commands.read(desired=False)
+        return pressures_ago,pressures_antago
     
 
-    def _align_robots(self,step=0.01):
-
-        _,__,target_positions,target_velocities = self._pressure_commands.read()
-        positions,velocities = self._mirroring.get()
-
-        def _one_step(arg):
-            target,current=arg
-            diff = target-current
-            if(abs(diff)<step):
-                current=target
-                return True,current
-            else:
-                if diff>0:
-                    current+=step
-                else:
-                    current-=step
-                return False,current
-        
-        over=[False]*len(target_positions)
-
-        while not all(over):
-
-            p = list(map(_one_step,zip(target_positions,positions)))
-            v = list(map(_one_step,zip(target_velocities,velocities)))
-
-            positions = [p_[1] for p_ in p]
-            velocities = [v_[1] for v_ in v]
-
-            over = [p_[0] for p_ in p]
-            
-            self._mirroring.set(positions,velocities,nb_iterations=1,burst=1)
-        
-        
-    
     def reset(self):
 
+        # aligning the mirrored robot with
+        # (pseudo) real robot
+        mirroring.align_robots(self._pressure_commands,
+                               self._mirroring)
+        
         # resetting first episode step
         self._first_episode_step = True
         
@@ -254,12 +231,19 @@ class HysrOneBall:
         pam_mujoco.reset_contact(SEGMENT_ID_CONTACT_ROBOT)
         time.sleep(0.1)
 
+        # resetting real robot to "vertical" position
+        mirroring.go_to_pressure_posture(self._pressure_commands,
+                                         self._mirroring,
+                                         self._max_pressures,
+                                         3, # in 1 seconds
+                                         self._accelerated_time)
+        
         # moving real robot back to reference posture
-        # (and mirroring this)
-        if self._reference_posture is not None:
-            for _,positions,velocities,__ in self._joint_controller.go_to(self._reference_posture):
-                if positions is not None:
-                    self._mirroring.set(positions,velocities,nb_iterations=1,burst=1)
+        mirroring.go_to_position_posture(self._pressure_commands,
+                                         self._mirroring,
+                                         self._reference_posture,
+                                         self._pam_config,
+                                         self._accelerated_time)
                 
         # getting a new trajectory
         if self._trajectory_index is not None:

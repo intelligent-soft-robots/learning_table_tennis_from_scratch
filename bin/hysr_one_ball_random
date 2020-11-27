@@ -76,7 +76,7 @@ def execute(accelerated_time):
 
 
 def _configure():
-    config = BrightArgs(str("hysr dummy demo using swing motion.\n"+
+    config = BrightArgs(str("hysr dummy demo using random motions.\n"+
                             "to be started after start_robots or start_robots_accelerated.\n"+
                             "(in same folder)"))
     config.add_operation("accelerated",

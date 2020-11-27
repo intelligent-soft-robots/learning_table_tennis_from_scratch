@@ -14,11 +14,8 @@ class Config:
         self.mujoco_time_step = 0.002
         self.algo_time_step = 0.01
         self.target_position = [0.45,2.7,0.17]
-        # for each dof : ago,antago
-        #self.reference_posture = [[20000,12000],[12000,22000],
-        #[15000,15000],[15000,15000]]
-        self.reference_posture = [[20000,20000],[20000,20000],
-                                  [20000,20000],[20000,20000]]
+        self.reference_posture = [-math.pi/4.0,math.pi/3.5,
+                                  math.pi/8.0,0.0]
         self.pressure_min = 7000.
         self.pressure_max = 23000.
         self.pressure_change_range = 1000
@@ -85,22 +82,19 @@ class HysrOneBallEnv(gym.Env):
             self._config = Config()
         else:
             self._config = config
-        
+
         self._hysr = HysrOneBall(self._config.accelerated_time,
                                  self._config.o80_pam_time_step,
                                  self._config.mujoco_time_step,
                                  self._config.algo_time_step,
-                                 self._config.reference_posture,
                                  self._config.target_position,
                                  self._config.reward_normalization_constant,
                                  self._config.smash_task,
-                                 rtt_cap=self._config.rtt_cap)
+                                 rtt_cap=self._config.rtt_cap,
+                                 trajectory_index=None,
+                                 reference_posture=self._config.reference_posture,
+                                 pam_config=self._config.pam_config)
         
-        #self.action_space = gym.spaces.Box(low=self._config.pressure_change_range[0],
-        #                                   high=self._config.pressure_change_range[1],
-        #                                   shape=(self._config.nb_dofs*2,),
-        #                                   dtype=np.float)
-
         self.action_space = gym.spaces.Box(low=-1.0,
                                            high=+1.0,
                                            shape=(self._config.nb_dofs*2,),
@@ -151,8 +145,8 @@ class HysrOneBallEnv(gym.Env):
         # casting actions from [-1,+1] to [-pressure_change_range,+pressure_change_range]
         action = [self._config.pressure_change_range*a for a in action]
         
-        # current desired pressures
-        agos,antagos = self._hysr.get_current_desired_pressures()
+        # current pressures
+        agos,antagos = self._hysr.get_current_pressures()
         
         # final target pressure is action + current desired
         for dof in range(self._config.nb_dofs):

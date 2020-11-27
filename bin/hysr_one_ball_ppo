@@ -1,18 +1,83 @@
 #!/usr/bin/env python3
 
+import sys
+import math
 import gym
 import o80
-import learning_table_tennis_from_scratch
+import pam_interface
+from learning_table_tennis_from_scratch.hysr_one_ball_env import HysrOneBallEnv
+from lightargs import BrightArgs,FileExists
 
 from stable_baselines.common.policies import MlpPolicy
 from stable_baselines.common import make_vec_env
 from stable_baselines import PPO2
 from stable_baselines.common.env_checker import check_env
 
-env = make_vec_env('hysroneball-v0')
-#check_env(env)
 
-model = PPO2(MlpPolicy, env, verbose=1, tensorboard_log="/tmp/ppo2")
-model.learn(total_timesteps=1000000)
-model.save("ppo2_hysr_one_ball")
+class Config:
 
+    def __init__(self):
+        self.accelerated_time = True
+        self.o80_pam_time_step = 0.002
+        self.mujoco_time_step = 0.002
+        self.algo_time_step = 0.01
+        self.target_position = [0.45,2.7,0.17]
+        self.reference_posture = [-math.pi/4.0,math.pi/3.5,
+                                  math.pi/8.0,0.0]
+        self.pam_config = None
+        self.pressure_min = 7000.
+        self.pressure_max = 23000.
+        self.pressure_change_range = 1000
+        self.reward_normalization_constant = 1.0
+        self.smash_task = True
+        self.rtt_cap = -0.2
+        self.nb_dofs = 4
+        self.world_boundaries = { "min":(0.0,-1.0,+0.17), # x,y,z
+                                  "max":(1.6,3.5,+1.5) }   
+
+
+def execute(accelerated,pam_config):
+
+    config = Config()
+    config.accelerated_time = accelerated
+    config.pam_config = pam_config
+
+    env = make_vec_env(HysrOneBallEnv,env_kwargs={"config":config})
+    #check_env(env)
+    
+    model = PPO2(MlpPolicy, env, verbose=1, tensorboard_log="/tmp/ppo2")
+    model.learn(total_timesteps=1000000)
+    model.save("ppo2_hysr_one_ball")
+
+
+def _configure():
+    config = BrightArgs(str("learning table tennis from scratch.\n"+
+                            "to be started after start_robots or start_robots_accelerated.\n"+
+                            "(in same folder)"))
+    config.add_operation("accelerated",
+                         "if used, start_robot_accelerated must have been started.")
+    config.add_option("pam_config_file",
+                      pam_interface.DefaultConfiguration.get_path(),
+                      "pam configuration file",
+                      str,
+                      integrity_checks= [FileExists()])
+    change_all=False
+    finished  = config.dialog(change_all,sys.argv[1:])
+    if not finished:
+        return None
+    return config
+
+
+def _run():
+    config = _configure()
+    if config is None:
+        return
+    pam_config = pam_interface.JsonConfiguration(config.pam_config_file)
+    execute(config.accelerated,pam_config)
+    accelerated = False
+    if("accelerated" in sys.argv):
+        accelerated = True
+
+
+if __name__ == "__main__":
+    _run()
