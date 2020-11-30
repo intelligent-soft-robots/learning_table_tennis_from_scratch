@@ -175,7 +175,8 @@ class HysrOneBall:
         # will be used to move the robot to reference posture
         # between episodes
         self._pam_config = pam_config
-        self._max_pressures = [(18000,18000)]*4
+        self._max_pressures1 = [(18000,18000)]*4
+        self._max_pressures2 = [(20000,20000)]*4
                                  
 
         
@@ -232,19 +233,32 @@ class HysrOneBall:
         time.sleep(0.1)
 
         # resetting real robot to "vertical" position
-        mirroring.go_to_pressure_posture(self._pressure_commands,
-                                         self._mirroring,
-                                         self._max_pressures,
-                                         3, # in 1 seconds
-                                         self._accelerated_time)
-        
+        # tripling down to ensure reproducibility
+        print("hysr_one_ball going back to ref posture")
+        for (max_pressures,duration) in zip( (self._max_pressures1,self._max_pressures2) , (0.5,2) ):
+            mirroring.go_to_pressure_posture(self._pressure_commands,
+                                             self._mirroring,
+                                             max_pressures,
+                                             duration, 
+                                             self._accelerated_time)
+
+        (pressures_ago,pressures_antago,
+         joint_positions,joint_velocities) = self._pressure_commands.read()
+        print(pressures_ago,pressures_antago)
+            
         # moving real robot back to reference posture
-        mirroring.go_to_position_posture(self._pressure_commands,
-                                         self._mirroring,
-                                         self._reference_posture,
-                                         self._pam_config,
-                                         self._accelerated_time)
-                
+        for duration in (0.5,1.0):
+            mirroring.go_to_pressure_posture(self._pressure_commands,
+                                             self._mirroring,
+                                             self._reference_posture,
+                                             duration, # in 1 seconds
+                                             self._accelerated_time)
+
+        (pressures_ago,pressures_antago,
+         joint_positions,joint_velocities) = self._pressure_commands.read()
+        print(pressures_ago,pressures_antago)
+
+
         # getting a new trajectory
         if self._trajectory_index is not None:
             trajectory_points = context.BallTrajectories().get_trajectory(self._trajectory_index)

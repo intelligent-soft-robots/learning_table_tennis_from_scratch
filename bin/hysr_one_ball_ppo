@@ -22,8 +22,10 @@ class Config:
         self.mujoco_time_step = 0.002
         self.algo_time_step = 0.01
         self.target_position = [0.45,2.7,0.17]
-        self.reference_posture = [-math.pi/4.0,math.pi/3.5,
-                                  math.pi/8.0,0.0]
+        self.reference_posture = [(17000,12000),
+                                  (12000,18000),
+                                  (15000,15000),
+                                  (15000,15000)]
         self.pam_config = None
         self.pressure_min = 7000.
         self.pressure_max = 23000.
