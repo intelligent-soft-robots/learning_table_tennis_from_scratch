@@ -16,19 +16,19 @@ from stable_baselines.common.env_checker import check_env
 
 class Config:
 
-    def __init__(self):
+    def __init__(self,pam_config):
         self.accelerated_time = True
         self.o80_pam_time_step = 0.002
         self.mujoco_time_step = 0.002
         self.algo_time_step = 0.01
         self.target_position = [0.45,2.7,0.17]
-        self.reference_posture = [(17000,12000),
-                                  (12000,18000),
-                                  (15000,15000),
-                                  (15000,15000)]
-        self.pam_config = None
-        self.pressure_min = 7000.
-        self.pressure_max = 23000.
+        self.reference_posture = [(19900,16000),
+                                  (16800,19100),
+                                  (18700,17300),
+                                  (18000,18000)]
+        self.pam_config = pam_config
+        self.pressure_min = pam_config.min_pressure()
+        self.pressure_max = pam_config.max_pressure()
         self.pressure_change_range = 1000
         self.reward_normalization_constant = 1.0
         self.smash_task = True
@@ -40,7 +40,7 @@ class Config:
 
 def execute(accelerated,pam_config):
 
-    config = Config()
+    config = Config(pam_config)
     config.accelerated_time = accelerated
     config.pam_config = pam_config
 

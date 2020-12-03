@@ -234,7 +234,6 @@ class HysrOneBall:
 
         # resetting real robot to "vertical" position
         # tripling down to ensure reproducibility
-        print("hysr_one_ball going back to ref posture")
         for (max_pressures,duration) in zip( (self._max_pressures1,self._max_pressures2) , (0.5,2) ):
             mirroring.go_to_pressure_posture(self._pressure_commands,
                                              self._mirroring,
@@ -244,7 +243,6 @@ class HysrOneBall:
 
         (pressures_ago,pressures_antago,
          joint_positions,joint_velocities) = self._pressure_commands.read()
-        print(pressures_ago,pressures_antago)
             
         # moving real robot back to reference posture
         for duration in (0.5,1.0):
@@ -256,7 +254,6 @@ class HysrOneBall:
 
         (pressures_ago,pressures_antago,
          joint_positions,joint_velocities) = self._pressure_commands.read()
-        print(pressures_ago,pressures_antago)
 
 
         # getting a new trajectory
@@ -316,15 +313,19 @@ class HysrOneBall:
         # getting information about simulated ball
         ball_position,ball_velocity = self._ball_communication.get()
 
+        # convert action [ago1,antago1,ago2] to list suitable for
+        # o80 ([(ago1,antago1),(),...])
+        pressures = _convert_pressures_in(list(action))
+        
         # sending action pressures to real (or pseudo real) robot.
         if self._accelerated_time:
             # if accelerated times, running the pseudo real robot iterations
             # (note : o80_pam expected to have started in bursting mode)
-            self._pressure_commands.set(_convert_pressures_in(list(action)),
+            self._pressure_commands.set(pressures,
                                         burst=self._nb_robot_bursts)
         else:
             # Should start acting now in the background if not accelerated time
-            self._pressure_commands.set(_convert_pressures_in(list(action)),burst=False)
+            self._pressure_commands.set(pressures,burst=False)
         
         # sending mirroring state to simulated robot
         self._mirroring.set(joint_positions,joint_velocities)

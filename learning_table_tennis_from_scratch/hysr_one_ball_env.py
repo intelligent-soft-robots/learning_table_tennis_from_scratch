@@ -6,26 +6,6 @@ import numpy as np
 from .hysr_one_ball import HysrOneBall
 from collections import OrderedDict
 
-class Config:
-
-    def __init__(self):
-        self.accelerated_time = True
-        self.o80_pam_time_step = 0.002
-        self.mujoco_time_step = 0.002
-        self.algo_time_step = 0.01
-        self.target_position = [0.45,2.7,0.17]
-        self.reference_posture = [-math.pi/4.0,math.pi/3.5,
-                                  math.pi/8.0,0.0]
-        self.pressure_min = 7000.
-        self.pressure_max = 23000.
-        self.pressure_change_range = 1000
-        self.reward_normalization_constant = 1.0
-        self.smash_task = True
-        self.rtt_cap = -0.2
-        self.nb_dofs = 4
-        self.world_boundaries = { "min":(0.0,-1.0,+0.17), # x,y,z
-                                  "max":(1.6,3.5,+1.5) }   
-    
 
 class _ObservationSpace:
 
@@ -78,10 +58,7 @@ class HysrOneBallEnv(gym.Env):
 
         super().__init__()
 
-        if config is None:
-            self._config = Config()
-        else:
-            self._config = config
+        self._config = config
 
         self._hysr = HysrOneBall(self._config.accelerated_time,
                                  self._config.o80_pam_time_step,
@@ -125,11 +102,15 @@ class HysrOneBallEnv(gym.Env):
             self._frequency_manager = o80.FrequencyManager(1.0/self._config.algo_time_step)
         
         
-    def _bound_pressure(self,value):
-        return int(max(min(value,
-                           self._config.pressure_max),
-                       self._config.pressure_min))
-
+    def _bound_pressure(self,dof,ago,value):
+        if ago:
+            return int(max(min(value,
+                               self._config.pam_config.max_pressures_ago[dof]),
+                           self._config.pam_config.min_pressures_ago[dof]))
+        else:
+            return int(max(min(value,
+                               self._config.pam_config.max_pressures_antago[dof]),
+                           self._config.pam_config.min_pressures_antago[dof]))
     
     def _convert_observation(self,observation):
         self._obs_boxes.set_values("robot_position",observation.joint_positions)
@@ -150,8 +131,8 @@ class HysrOneBallEnv(gym.Env):
         
         # final target pressure is action + current desired
         for dof in range(self._config.nb_dofs):
-            action[2*dof] = self._bound_pressure(agos[dof]+action[2*dof])
-            action[2*dof+1] = self._bound_pressure(antagos[dof]+action[2*dof+1])
+            action[2*dof] = self._bound_pressure(dof,True,agos[dof]+action[2*dof])
+            action[2*dof+1] = self._bound_pressure(dof,True,antagos[dof]+action[2*dof+1])
 
         # hysr takes a list of int, not float, as input
         action = [int(a) for a in action]

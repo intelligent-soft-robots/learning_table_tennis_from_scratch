@@ -25,10 +25,11 @@ smash_task = False
 rtt_cap = 0.2
 nb_episodes = 5
 
-# in joint positions
-reference_posture = [-math.pi/4.0,math.pi/3.5,
-                     math.pi/8.0,0.0]
 # in pressures
+reference_posture = [(19900,16000),
+                     (16800,19100),
+                     (18700,17300),
+                     (18000,18000)]
 swing_posture = [[14000,22000],[14000,22000],
                  [17000,13000],[14000,16000]]
 
@@ -73,7 +74,7 @@ def execute(accelerated_time,
 
         start_robot_iteration = hysr.get_robot_iteration()
         start_ball_iteration = hysr.get_ball_iteration()
-        
+
         running = True
 
         while running:
