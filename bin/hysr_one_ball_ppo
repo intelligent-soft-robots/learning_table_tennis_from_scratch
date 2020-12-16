@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+import os
 import sys
 import math
 import gym
@@ -36,18 +37,28 @@ class Config:
         self.nb_dofs = 4
         self.world_boundaries = { "min":(0.0,-1.0,+0.17), # x,y,z
                                   "max":(1.6,3.5,+1.5) }   
+        self.record_path = None
 
+def execute(accelerated,
+            ppo_config,
+            pam_config,
+            record_path):
 
-def execute(accelerated,pam_config):
-
-    config = Config(pam_config)
-    config.accelerated_time = accelerated
-    config.pam_config = pam_config
-
-    env = make_vec_env(HysrOneBallEnv,env_kwargs={"config":config})
-    #check_env(env)
+    env_config = Config(pam_config)
+    env_config.accelerated_time = accelerated
+    env_config.pam_config = pam_config
+    env_config.record_path = record_path
     
-    model = PPO2(MlpPolicy, env, verbose=1, tensorboard_log="/tmp/ppo2")
+    env = make_vec_env(HysrOneBallEnv,env_kwargs={"config":env_config})
+    #check_env(env)
+
+    ppo_params = ("gamma","n_steps","ent_coef",
+                  "learning_rate","cliprange","cliprange_vf",
+                  "vf_coef","max_grad_norm","lam",
+                  "nminibatches","noptepochs")
+    ppo_config = { param:getattr(ppo_config,param)
+                   for param in ppo_params }
+    model = PPO2(MlpPolicy, env, verbose=1, tensorboard_log="/tmp/ppo2",**ppo_config)
     model.learn(total_timesteps=1000000)
     model.save("ppo2_hysr_one_ball")
 
@@ -63,6 +74,55 @@ def _configure():
                       "pam configuration file",
                       str,
                       integrity_checks= [FileExists()])
+    config.add_option("record_path",
+                     "None",
+                     "if not None, then it is assumed to be a valid file path,\n"
+                     +"and pressures applied to the robot will be recorded to a corresponding file",
+                     str)
+    config.add_option("gamma",
+                      0.99,
+                      "ppo discount factor",
+                      float)
+    config.add_option("n_steps",
+                      128,
+                      "ppop number of steps to run",
+                      int)
+    config.add_option("ent_coef",
+                      0.01,
+                      "ppo entropy coefficient for the loss calculation",
+                      float),
+    config.add_option("learning_rate",
+                      0.00025,
+                      "ppo learning rate",
+                      float),
+    config.add_option("vf_coef",
+                      0.5,
+                      "ppo value function coefficient for the loss calculation",
+                      float),
+    config.add_option("max_grad_norm",
+                      0.5,
+                      "ppo maximum value for gradient clipping",
+                      float)
+    config.add_option("lam",
+                      0.95,
+                      "ppo factor for trade-off of bias vs variance for Generalized Advantage Estimator",
+                      float)
+    config.add_option("nminibatches",
+                      4,
+                      "ppo number of training minibatches per update",
+                      int)
+    config.add_option("noptepochs",
+                      4,
+                      "ppo number of epoch when optimizing the surrogate",
+                      int)
+    config.add_option("cliprange",
+                      0.2,
+                      "ppo clipping parameter",
+                      float)
+    config.add_option("cliprange_vf",
+                      0.2,
+                      "ppo clipping parameter for the value function",
+                      float)
     change_all=False
     finished  = config.dialog(change_all,sys.argv[1:])
     if not finished:
@@ -74,8 +134,17 @@ def _run():
     config = _configure()
     if config is None:
         return
+    record_path = config.record_path
+    if record_path == "None":
+        record_path = None
+    if record_path is not None:
+        if os.path.exists(record_path):
+            os.remove(record_path)
     pam_config = pam_interface.JsonConfiguration(config.pam_config_file)
-    execute(config.accelerated,pam_config)
+    execute(config.accelerated,
+            config,
+            pam_config,
+            record_path)
     accelerated = False
     if("accelerated" in sys.argv):
         accelerated = True

@@ -106,9 +106,8 @@ class HysrOneBall:
                  rtt_cap=-0.2,
                  trajectory_index=None,
                  reference_posture=None,
-                 pam_config=None):
-
-
+                 pam_config=None,
+                 record_path=None):
       
         # moving the goal to the target position
         goal = o80_pam.o80Goal(SEGMENT_ID_GOAL)
@@ -178,7 +177,15 @@ class HysrOneBall:
         self._max_pressures1 = [(18000,18000)]*4
         self._max_pressures2 = [(20000,20000)]*4
                                  
-
+        # if record path is not None, saving all applied pressures in
+        # a file (we buffer them then write them in the file during reset)
+        if record_path is not None:
+            self._record = True
+            self._record_path = record_path
+            self._record_buffer = []
+        else:
+            self._record = False
+            self._record_buffer = None
         
         
     def _create_observation(self):
@@ -239,23 +246,27 @@ class HysrOneBall:
                                              self._mirroring,
                                              max_pressures,
                                              duration, 
-                                             self._accelerated_time)
+                                             self._accelerated_time,
+                                             record_buffer=self._record_buffer)
 
-        (pressures_ago,pressures_antago,
-         joint_positions,joint_velocities) = self._pressure_commands.read()
-            
         # moving real robot back to reference posture
         for duration in (0.5,1.0):
             mirroring.go_to_pressure_posture(self._pressure_commands,
                                              self._mirroring,
                                              self._reference_posture,
                                              duration, # in 1 seconds
-                                             self._accelerated_time)
-
-        (pressures_ago,pressures_antago,
-         joint_positions,joint_velocities) = self._pressure_commands.read()
+                                             self._accelerated_time,
+                                             record_buffer=self._record_buffer)
 
 
+        # saving pressures applied during the episode to a file
+        if self._record:
+            with open(self._record_path,"a+") as f:
+                data = "\n".join([repr(d) for d in self._record_buffer])
+                f.write(data)
+                f.write("\n")
+            self._record_buffer=[]
+        
         # getting a new trajectory
         if self._trajectory_index is not None:
             trajectory_points = context.BallTrajectories().get_trajectory(self._trajectory_index)
@@ -316,6 +327,10 @@ class HysrOneBall:
         # convert action [ago1,antago1,ago2] to list suitable for
         # o80 ([(ago1,antago1),(),...])
         pressures = _convert_pressures_in(list(action))
+
+        # saving set actions in the buffer
+        if self._record:
+            self._record_buffer.append((time.time(),pressures,None))
         
         # sending action pressures to real (or pseudo real) robot.
         if self._accelerated_time:

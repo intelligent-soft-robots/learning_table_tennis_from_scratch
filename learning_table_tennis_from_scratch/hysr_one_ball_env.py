@@ -70,7 +70,8 @@ class HysrOneBallEnv(gym.Env):
                                  rtt_cap=self._config.rtt_cap,
                                  trajectory_index=None,
                                  reference_posture=self._config.reference_posture,
-                                 pam_config=self._config.pam_config)
+                                 pam_config=self._config.pam_config,
+                                 record_path=self._config.record_path)
         
         self.action_space = gym.spaces.Box(low=-1.0,
                                            high=+1.0,
