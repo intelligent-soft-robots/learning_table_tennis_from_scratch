@@ -68,7 +68,7 @@ class HysrOneBallEnv(gym.Env):
                                  self._config.reward_normalization_constant,
                                  self._config.smash_task,
                                  rtt_cap=self._config.rtt_cap,
-                                 trajectory_index=None,
+                                 trajectory_index=1,
                                  reference_posture=self._config.reference_posture,
                                  pam_config=self._config.pam_config,
                                  record_path=self._config.record_path)
@@ -89,6 +89,7 @@ class HysrOneBallEnv(gym.Env):
                             self._config.pressure_min,
                             self._config.pressure_max,
                             self._config.nb_dofs*2)
+        print("pressure limits:", self._config.pressure_min, self._config.pressure_max)
         
         self._obs_boxes.add_box("ball_position",
                             min(self._config.world_boundaries["min"]),
@@ -125,7 +126,13 @@ class HysrOneBallEnv(gym.Env):
     def step(self,action):
 
         # casting actions from [-1,+1] to [-pressure_change_range,+pressure_change_range]
-        action = [self._config.pressure_change_range*a for a in action]
+        
+        # action = [self._config.pressure_change_range*a for a in action]
+
+        #alternative casting
+        action_factor = 0.1
+        action_sigmoid = [1/(1+np.exp(-a*action_factor)) - 0.5 for a in action]
+        action = [self._config.pressure_change_range*a for a in action_sigmoid]
         
         # current pressures
         agos,antagos = self._hysr.get_current_pressures()
@@ -142,11 +149,28 @@ class HysrOneBallEnv(gym.Env):
         observation,reward,episode_over = self._hysr.step(list(action))
 
         # formatting observation in a format suitable for gym
+        # print("....................")
+        # print(observation.joint_positions)
+        # print(observation.joint_velocities)
+        # print(observation.pressures)
+        # print(observation.ball_position)
+        # print(observation.ball_velocity)
+        # print("....................")
         observation = self._convert_observation(observation)
 
         # imposing frequency to learning agent
         if not self._config.accelerated_time:
             self._frequency_manager.wait()
+
+        if reward!=0:
+            print(observation, reward, episode_over)
+
+        #simple normalization
+        # f = [1] * len(observation)
+        # for i in range(4,8):
+        #     f[i]=30
+
+        # observation = [observation[i] * f[i] for i in range(len(observation))]
         
         return observation,reward,episode_over,{}
 

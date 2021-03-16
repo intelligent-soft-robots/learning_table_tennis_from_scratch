@@ -8,12 +8,18 @@ import o80
 import pam_interface
 from learning_table_tennis_from_scratch.hysr_one_ball_env import HysrOneBallEnv
 from lightargs import BrightArgs,FileExists
+import tensorflow as tf
 
-from stable_baselines.common.policies import MlpPolicy
+import baselines
+from baselines.common.vec_env import VecFrameStack, VecNormalize, VecEnv
+from baselines.common.vec_env.vec_video_recorder import VecVideoRecorder
+from baselines.common.vec_env.dummy_vec_env import DummyVecEnv
+from baselines.common.cmd_util import common_arg_parser, parse_unknown_args, make_env
+from baselines.common.tf_util import get_session
+from baselines import logger
+from importlib import import_module
+
 from stable_baselines.common import make_vec_env
-from stable_baselines import PPO2
-from stable_baselines.common.env_checker import check_env
-
 
 class Config:
 
@@ -32,12 +38,25 @@ class Config:
         self.pressure_max = pam_config.max_pressure()
         self.pressure_change_range = self.pressure_max - self.pressure_min
         self.reward_normalization_constant = 1.0
-        self.smash_task = True
+        self.smash_task = False
         self.rtt_cap = -0.2
         self.nb_dofs = 4
         self.world_boundaries = { "min":(0.0,-1.0,+0.17), # x,y,z
                                   "max":(1.6,3.5,+1.5) }   
         self.record_path = None
+
+
+
+def get_alg_module_openai_baselines(alg, submodule=None):
+    submodule = submodule or alg
+    try:
+        # first try to import the alg module from baselines
+        alg_module = import_module('.'.join(['baselines', alg, submodule]))
+    except ImportError:
+        # then from rl_algs
+        alg_module = import_module('.'.join(['rl_' + 'algs', alg, submodule]))
+
+    return alg_module
 
 def execute(accelerated,
             ppo_config,
@@ -51,16 +70,32 @@ def execute(accelerated,
     
     env = make_vec_env(HysrOneBallEnv,env_kwargs={"config":env_config})
     #check_env(env)
+    total_timesteps = getattr(ppo_config, "num_timesteps")
 
-    ppo_params = ("gamma","n_steps","ent_coef",
-                  "learning_rate","cliprange","cliprange_vf",
+    ppo_params = ("gamma", "ent_coef",
+                  "lr","cliprange",
                   "vf_coef","max_grad_norm","lam",
-                  "nminibatches","noptepochs")
+                  "nminibatches","noptepochs", "network",
+                  "num_layers", "num_hidden", "activation", "nsteps")
     ppo_config = { param:getattr(ppo_config,param)
-                   for param in ppo_params }
-    model = PPO2(MlpPolicy, env, verbose=1, tensorboard_log="/tmp/ppo2",**ppo_config)
-    model.learn(total_timesteps=1000000)
-    model.save("ppo2_hysr_one_ball")
+                for param in ppo_params }
+    #model = PPO2(MlpPolicy, env, verbose=1, tensorboard_log="/tmp/ppo2",**ppo_config)
+    #model.learn(total_timesteps=1000000)
+    #model.save("ppo2_hysr_one_ball")
+
+    alg = "ppo2"
+
+    learn = get_alg_module_openai_baselines(alg).learn
+    seed = None
+
+    model = learn(
+        env=env,
+        seed=seed,
+        total_timesteps=total_timesteps,
+        **ppo_config
+    )
+    model.save("ppo2_openai_baselines_hysr_one_ball")
+    return model, env
 
 
 def _configure():
@@ -83,15 +118,15 @@ def _configure():
                       0.99,
                       "ppo discount factor",
                       float)
-    config.add_option("n_steps",
-                      2048,
+    config.add_option("num_timesteps",
+                      100000,
                       "ppop number of steps to run",
                       int)
     config.add_option("ent_coef",
-                      0.01,
+                      0.001,
                       "ppo entropy coefficient for the loss calculation",
                       float),
-    config.add_option("learning_rate",
+    config.add_option("lr",
                       0.0001,
                       "ppo learning rate",
                       float),
@@ -123,6 +158,29 @@ def _configure():
                       0.2,
                       "ppo clipping parameter for the value function",
                       float)
+    config.add_option("network",
+                      "mlp",
+                      "network type (mlp or cnn)",
+                      str)
+    config.add_option("num_layers",
+                      1,
+                      "number of layers",
+                      int)
+    config.add_option("num_hidden",
+                      128,
+                      "number of hidden unites",
+                      int)
+    config.add_option("activation",
+                      tf.tanh,
+                      "activation function",
+                      tf.function)
+    config.add_option("nsteps",
+                      2048,
+                      "nsteps",
+                      int)
+
+
+
     change_all=False
     finished  = config.dialog(change_all,sys.argv[1:])
     if not finished:
