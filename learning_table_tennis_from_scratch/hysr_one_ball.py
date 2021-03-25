@@ -106,10 +106,21 @@ class HysrOneBall:
                  reward_normalization_constant,
                  smash_task,
                  rtt_cap=-0.2,
-                 trajectory_index=None,
+                 trajectory=None,
                  reference_posture=None,
                  pam_config=None):
-      
+        '''
+        trajectory:
+        - if None, a different random pre-recorded trajectory will
+          by played at each iteration
+        - if an integer, the same pre-recorded trajectory corresponding
+          to the index will be played at each iteration
+        - if a tuple (position1,position2,velocity) (3d list for
+          position and float for velocity): the trajectory of 
+          the ball going from position1 to position2 at the 
+          given velocity will be played.
+        '''
+        
         # moving the goal to the target position
         goal = o80_pam.o80Goal(SEGMENT_ID_GOAL)
         goal.set(target_position,[0,0,0])
@@ -132,7 +143,7 @@ class HysrOneBall:
         # if a number, the same trajectory will be played
         # all the time. If None, a random trajectory will be
         # played each time
-        self._trajectory_index = trajectory_index
+        self._trajectory = trajectory
         
         # the robot will interpolate between current and
         # target posture over this duration
@@ -210,7 +221,20 @@ class HysrOneBall:
         return pressures_ago,pressures_antago
     
 
-    def reset(self):
+    def reset(self,trajectory=None):
+
+        '''
+        reset the environment:
+        - reset the contacts and the ball status
+        - move the robot back to the reference posture
+        - load a ball trajectory
+        - return an observation
+        The trajectory loaded depends either on:
+        1) the trajectory argument if not None, otherwise
+        2) the constructor trajectory argument
+        See the constructor doc for further information
+        '''
+        
 
         # aligning the mirrored robot with
         # (pseudo) real robot
@@ -249,8 +273,17 @@ class HysrOneBall:
                                                  self._accelerated_time)
 
         # getting a new trajectory
-        if self._trajectory_index is not None:
-            trajectory_points = context.BallTrajectories().get_trajectory(self._trajectory_index)
+        trajectory = (trajectory if trajectory is not None
+                      else self._trajectory)
+        if trajectory is not None:
+            if isinstance(trajectory,int):
+                # trajectory is the index of a pre-recorded trajectory
+                trajectory_points = context.BallTrajectories().get_trajectory(trajectory)
+            else:
+                # trajectory is a tuple (start,end,velocity)
+                trajectory_points = context.line_trajectory(trajectory[0],
+                                                            trajectory[1],
+                                                            trajectory[2])
         else:
             _,trajectory_points = context.BallTrajectories().random_trajectory()
             
@@ -296,8 +329,20 @@ class HysrOneBall:
 
         
     # action assumed to be np.array(ago1,antago1,ago2,antago2,...)
-    def step(self,action):
+    def step(self,action,ball_position=None):
 
+        '''
+        ball_position: if None (the default), no effect. 
+                       if 3d tuple, move the ball to the position
+                       (and set velocity to 0). The loaded trajectory
+                       (if any) is deleted. Mostly used for debugging.
+        '''
+
+        # if ball_position is not None, moving the ball there:
+        # note: will have effect at the next iteration, after bursting
+        self._ball_position.set(ball_position,
+                                [0]*3,durations_ms=None,wait=False)
+        
         # reading current real (or pseudo real) robot state
         (pressures_ago,pressures_antago,
          joint_positions,joint_velocities) = self._pressure_commands.read()
