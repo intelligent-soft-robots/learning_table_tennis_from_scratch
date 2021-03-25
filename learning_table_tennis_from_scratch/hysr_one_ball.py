@@ -108,7 +108,7 @@ class HysrOneBall:
                  rtt_cap=-0.2,
                  trajectory_index=None,
                  reference_posture=None,
-                 pam_config=None)
+                 pam_config=None):
       
         # moving the goal to the target position
         goal = o80_pam.o80Goal(SEGMENT_ID_GOAL)
@@ -240,12 +240,13 @@ class HysrOneBall:
                                              self._accelerated_time)
 
         # moving real robot back to reference posture
-        for duration in (0.5,1.0):
-            mirroring.go_to_pressure_posture(self._pressure_commands,
-                                             self._mirroring,
-                                             self._reference_posture,
-                                             duration, # in 1 seconds
-                                             self._accelerated_time)
+        if self._reference_posture:
+            for duration in (0.5,1.0):
+                mirroring.go_to_pressure_posture(self._pressure_commands,
+                                                 self._mirroring,
+                                                 self._reference_posture,
+                                                 duration, # in 1 seconds
+                                                 self._accelerated_time)
 
         # getting a new trajectory
         if self._trajectory_index is not None:
