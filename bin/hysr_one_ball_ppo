@@ -37,17 +37,14 @@ class Config:
         self.nb_dofs = 4
         self.world_boundaries = { "min":(0.0,-1.0,+0.17), # x,y,z
                                   "max":(1.6,3.5,+1.5) }   
-        self.record_path = None
 
 def execute(accelerated,
             ppo_config,
-            pam_config,
-            record_path):
+            pam_config):
 
     env_config = Config(pam_config)
     env_config.accelerated_time = accelerated
     env_config.pam_config = pam_config
-    env_config.record_path = record_path
     
     env = make_vec_env(HysrOneBallEnv,env_kwargs={"config":env_config})
     #check_env(env)
@@ -74,11 +71,6 @@ def _configure():
                       "pam configuration file",
                       str,
                       integrity_checks= [FileExists()])
-    config.add_option("record_path",
-                     "None",
-                     "if not None, then it is assumed to be a valid file path,\n"
-                     +"and pressures applied to the robot will be recorded to a corresponding file",
-                     str)
     config.add_option("gamma",
                       0.99,
                       "ppo discount factor",
@@ -134,17 +126,10 @@ def _run():
     config = _configure()
     if config is None:
         return
-    record_path = config.record_path
-    if record_path == "None":
-        record_path = None
-    if record_path is not None:
-        if os.path.exists(record_path):
-            os.remove(record_path)
     pam_config = pam_interface.JsonConfiguration(config.pam_config_file)
     execute(config.accelerated,
             config,
-            pam_config,
-            record_path)
+            pam_config)
     accelerated = False
     if("accelerated" in sys.argv):
         accelerated = True
