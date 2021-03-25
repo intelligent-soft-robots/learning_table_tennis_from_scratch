@@ -31,7 +31,7 @@ class Config:
         self.pressure_min = pam_config.min_pressure()
         self.pressure_max = pam_config.max_pressure()
         self.pressure_change_range = 1000
-        self.reward_normalization_constant = 1.0
+        self.reward_normalization_constant = 3.0
         self.smash_task = True
         self.rtt_cap = -0.2
         self.nb_dofs = 4

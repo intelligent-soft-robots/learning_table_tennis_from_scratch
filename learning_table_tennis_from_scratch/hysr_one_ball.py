@@ -25,7 +25,7 @@ def _return_task_reward( min_distance_ball_target,
                          c,
                          rtt_cap ):
     distance_reward_baseline = 3.0
-    reward = 1.- c * ((min_distance_ball_target/distance_reward_baseline) ** 0.75)
+    reward = 1.- ((min_distance_ball_target/c) ** 0.75)
     reward = max(reward,rtt_cap)
     return reward
 
@@ -35,7 +35,7 @@ def _smash_task_reward( min_distance_ball_target,
                         c,
                         rtt_cap ):
     distance_reward_baseline = 3.0
-    reward = 1.- c * ((min_distance_ball_target/distance_reward_baseline) ** 0.75)
+    reward = 1.- ((min_distance_ball_target/c) ** 0.75)
     reward = reward * max_ball_velocity
     reward = max(reward,rtt_cap)
     return reward
@@ -47,8 +47,6 @@ def _reward(smash,
             max_ball_velocity,
             c,
             rtt_cap):
-
-    print(smash, min_distance_ball_racket, min_distance_ball_target, max_ball_velocity, c, rtt_cap)
 
     # i.e. the ball did not hit the racket,
     # so computing a reward based on the minimum
