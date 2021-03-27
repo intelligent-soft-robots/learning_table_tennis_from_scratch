@@ -1,12 +1,6 @@
-import time
-import math
-import random
-import o80
-import o80_pam
-import pam_mujoco
+import os,sys,time,math,random,json
+import o80,o80_pam,pam_mujoco,context,pam_interface
 from pam_mujoco import mirroring
-import context
-import pam_interface
 import numpy as np
 
 SEGMENT_ID_BALL = pam_mujoco.segment_ids.ball
@@ -17,58 +11,46 @@ SEGMENT_ID_ROBOT_MIRROR = pam_mujoco.segment_ids.mirroring
 SEGMENT_ID_PSEUDO_REAL_ROBOT = o80_pam.segment_ids.robot
 
 
-def _no_hit_reward(min_distance_ball_racket):
-    return -min_distance_ball_racket
+class HysrOneBallConfig:
 
+    __slots__ = ("o80_pam_time_step","mujoco_time_step","algo_time_step",
+                 "target_position","reference_posture","world_boundaries",
+                 "pressure_change_range","trajectory")
 
-def _return_task_reward( min_distance_ball_target,
-                         c,
-                         rtt_cap ):
-    distance_reward_baseline = 3.0
-    reward = 1.- ((min_distance_ball_target/c) ** 0.75)
-    reward = max(reward,rtt_cap)
-    return reward
+    def __init__(self):
+        for s in self.__slots__:
+            setattr(self,s,None)
 
+    def get(self):
+        r = {s:getattr(self,s)
+             for s in self.__slots__}
+        return r
+        
+    @classmethod
+    def from_json(cls,jsonpath):
+        if not os.path.isfile(jsonpath):
+            raise FileNotFoundError("failed to find hysr configuration file: {}".format(jsonpath))
+        try :
+            with open(jsonpath) as f:
+                conf=json.load(f)
+        except Exception as e:
+            raise ValueError("failed to parse reward json configuration file {}: {}".format(jsonpath,e))
+        instance=cls()
+        for s in cls.__slots__:
+            try:
+                setattr(instance,s,conf[s])
+            except:
+                raise ValueError("failed to find the attribute {} "
+                                 "in {}".format(s,jsonpath))
+        return instance
 
-def _smash_task_reward( min_distance_ball_target,
-                        max_ball_velocity,
-                        c,
-                        rtt_cap ):
-    distance_reward_baseline = 3.0
-    reward = 1.- ((min_distance_ball_target/c) ** 0.75)
-    reward = reward * max_ball_velocity
-    reward = max(reward,rtt_cap)
-    return reward
-
-
-def _reward(smash, 
-            min_distance_ball_racket,
-            min_distance_ball_target,
-            max_ball_velocity,
-            c,
-            rtt_cap):
-
-    # i.e. the ball did not hit the racket,
-    # so computing a reward based on the minimum
-    # distance between the racket and the ball
-    if min_distance_ball_racket is not None:
-        return _no_hit_reward(min_distance_ball_racket)
-
-    # the ball did hit the racket, so computing
-    # a reward based on the ball / target
+    @staticmethod
+    def default_path():
+        return os.path.join(sys.prefix,
+                            "learning_table_tennis_from_scratch_config",
+                            "hysr_one_ball_default.json")
     
-    if smash:
-        return _smash_task_reward( min_distance_ball_target,
-                                   max_ball_velocity,
-                                   c,
-                                   rtt_cap )
-    
-    else:
-        return _return_task_reward( min_distance_ball_target,
-                                    c,
-                                    rtt_cap )
 
-    
 def _convert_pressures_in(pressures):
     # convert pressure from [ago1, antago1, ago2, antago2, ...]
     # to [(ago1, antago1), (ago2, antago2), ...]
@@ -93,26 +75,18 @@ class _Observation:
         self.pressures = pressures
         self.ball_position = ball_position
         self.ball_velocity = ball_velocity
-
-
+    
+        
 class HysrOneBall:
 
     def __init__(self,
+                 hysr_config,
                  accelerated_time,
-                 o80_time_step,
-                 mujoco_time_step,
-                 algo_time_step,
-                 target_position,
-                 reward_normalization_constant,
-                 smash_task,
-                 rtt_cap=-0.2,
-                 trajectory_index=None,
-                 reference_posture=None,
-                 pam_config=None):
-      
+                 reward_function):
+        
         # moving the goal to the target position
         goal = o80_pam.o80Goal(SEGMENT_ID_GOAL)
-        goal.set(target_position,[0,0,0])
+        goal.set(hysr_config.target_position,[0,0,0])
 
         # if o80_pam (i.e. the pseudo real robot)
         # has been started in accelerated time,
@@ -120,28 +94,29 @@ class HysrOneBall:
         # an algorithm time step
         self._accelerated_time = accelerated_time
         if accelerated_time:
-            self._o80_time_step = o80_time_step
-            self._nb_robot_bursts = int(algo_time_step/o80_time_step)
+            self._o80_time_step = hysr_config.o80_pam_time_step
+            self._nb_robot_bursts = int(hysr_config.algo_time_step/hysr_config.o80_pam_time_step)
 
         # pam_mujoco (i.e. simulated ball and robot) should have been
         # started in accelerated time. It burst through algorithm
         # time steps
-        self._mujoco_time_step = mujoco_time_step
-        self._nb_sim_bursts = int(algo_time_step/mujoco_time_step)
+        self._mujoco_time_step = hysr_config.mujoco_time_step
+        self._nb_sim_bursts = int(hysr_config.algo_time_step/hysr_config.mujoco_time_step)
         
         # if a number, the same trajectory will be played
-        # all the time. If None, a random trajectory will be
-        # played each time
-        self._trajectory_index = trajectory_index
+        # all the time. If None or negative number, a random trajectory will be
+        # played each time. Here None by default. Use
+        # method set_ball_trajectory to overwrite
+        if hysr_config.trajectory<0:
+            hysr_config.trajectory=None
+        self._trajectory_index = hysr_config.trajectory
         
         # the robot will interpolate between current and
         # target posture over this duration
-        self._period_ms = algo_time_step
+        self._period_ms = hysr_config.algo_time_step
         
         # reward configuration
-        self._c = reward_normalization_constant 
-        self._smash_task = smash_task # True or False (return task)
-        self._rtt_cap = rtt_cap
+        self._reward_function = reward_function
 
         # to get information regarding the ball
         self._ball_communication = o80_pam.o80Ball(SEGMENT_ID_BALL)
@@ -151,11 +126,11 @@ class HysrOneBall:
 
         # the posture in which the robot will reset itself
         # upon reset (may be None if no posture reset)
-        self._reference_posture = reference_posture
+        self._reference_posture = hysr_config.reference_posture
         
         # will encapsulate all information
         # about the ball (e.g. min distance with racket, etc)
-        self._ball_status = context.BallStatus(target_position)
+        self._ball_status = context.BallStatus(hysr_config.target_position)
         
         # to send mirroring commands to simulated robot
         self._mirroring = o80_pam.o80RobotMirroring(SEGMENT_ID_ROBOT_MIRROR)
@@ -174,10 +149,17 @@ class HysrOneBall:
 
         # will be used to move the robot to reference posture
         # between episodes
-        self._pam_config = pam_config
         self._max_pressures1 = [(18000,18000)]*4
         self._max_pressures2 = [(20000,20000)]*4
                                  
+
+    def set_ball_trajectory(self,trajectory_index):
+        # overwrite the trajectory index (set to None in
+        # constructor). If None: playing a random pre-recorded
+        # trajectory at each episode. If an index: playing the
+        # corresponding pre-recorded trajectory exclusively
+        self._trajectory_index= trajectory_index
+
         
     def _create_observation(self):
         (pressures_ago,pressures_antago,
@@ -353,11 +335,9 @@ class HysrOneBall:
 
         # if episode over, computing related reward
         if episode_over:
-            reward = _reward( self._smash_task,
-                              self._ball_status.min_distance_ball_racket,
-                              self._ball_status.min_distance_ball_target,
-                              self._ball_status.max_ball_velocity,
-                              self._c,self._rtt_cap )
+            reward = self._reward_function(self._ball_status.min_distance_ball_racket,
+                                           self._ball_status.min_distance_ball_target,
+                                           self._ball_status.max_ball_velocity)
 
         # next step can not be the first one
         # (reset will set this back to True)

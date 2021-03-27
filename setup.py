@@ -1,4 +1,4 @@
-from setuptools import setup, find_packages
+from distutils.core import setup
 
 setup( name='learning_table_tennis_from_scratch',
        version='1.0',
@@ -15,6 +15,10 @@ setup( name='learning_table_tennis_from_scratch',
        packages=['learning_table_tennis_from_scratch'],
        install_requires=['tensorflow==1.15','gym'],
        zip_safe=True,
+       data_files=[('learning_table_tennis_from_scratch_config/',
+                    ["config/hysr_one_ball_default.json",
+                     "config/ppo_default.json",
+                     "config/reward_default.json"])],
        scripts=['bin/hysr_one_ball_random',
                 'bin/hysr_one_ball_swing',
                 'bin/hysr_one_ball_ppo',

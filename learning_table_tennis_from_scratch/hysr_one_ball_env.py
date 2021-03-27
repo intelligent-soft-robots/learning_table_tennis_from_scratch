@@ -1,9 +1,8 @@
-import o80
-import math
-import gym
-import random
+import o80,pam_interface
+import math,gym,random
 import numpy as np
-from .hysr_one_ball import HysrOneBall
+from .hysr_one_ball import HysrOneBall,HysrOneBallConfig
+from .rewards import JsonReward
 from collections import OrderedDict
 
 
@@ -52,66 +51,68 @@ class _ObservationSpace:
         
         
 class HysrOneBallEnv(gym.Env):
-    
+
     def __init__(self,
-                 config=None):
+                 accelerated_time=None,
+                 pam_config_file=None,
+                 reward_config_file=None,
+                 hysr_one_ball_config_file=None):
 
         super().__init__()
+       
+        hysr_one_ball_config = HysrOneBallConfig.from_json(hysr_one_ball_config_file)
+        reward_function = JsonReward.get(reward_config_file)
 
-        self._config = config
-
-        self._hysr = HysrOneBall(self._config.accelerated_time,
-                                 self._config.o80_pam_time_step,
-                                 self._config.mujoco_time_step,
-                                 self._config.algo_time_step,
-                                 self._config.target_position,
-                                 self._config.reward_normalization_constant,
-                                 self._config.smash_task,
-                                 rtt_cap=self._config.rtt_cap,
-                                 trajectory_index=None,
-                                 reference_posture=self._config.reference_posture,
-                                 pam_config=self._config.pam_config)
+        self._config = pam_interface.JsonConfiguration(pam_config_file)
+        self._nb_dofs = len(self._config.max_pressures_ago)
+        self._accelerated_time = accelerated_time
+        self._algo_time_step = hysr_one_ball_config.algo_time_step 
+        self._pressure_change_range = hysr_one_ball_config.pressure_change_range
+        
+        self._hysr = HysrOneBall(hysr_one_ball_config,
+                                 accelerated_time,
+                                 reward_function)
         
         self.action_space = gym.spaces.Box(low=-1.0,
                                            high=+1.0,
-                                           shape=(self._config.nb_dofs*2,),
+                                           shape=(self._nb_dofs*2,),
                                            dtype=np.float)
-
         
         self._obs_boxes = _ObservationSpace()
         
         self._obs_boxes.add_box("robot_position",-math.pi,+math.pi,
-                            self._config.nb_dofs)
+                            self._nb_dofs)
         self._obs_boxes.add_box("robot_velocity",0.0,10.0,
-                            self._config.nb_dofs)
+                            self._nb_dofs)
         self._obs_boxes.add_box("robot_pressure",
-                            self._config.pressure_min,
-                            self._config.pressure_max,
-                            self._config.nb_dofs*2)
+                            self._config.min_pressure(),
+                            self._config.max_pressure(),
+                            self._nb_dofs*2)
         
         self._obs_boxes.add_box("ball_position",
-                            min(self._config.world_boundaries["min"]),
-                            max(self._config.world_boundaries["max"]),
+                            min(hysr_one_ball_config.world_boundaries["min"]),
+                            max(hysr_one_ball_config.world_boundaries["max"]),
                             3)
         self._obs_boxes.add_box("ball_velocity",
                             -10.0,+10.0,3)
 
         self.observation_space = self._obs_boxes.get_gym_box()
 
-        if not self._config.accelerated_time:
-            self._frequency_manager = o80.FrequencyManager(1.0/self._config.algo_time_step)
+        if not self._accelerated_time:
+            self._frequency_manager = o80.FrequencyManager(1.0/hysr_one_ball_config.algo_time_step)
         
         
     def _bound_pressure(self,dof,ago,value):
         if ago:
             return int(max(min(value,
-                               self._config.pam_config.max_pressures_ago[dof]),
-                           self._config.pam_config.min_pressures_ago[dof]))
+                               self._config.max_pressures_ago[dof]),
+                           self._config.min_pressures_ago[dof]))
         else:
             return int(max(min(value,
-                               self._config.pam_config.max_pressures_antago[dof]),
-                           self._config.pam_config.min_pressures_antago[dof]))
-    
+                               self._config.max_pressures_antago[dof]),
+                           self._config.min_pressures_antago[dof]))
+
+        
     def _convert_observation(self,observation):
         self._obs_boxes.set_values("robot_position",observation.joint_positions)
         self._obs_boxes.set_values("robot_velocity",observation.joint_velocities)
@@ -124,13 +125,13 @@ class HysrOneBallEnv(gym.Env):
     def step(self,action):
 
         # casting actions from [-1,+1] to [-pressure_change_range,+pressure_change_range]
-        action = [self._config.pressure_change_range*a for a in action]
+        action = [self._pressure_change_range*a for a in action]
         
         # current pressures
         agos,antagos = self._hysr.get_current_pressures()
         
         # final target pressure is action + current desired
-        for dof in range(self._config.nb_dofs):
+        for dof in range(self._nb_dofs):
             action[2*dof] = self._bound_pressure(dof,True,agos[dof]+action[2*dof])
             action[2*dof+1] = self._bound_pressure(dof,True,antagos[dof]+action[2*dof+1])
 
@@ -144,7 +145,7 @@ class HysrOneBallEnv(gym.Env):
         observation = self._convert_observation(observation)
 
         # imposing frequency to learning agent
-        if not self._config.accelerated_time:
+        if not self._accelerated_time:
             self._frequency_manager.wait()
         
         return observation,reward,episode_over,{}
@@ -153,6 +154,6 @@ class HysrOneBallEnv(gym.Env):
     def reset(self):
         observation = self._hysr.reset()
         observation = self._convert_observation(observation)
-        if not self._config.accelerated_time:
-            self._frequency_manager = o80.FrequencyManager(1.0/self._config.algo_time_step)
+        if not self._accelerated_time:
+            self._frequency_manager = o80.FrequencyManager(1.0/self._algo_time_step)
         return observation

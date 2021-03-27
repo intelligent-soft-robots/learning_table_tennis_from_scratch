@@ -1,64 +1,25 @@
 #!/usr/bin/env python3
 
-import os
 import sys
-import math
-import gym
-import o80
 import pam_interface
-from learning_table_tennis_from_scratch.hysr_one_ball_env import HysrOneBallEnv
 from lightargs import BrightArgs,FileExists
+from learning_table_tennis_from_scratch.rewards import JsonReward
+from learning_table_tennis_from_scratch.models import run_stable_baselines
+from learning_table_tennis_from_scratch.hysr_one_ball import HysrOneBallConfig
+from learning_table_tennis_from_scratch.ppo_config import PPOConfig
 
-from stable_baselines.common.policies import MlpPolicy
-from stable_baselines.common import make_vec_env
-from stable_baselines import PPO2
-from stable_baselines.common.env_checker import check_env
-
-
-class Config:
-
-    def __init__(self,pam_config):
-        self.accelerated_time = True
-        self.o80_pam_time_step = 0.002
-        self.mujoco_time_step = 0.002
-        self.algo_time_step = 0.01
-        self.target_position = [0.45,2.7,0.17]
-        self.reference_posture = [(19900,16000),
-                                  (16800,19100),
-                                  (18700,17300),
-                                  (18000,18000)]
-        self.pam_config = pam_config
-        self.pressure_min = pam_config.min_pressure()
-        self.pressure_max = pam_config.max_pressure()
-        self.pressure_change_range = 1000
-        self.reward_normalization_constant = 3.0
-        self.smash_task = True
-        self.rtt_cap = -0.2
-        self.nb_dofs = 4
-        self.world_boundaries = { "min":(0.0,-1.0,+0.17), # x,y,z
-                                  "max":(1.6,3.5,+1.5) }   
 
 def execute(accelerated,
-            ppo_config,
-            pam_config):
-
-    env_config = Config(pam_config)
-    env_config.accelerated_time = accelerated
-    env_config.pam_config = pam_config
+            pam_config,
+            reward_config,
+            hysr_config,
+            ppo_config):
+    run_stable_baselines(accelerated,
+                         pam_config,
+                         reward_config,
+                         hysr_config,
+                         ppo_config)
     
-    env = make_vec_env(HysrOneBallEnv,env_kwargs={"config":env_config})
-    #check_env(env)
-
-    ppo_params = ("gamma","n_steps","ent_coef",
-                  "learning_rate","cliprange","cliprange_vf",
-                  "vf_coef","max_grad_norm","lam",
-                  "nminibatches","noptepochs")
-    ppo_config = { param:getattr(ppo_config,param)
-                   for param in ppo_params }
-    model = PPO2(MlpPolicy, env, verbose=1, tensorboard_log="/tmp/ppo2",**ppo_config)
-    model.learn(total_timesteps=1000000)
-    model.save("ppo2_hysr_one_ball")
-
 
 def _configure():
     config = BrightArgs(str("learning table tennis from scratch.\n"+
@@ -71,50 +32,21 @@ def _configure():
                       "pam configuration file",
                       str,
                       integrity_checks= [FileExists()])
-    config.add_option("gamma",
-                      0.99,
-                      "ppo discount factor",
-                      float)
-    config.add_option("n_steps",
-                      128,
-                      "ppop number of steps to run",
-                      int)
-    config.add_option("ent_coef",
-                      0.01,
-                      "ppo entropy coefficient for the loss calculation",
-                      float),
-    config.add_option("learning_rate",
-                      0.00025,
-                      "ppo learning rate",
-                      float),
-    config.add_option("vf_coef",
-                      0.5,
-                      "ppo value function coefficient for the loss calculation",
-                      float),
-    config.add_option("max_grad_norm",
-                      0.5,
-                      "ppo maximum value for gradient clipping",
-                      float)
-    config.add_option("lam",
-                      0.95,
-                      "ppo factor for trade-off of bias vs variance for Generalized Advantage Estimator",
-                      float)
-    config.add_option("nminibatches",
-                      4,
-                      "ppo number of training minibatches per update",
-                      int)
-    config.add_option("noptepochs",
-                      4,
-                      "ppo number of epoch when optimizing the surrogate",
-                      int)
-    config.add_option("cliprange",
-                      0.2,
-                      "ppo clipping parameter",
-                      float)
-    config.add_option("cliprange_vf",
-                      0.2,
-                      "ppo clipping parameter for the value function",
-                      float)
+    config.add_option("reward_config_file",
+                      JsonReward.default_path(),
+                      "reward configuration file",
+                      str,
+                      integrity_checks= [FileExists()])
+    config.add_option("hysr_config_file",
+                      HysrOneBallConfig.default_path(),
+                      "hysr configuration file",
+                      str,
+                      integrity_checks= [FileExists()])
+    config.add_option("ppo_config_file",
+                      PPOConfig.default_path(),
+                      "ppo configuration file",
+                      str,
+                      integrity_checks= [FileExists()])
     change_all=False
     finished  = config.dialog(change_all,sys.argv[1:])
     if not finished:
@@ -126,13 +58,11 @@ def _run():
     config = _configure()
     if config is None:
         return
-    pam_config = pam_interface.JsonConfiguration(config.pam_config_file)
     execute(config.accelerated,
-            config,
-            pam_config)
-    accelerated = False
-    if("accelerated" in sys.argv):
-        accelerated = True
+            config.pam_config_file,
+            config.reward_config_file,
+            config.hysr_config_file,
+            config.ppo_config_file)
 
 
 if __name__ == "__main__":

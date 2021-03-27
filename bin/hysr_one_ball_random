@@ -1,52 +1,35 @@
 #!/usr/bin/env python3
 
-import sys
-import random
+import sys,random
 import o80
-from learning_table_tennis_from_scratch.hysr_one_ball import HysrOneBall
-from lightargs import BrightArgs,Set,Range,Positive
+from lightargs import BrightArgs,FileExists
+from learning_table_tennis_from_scratch.hysr_one_ball import HysrOneBall,HysrOneBallConfig
+from learning_table_tennis_from_scratch.rewards import JsonReward
 
 
-# default frequency for real/dummy robot
-# o80_pam_time_step = 0.0005
-# default frequency for mujoco robot
-o80_pam_time_step = 0.002
+def execute(accelerated_time,
+            reward_config_path,
+            hysr_config_path):
 
-mujoco_time_step = 0.002
-algo_time_step = 0.01
-target_position = (1.6,3.5,+1.5)
-reward_normalization_constant = 3.0
-smash_task = True
-rtt_cap = 0.2
-nb_episodes = 3
+    hysr_config = HysrOneBallConfig.from_json(hysr_config_path)
+    reward_function = JsonReward.get(reward_config_path)
+    algo_time_step = hysr_config.algo_time_step
 
-def execute(accelerated_time):
-
-    hysr = HysrOneBall(accelerated_time,
-                       o80_pam_time_step,
-                       mujoco_time_step,
-                       algo_time_step,
-                       target_position,
-                       reward_normalization_constant,
-                       smash_task,
-                       rtt_cap=rtt_cap,
-                       trajectory_index=None,
-                       reference_posture=None)
-
+    hysr = HysrOneBall(hysr_config,
+                       accelerated_time,
+                       reward_function)
+    
     hysr.reset()
     frequency_manager = o80.FrequencyManager(1.0/algo_time_step)
-
     pressures = [ [ random.randrange(14000,20000),
                     random.randrange(14000,20000) ]
                   for _ in range(4) ]
-
     pressure_max_diff = 300
-
+    nb_episodes = 3    
     
     for episode in range(nb_episodes):
 
         print(episode+1," / ",nb_episodes)
-        
         running = True
 
         while running:
@@ -59,7 +42,6 @@ def execute(accelerated_time):
                     pressure += diff
                     pressure = max(min(pressure,20000),14000)
                     pressures[dof][ago] = pressure
-
 
             pressures_ = [p for sublist in pressures for p in sublist]
             observation,reward,reset = hysr.step(pressures_)
@@ -81,6 +63,16 @@ def _configure():
                             "(in same folder)"))
     config.add_operation("accelerated",
                          "if used, start_robot_accelerated must have been started.")
+    config.add_option("reward_config_file",
+                      JsonReward.default_path(),
+                      "reward configuration file",
+                      str,
+                      integrity_checks= [FileExists()])
+    config.add_option("hysr_config_file",
+                      HysrOneBallConfig.default_path(),
+                      "hysr configuration file",
+                      str,
+                      integrity_checks= [FileExists()])
     change_all=False
     finished  = config.dialog(change_all,sys.argv[1:])
     if not finished:
@@ -92,11 +84,9 @@ def _run():
     config = _configure()
     if config is None:
         return
-    execute(config.accelerated)
-    accelerated = False
-    if("accelerated" in sys.argv):
-        accelerated = True
-
+    execute(config.accelerated,
+            config.reward_config_file,
+            config.hysr_config_file)
     
 if __name__ == "__main__":
     _run()
