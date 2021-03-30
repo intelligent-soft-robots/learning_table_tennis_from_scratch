@@ -75,3 +75,11 @@ In a terminal:
 tensorboard --logdir /tmp/ppo2
 ```
 
+# Unit tests
+
+in the repository root directory, run:
+
+```bash
+pip install .
+python -m unittest discover .
+```
