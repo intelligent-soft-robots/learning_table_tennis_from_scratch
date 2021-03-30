@@ -22,6 +22,7 @@ setup( name='learning_table_tennis_from_scratch',
        scripts=['bin/hysr_one_ball_random',
                 'bin/hysr_one_ball_swing',
                 'bin/hysr_one_ball_ppo',
+                'bin/hysr_one_ball_tests',
                 "bin/hysr_start_robots",
                 "bin/hysr_start_robots_accelerated"]
 )

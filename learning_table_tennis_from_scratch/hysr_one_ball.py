@@ -51,6 +51,99 @@ class HysrOneBallConfig:
                             "hysr_one_ball_default.json")
     
 
+class _BallBehavior:
+    '''
+    HYSROneBall supports 4 ball behavior:
+    fixed: a 3d tuple, corresponds to the ball at 
+           the corresponding fixed position
+    line: (3d tuple, 3d tuple, float): ball going from
+          start to end position in straight line at 
+          the provided velocity
+    index: (positive int) ball playing the pre-recorded trajectory
+           corresponding to the index
+    random: (True) ball playing a random pre-recorded trajectory
+    '''
+    POSITION = 0
+    TRAJECTORY = 1
+    def __init__(self,
+                 fixed=False,
+                 line=False,
+                 index=False,
+                 random=False):
+        # checking input
+        not_false = [a for a in (fixed,line,index,random)
+                      if a!=False]
+        if not not_false:
+            raise ValueError("type of ball behavior not specified")
+        if len(not_false)>1:
+            raise ValueError("type of ball behavior over-specified")
+        if fixed!=False:
+            if not len(fixed)==3:
+                raise ValueError("fixed ball behavior expect a 3d value: "
+                                 "{} provided".format(fixed))
+        if line!=False:
+            if not len(line)==3:
+                raise ValueError("line ball behavior expect a 3d tuple "
+                                 "(start,end,velocity): "
+                                 "{} provided".format(line))
+            if not len(line[0])==3:
+                raise ValueError("line ball behavior first entry (start) expect a 3d tuple, "
+                                 "{} provided".format(line))
+            if not len(line[1])==3:
+                raise ValueError("line ball behavior second entry (end) expect a 3d tuple, "
+                                 "{} provided".format(line))
+            if not isinstance(line[2],int) and not isinstance(line[2],float): 
+                raise ValueError("line ball behavior third entry (velocity) expect a positive number, "
+                                 "{} provided".format(line))
+            elif line[2]<0:
+                raise ValueError("line ball behavior third entry (velocity) expect a positive number, "
+                                 "{} provided".format(line))
+        if index!=False:
+            if not isinstance(index,int): 
+                raise ValueError("index ball behavior, index expected, "
+                                 "{} provided".format(index))
+            if index<0:
+                raise ValueError("index ball behavior, positive index expected, "
+                                 "{} provided".format(index))
+        # does this instance correspond
+        # to a fixed point or to a trajectory ?
+        if fixed!=False:
+            self.type_=self.POSITION
+        else:
+            self.type_=self.TRAJECTORY
+        # self.index not False means a pre-recorded
+        # trajectory, None if random, int if
+        # index of trajectory
+        self.index = False
+        if index!=False:
+            self.index = index
+        if random!=False:
+            self.index = None
+        # value 
+        self.value = not_false[0]
+    def is_trajectory(self):
+        return self.type_ == self.TRAJECTORY
+    def is_prerecorded(self):
+        return self.index!=False
+    def is_line(self):
+        if len(self.value)!=3:
+            return False
+        if self.is_fixed():
+            return False
+        return True
+    def is_fixed(self):
+        if len(self.value)!=3:
+            return False
+        if isinstance(self.value[0],float):
+            return True
+        if isinstance(self.value[0],int):
+            return True
+    def get(self):
+        return self.value
+        
+                 
+
+    
 def _convert_pressures_in(pressures):
     # convert pressure from [ago1, antago1, ago2, antago2, ...]
     # to [(ago1, antago1), (ago2, antago2), ...]
@@ -103,13 +196,13 @@ class HysrOneBall:
         self._mujoco_time_step = hysr_config.mujoco_time_step
         self._nb_sim_bursts = int(hysr_config.algo_time_step/hysr_config.mujoco_time_step)
         
-        # if a number, the same trajectory will be played
-        # all the time. If None or negative number, a random trajectory will be
-        # played each time. Here None by default. Use
-        # method set_ball_trajectory to overwrite
-        if hysr_config.trajectory<0:
-            hysr_config.trajectory=None
-        self._trajectory_index = hysr_config.trajectory
+        # the config sets either a zero or positive int (playing the corresponding indexed
+        # pre-recorded trajectory) or a negative int (playing randomly selected indexed
+        # trajectories)
+        if hysr_config.trajectory>=0:
+            self._ball_behavior = _BallBehavior(index=hysr_config.trajectory)
+        else:
+            self._ball_behavior = _BallBehavior(random=True)
         
         # the robot will interpolate between current and
         # target posture over this duration
@@ -151,14 +244,31 @@ class HysrOneBall:
         # between episodes
         self._max_pressures1 = [(18000,18000)]*4
         self._max_pressures2 = [(20000,20000)]*4
-                                 
 
-    def set_ball_trajectory(self,trajectory_index):
-        # overwrite the trajectory index (set to None in
-        # constructor). If None: playing a random pre-recorded
-        # trajectory at each episode. If an index: playing the
-        # corresponding pre-recorded trajectory exclusively
-        self._trajectory_index= trajectory_index
+        # normally an episode ends when the ball z position goes
+        # below a certain threshold (see method _episode_over)
+        # this is to allow user to force ending an episode
+        # (see force_episode_over method)
+        self._force_episode_over = False
+        
+
+    def force_episode_over(self):
+        # will trigger the method _episode_over
+        # (called in the step method) to return True
+        self._force_episode_over = True
+
+        
+    def set_ball_behavior(self,
+                          fixed=False,
+                          line=False,
+                          index=False,
+                          random=False):
+        # overwrite the ball behavior (set to a trajectory in the constructor)
+        # see comments in _BallBehavior, in this file
+        self._ball_behavior=_BallBehavior(fixed=fixed,
+                                          line=line,
+                                          index=index,
+                                          random=random)
 
         
     def _create_observation(self):
@@ -194,6 +304,10 @@ class HysrOneBall:
 
     def reset(self):
 
+        # in case the episode was forced to end by the
+        # user (see force_episode_over method)
+        self._force_episode_over = False
+        
         # aligning the mirrored robot with
         # (pseudo) real robot
         mirroring.align_robots(self._pressure_commands,
@@ -230,26 +344,40 @@ class HysrOneBall:
                                                  duration, # in 1 seconds
                                                  self._accelerated_time)
 
-        # getting a new trajectory
-        if self._trajectory_index is not None:
-            trajectory_points = context.BallTrajectories().get_trajectory(self._trajectory_index)
+        # setting the ball behavior
+        ball_behavior = self._ball_behavior.get()
+        if self._ball_behavior.is_trajectory():
+            # ball behavior is a straight line, ball behavior is (start,end,velocity)
+            if self._ball_behavior.is_line():
+                trajectory_points = context.line_trajectory(*ball_behavior)
+            # ball behavior is a specified pre-recorded trajectory
+            if self._ball_behavior.index!=False:
+                trajectory_points = context.BallTrajectories().get_trajectory(ball_behavior)
+            # ball behavior is a randomly selecyed pre-recorded trajectory
+            else:
+                _,trajectory_points = context.BallTrajectories().random_trajectory()
+            # setting the last trajectory point way below the table, to be sure
+            # end of episode will be detected
+            last_state = context.State([0,0,-10.00],[0,0,0])
+            trajectory_points.append(last_state)
+            # setting the ball to the first trajectory point
+            self._ball_communication.set(trajectory_points[0].position,
+                                         trajectory_points[0].velocity)
+            self._ball_status.ball_position = trajectory_points[0].position
+            self._ball_status.ball_velocity = trajectory_points[0].velocity
+            # moving the ball to initial position
+            self._mirroring.burst(5)
+            # shooting the ball
+            self._ball_communication.play_trajectory(trajectory_points)
         else:
-            _,trajectory_points = context.BallTrajectories().random_trajectory()
-            
-        # setting the last trajectory point way below the table, to be sure
-        # end of episode will be detected
-        last_state = context.State([0,0,-10.00],[0,0,0])
-        trajectory_points.append(last_state)
+            # ball behavior is a fixed point (x,y,z)
+            self._ball_communication.set(ball_behavior,
+                                         (0,0,0))
+            self._ball_status.ball_position = ball_behavior
+            self._ball_status.ball_velocity = (0,0,0)
+            # moving the ball to initial position
+            self._mirroring.burst(5)
 
-        # setting the ball to the first trajectory point
-        self._ball_communication.set(trajectory_points[0].position,
-                                     trajectory_points[0].velocity)
-        self._ball_status.ball_position = trajectory_points[0].position
-        self._ball_status.ball_velocity = trajectory_points[0].velocity
-        self._mirroring.burst(5)
-
-        # shooting the ball
-        self._ball_communication.play_trajectory(trajectory_points)
 
         # returning an observation
         return self._create_observation()
@@ -262,6 +390,10 @@ class HysrOneBall:
         # with z = -10.0, to insure this always occurs.
         # see: function reset
         if self._ball_status.ball_position[2] < -0.5:
+            over = True
+        # in case the user called the method
+        # force_episode_over
+        if self._force_episode_over:
             over = True
         return over
 

@@ -128,7 +128,7 @@ class JsonReward:
             with open(jsonpath) as f:
                 conf=json.load(f)
         except Exception as e:
-            raise ValueError("failed to parse reward json configuration file: {}".format(e))
+            raise ValueError("failed to parse reward json configuration file {}: {}".format(jsonpath,e))
         for attr in ("smash","normalization_constant","rtt_cap"):
             if attr not in conf:
                 raise ValueError("failed to find the attribute {} "

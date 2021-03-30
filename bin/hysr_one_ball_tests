@@ -1,130 +1,113 @@
 #!/usr/bin/env python3
 
-import sys
-import time
-import random
-import math
+import sys,random
 import o80
-import context
-import pam_interface
-import o80_pam
 from lightargs import BrightArgs,FileExists
-from learning_table_tennis_from_scratch.hysr_one_ball import HysrOneBall
+from learning_table_tennis_from_scratch.hysr_one_ball import HysrOneBall,HysrOneBallConfig
+from learning_table_tennis_from_scratch.rewards import JsonReward
 
-
-class global_config:
-    o80_pam_time_step = 0.002
-    mujoco_time_step = 0.002
-    algo_time_step = 0.01
-    target_position = [0.45,2.7,0.17]
-    reward_normalization_constant = 3.0
-    smash_task = False
-    rtt_cap = 0.2
-    reference_posture = [[14000,22000],[14000,22000],
-                         [17000,13000],[14000,16000]]
-
-
-def ball_other_side(accelerated_time,
-                    pam_config,
-                    global_config,
-                    smash_task):
-
-    hysr = HysrOneBall(accelerated_time,
-                       global_config.o80_pam_time_step,
-                       global_config.mujoco_time_step,
-                       global_config.algo_time_step,
-                       global_config.target_position,
-                       global_config.reward_normalization_constant,
-                       smash_task,
-                       rtt_cap=global_config.rtt_cap,
-                       trajectory_index=None
-                       reference_posture=global_config.reference_posture,
-                       pam_config=pam_config)
-
-    hysr.reset()
-    frequency_manager = o80.FrequencyManager(1.0/algo_time_step)
-
-    
 
 def execute(accelerated_time,
-            pam_config):
+            reward_config_path,
+            hysr_config_path):
 
-    trajectory_index = 49
-    print("using ball trajectory file: ",
-          context.BallTrajectories().get_file_name(trajectory_index))
+    hysr_config = HysrOneBallConfig.from_json(hysr_config_path)
+    reward_function = JsonReward.get(reward_config_path)
+    algo_time_step = hysr_config.algo_time_step
 
-    hysr = HysrOneBall(accelerated_time,
-                       o80_pam_time_step,
-                       mujoco_time_step,
-                       algo_time_step,
-                       target_position,
-                       reward_normalization_constant,
-                       smash_task,
-                       rtt_cap=rtt_cap,
-                       trajectory_index=trajectory_index, # always plays this trajectory (None for random).
-                       reference_posture=reference_posture,
-                       pam_config=pam_config)
+    hysr = HysrOneBall(hysr_config,
+                       accelerated_time,
+                       reward_function)
 
-    hysr.reset()
-    frequency_manager = o80.FrequencyManager(1.0/algo_time_step)
+    # for all tests, the actions are high pressures
+    # on all muscles
+    pressures = [[20000,20000]*4]
+    pressures = [p for sublist in pressures for p in sublist]
 
-    # time_switch: duration after episode start after which
-    # the robot performs the swing motion
-    # manually selected so that sometimes the racket hits the ball,
-    # sometimes it does not
-    ts = 0.5
-    time_switches = []
-    while ts<=0.8:
-        time_switches.append(ts)
-        ts+=0.025
+    ###################
+    # Testing rewards #
+    ###################
 
-    # converting time switches from seconds to nb of iterations
-    iteration_switches = [(1.0/o80_pam_time_step) * ts for ts in time_switches]
-
-    for episode,iteration_switch in enumerate(iteration_switches):
-
-        print("EPISODE",episode,iteration_switch)
-
-        start_robot_iteration = hysr.get_robot_iteration()
-        start_ball_iteration = hysr.get_ball_iteration()
-
-        running = True
-
-        while running:
-
-            pressures = swing_posture
-
-            # flatting the pressures
-            pressures = [p for sublist in pressures for p in sublist]
-
-            observation,reward,reset = hysr.step(pressures)
-
+    # fixed position, no contact
+    
+    def _fixed_position(ball_position):
+        hysr.set_ball_behavior(fixed=ball_position)
+        hysr.reset()
+        frequency_manager = o80.FrequencyManager(1.0/algo_time_step)
+        for episode in range(5):
+            hysr.step(pressures)
             if not accelerated_time:
                 waited = frequency_manager.wait()
                 if waited<0:
                     print("! warning ! failed to maintain algorithm frequency")
+        hysr.force_episode_over()
+        _,reward,__=hysr.step(pressures)
+        return reward
 
-            if reset:
-                print("\treward:",reward)
+    def _commented():
+        print("ball staying far from racket")
+        reward = _fixed_position([1.2,2.7,0.17])
+        print("\t\treward: ",reward)
 
-            running = not reset
+        print("repeating")
+        reward = _fixed_position([1.2,2.7,0.17])
+        print("\t\treward: ",reward)
+        
+        print("ball getting closer to racket")
+        reward = _fixed_position([1.2,1.7,0.17])
+        print("\t\treward: ",reward)
+
+        print("ball getting closer to racket")
+        reward = _fixed_position([1.2,1.2,0.17])
+        print("\t\treward: ",reward)
+
+        print("repeating")
+        reward = _fixed_position([1.2,1.2,0.17])
+        print("\t\treward: ",reward)
+        
+        print("ball getting closer to racket")
+        reward = _fixed_position([1.2,0.5,0.17])
+        print("\t\treward: ",reward)
 
 
+    # moving
+
+    def _moving(ball_start,ball_end,velocity):
+        hysr.set_ball_behavior(line=(ball_start,
+                                     ball_end,
+                                     velocity))
         hysr.reset()
         frequency_manager = o80.FrequencyManager(1.0/algo_time_step)
-
-    hysr.close()
+        for episode in range(5):
+            hysr.step(pressures)
+            if not accelerated_time:
+                waited = frequency_manager.wait()
+                if waited<0:
+                    print("! warning ! failed to maintain algorithm frequency")
+        hysr.force_episode_over()
+        _,reward,__=hysr.step(pressures)
+        return reward
+        
+    print("ball flying far from racket")
+    reward = _moving([1.2,2.7,0.17],
+                     [1.2,-0.5,0.17],
+                     1)
+    print("\t\treward: ",reward)
+    
 
     
 def _configure():
-    config = BrightArgs(str("hysr dummy demo using swing motion.\n"+
-                            "to be started after start_robots or start_robots_accelerated.\n"+
-                            "(in same folder)"))
+    config = BrightArgs(str("hysr 'tests', but output requires expert check"))
     config.add_operation("accelerated",
                          "if used, start_robot_accelerated must have been started.")
-    config.add_option("pam_config_file",
-                      pam_interface.DefaultConfiguration.get_path(),
-                      "pam configuration file",
+    config.add_option("reward_config_file",
+                      JsonReward.default_path(),
+                      "reward configuration file",
+                      str,
+                      integrity_checks= [FileExists()])
+    config.add_option("hysr_config_file",
+                      HysrOneBallConfig.default_path(),
+                      "hysr configuration file",
                       str,
                       integrity_checks= [FileExists()])
     change_all=False
@@ -138,10 +121,9 @@ def _run():
     config = _configure()
     if config is None:
         return
-    pam_config = pam_interface.JsonConfiguration(config.pam_config_file)
     execute(config.accelerated,
-            pam_config)
+            config.reward_config_file,
+            config.hysr_config_file)
     
-
 if __name__ == "__main__":
     _run()
