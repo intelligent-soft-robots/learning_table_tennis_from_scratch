@@ -123,14 +123,6 @@ class _BallBehavior:
         self.value = not_false[0]
     def is_trajectory(self):
         return self.type_ == self.TRAJECTORY
-    def is_prerecorded(self):
-        return self.index!=False
-    def is_line(self):
-        if len(self.value)!=3:
-            return False
-        if self.is_fixed():
-            return False
-        return True
     def is_fixed(self):
         if len(self.value)!=3:
             return False
@@ -138,6 +130,27 @@ class _BallBehavior:
             return True
         if isinstance(self.value[0],int):
             return True
+        return False
+    def get_trajectory(self):
+        if not self.is_trajectory():
+            raise ValueError("requesting trajectory from a non trajectory ball behavior")
+        # ball behavior is a straight line, ball behavior is (start,end,velocity)
+        if self.is_line():
+            trajectory_points = context.line_trajectory(*self.value)
+            return trajectory_points
+        # ball behavior is a specified pre-recorded trajectory
+        if self.index!=False:
+            trajectory_points = context.BallTrajectories().get_trajectory(self.value)
+            return trajectory_points
+        # ball behavior is a randomly selecyed pre-recorded trajectory
+        _,trajectory_points = context.BallTrajectories().random_trajectory()
+        return trajectory_point
+    def is_line(self):
+        if len(self.value)!=3:
+            return False
+        if self.is_fixed():
+            return False
+        return True
     def get(self):
         return self.value
         
@@ -300,7 +313,9 @@ class HysrOneBall:
         (pressures_ago,pressures_antago,
          _,__) = self._pressure_commands.read(desired=False)
         return pressures_ago,pressures_antago
-    
+
+    def contact_occured(self):
+        return self._ball_status.contact_occured()
 
     def reset(self):
 
@@ -347,15 +362,7 @@ class HysrOneBall:
         # setting the ball behavior
         ball_behavior = self._ball_behavior.get()
         if self._ball_behavior.is_trajectory():
-            # ball behavior is a straight line, ball behavior is (start,end,velocity)
-            if self._ball_behavior.is_line():
-                trajectory_points = context.line_trajectory(*ball_behavior)
-            # ball behavior is a specified pre-recorded trajectory
-            if self._ball_behavior.index!=False:
-                trajectory_points = context.BallTrajectories().get_trajectory(ball_behavior)
-            # ball behavior is a randomly selecyed pre-recorded trajectory
-            else:
-                _,trajectory_points = context.BallTrajectories().random_trajectory()
+            trajectory_points = self._ball_behavior.get_trajectory()
             # setting the last trajectory point way below the table, to be sure
             # end of episode will be detected
             last_state = context.State([0,0,-10.00],[0,0,0])
@@ -368,7 +375,7 @@ class HysrOneBall:
             # moving the ball to initial position
             self._mirroring.burst(5)
             # shooting the ball
-            self._ball_communication.play_trajectory(trajectory_points)
+            self._ball_communication.play_trajectory(trajectory_points,overwrite=True)
         else:
             # ball behavior is a fixed point (x,y,z)
             self._ball_communication.set(ball_behavior,
