@@ -23,7 +23,7 @@ def execute(accelerated_time,
     trajectory_index = 49
     print("using ball trajectory file: ",
           context.BallTrajectories().get_file_name(trajectory_index))
-    hysr.set_ball_trajectory(trajectory_index)
+    hysr.set_ball_behavior(index=trajectory_index)
     
     hysr.reset()
 

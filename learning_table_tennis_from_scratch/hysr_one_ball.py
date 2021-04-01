@@ -65,6 +65,9 @@ class _BallBehavior:
     '''
     POSITION = 0
     TRAJECTORY = 1
+    LINE = -1
+    INDEX = -2
+    RANDOM = -3
     def __init__(self,
                  fixed=False,
                  line=False,
@@ -77,80 +80,46 @@ class _BallBehavior:
             raise ValueError("type of ball behavior not specified")
         if len(not_false)>1:
             raise ValueError("type of ball behavior over-specified")
+        # setting primary type (fixed position or trajectory)
+        # and if trajectory, secondary type (line trajectory,
+        # indexed pre-recorded trajectory or randomly selected
+        # trajectory
         if fixed!=False:
-            if not len(fixed)==3:
-                raise ValueError("fixed ball behavior expect a 3d value: "
-                                 "{} provided".format(fixed))
-        if line!=False:
-            if not len(line)==3:
-                raise ValueError("line ball behavior expect a 3d tuple "
-                                 "(start,end,velocity): "
-                                 "{} provided".format(line))
-            if not len(line[0])==3:
-                raise ValueError("line ball behavior first entry (start) expect a 3d tuple, "
-                                 "{} provided".format(line))
-            if not len(line[1])==3:
-                raise ValueError("line ball behavior second entry (end) expect a 3d tuple, "
-                                 "{} provided".format(line))
-            if not isinstance(line[2],int) and not isinstance(line[2],float): 
-                raise ValueError("line ball behavior third entry (velocity) expect a positive number, "
-                                 "{} provided".format(line))
-            elif line[2]<0:
-                raise ValueError("line ball behavior third entry (velocity) expect a positive number, "
-                                 "{} provided".format(line))
-        if index!=False:
-            if not isinstance(index,int): 
-                raise ValueError("index ball behavior, index expected, "
-                                 "{} provided".format(index))
-            if index<0:
-                raise ValueError("index ball behavior, positive index expected, "
-                                 "{} provided".format(index))
-        # does this instance correspond
-        # to a fixed point or to a trajectory ?
-        if fixed!=False:
-            self.type_=self.POSITION
+            self.primary_type=self.POSITION
+            self.value = fixed
         else:
-            self.type_=self.TRAJECTORY
-        # self.index not False means a pre-recorded
-        # trajectory, None if random, int if
-        # index of trajectory
-        self.index = False
-        if index!=False:
-            self.index = index
-        if random!=False:
-            self.index = None
-        # value 
-        self.value = not_false[0]
+            self.primary_type=self.TRAJECTORY
+            if line!=False:
+                self.secondary_type=self.LINE
+                self.value = line
+            elif index!=False:
+                self.secondary_type=self.INDEX
+                self.value = index
+            elif random!=False:
+                self.secondary_type=self.RANDOM
     def is_trajectory(self):
-        return self.type_ == self.TRAJECTORY
+        return self.primary_type == self.TRAJECTORY
     def is_fixed(self):
-        if len(self.value)!=3:
-            return False
-        if isinstance(self.value[0],float):
-            return True
-        if isinstance(self.value[0],int):
-            return True
-        return False
+        return self.primary_type == self.POSITION
     def get_trajectory(self):
         if not self.is_trajectory():
             raise ValueError("requesting trajectory from a non trajectory ball behavior")
         # ball behavior is a straight line, self.value is (start,end,velocity)
-        if self.is_line():
+        if self.secondary_type==self.LINE:
             trajectory_points = context.line_trajectory(*self.value)
             return trajectory_points
         # ball behavior is a specified pre-recorded trajectory
-        if self.index!=False:
+        if self.secondary_type==self.INDEX:
             trajectory_points = context.BallTrajectories().get_trajectory(self.value)
             return trajectory_points
-        # ball behavior is a randomly selected pre-recorded trajectory
-        _,trajectory_points = context.BallTrajectories().random_trajectory()
-        return trajectory_point
+        if self.secondary_type==self.RANDOM:
+            _,trajectory_points = context.BallTrajectories().random_trajectory()
+            return trajectory_points
     def is_line(self):
-        if len(self.value)!=3:
+        if not self.primary_type==self.TRAJECTORY:
             return False
-        if self.is_fixed():
-            return False
-        return True
+        if self.secondary_type==self.LINE:
+            return True
     def get(self):
         return self.value
         
@@ -322,7 +291,6 @@ class HysrOneBall:
     def load_ball(self,burst=True):
         # "load" the ball means creating the o80 commands corresponding
         # to the ball behavior (set by the "set_ball_behavior" method) 
-        ball_behavior = self._ball_behavior.get()
         if self._ball_behavior.is_trajectory():
             trajectory_points = self._ball_behavior.get_trajectory()
             # setting the last trajectory point way below the table, to be sure
@@ -341,9 +309,10 @@ class HysrOneBall:
                 self._mirroring.burst(5)
         else:
             # ball behavior is a fixed point (x,y,z)
-            self._ball_communication.set(ball_behavior,
+            position = self._ball_behavior.get()
+            self._ball_communication.set(position,
                                          (0,0,0))
-            self._ball_status.ball_position = ball_behavior
+            self._ball_status.ball_position = position
             self._ball_status.ball_velocity = (0,0,0)
             # moving the ball to initial position
             if burst:
