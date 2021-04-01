@@ -304,9 +304,6 @@ class HysrOneBall:
             self._ball_status.ball_velocity = trajectory_points[0].velocity
             # shooting the ball
             self._ball_communication.play_trajectory(trajectory_points,overwrite=True)
-            # moving the ball to initial position
-            if burst:
-                self._mirroring.burst(5)
         else:
             # ball behavior is a fixed point (x,y,z)
             position = self._ball_behavior.get()
@@ -314,9 +311,6 @@ class HysrOneBall:
                                          (0,0,0))
             self._ball_status.ball_position = position
             self._ball_status.ball_velocity = (0,0,0)
-            # moving the ball to initial position
-            if burst:
-                self._mirroring.burst(5)
 
                 
     def reset_contact(self):
@@ -328,6 +322,10 @@ class HysrOneBall:
         # in case the episode was forced to end by the
         # user (see force_episode_over method)
         self._force_episode_over = False
+
+        # fixing ball position during reset
+        self._ball_communication.set((0,10,0),
+                                     (0,0,0))
         
         # aligning the mirrored robot with
         # (pseudo) real robot
@@ -368,6 +366,9 @@ class HysrOneBall:
         # setting the ball behavior
         self.load_ball()
 
+        # moving the ball to initial position
+        self._mirroring.burst(15)
+        
         # returning an observation
         return self._create_observation()
         
