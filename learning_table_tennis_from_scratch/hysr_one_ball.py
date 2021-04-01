@@ -134,7 +134,7 @@ class _BallBehavior:
     def get_trajectory(self):
         if not self.is_trajectory():
             raise ValueError("requesting trajectory from a non trajectory ball behavior")
-        # ball behavior is a straight line, ball behavior is (start,end,velocity)
+        # ball behavior is a straight line, self.value is (start,end,velocity)
         if self.is_line():
             trajectory_points = context.line_trajectory(*self.value)
             return trajectory_points
@@ -142,7 +142,7 @@ class _BallBehavior:
         if self.index!=False:
             trajectory_points = context.BallTrajectories().get_trajectory(self.value)
             return trajectory_points
-        # ball behavior is a randomly selecyed pre-recorded trajectory
+        # ball behavior is a randomly selected pre-recorded trajectory
         _,trajectory_points = context.BallTrajectories().random_trajectory()
         return trajectory_point
     def is_line(self):
@@ -314,9 +314,46 @@ class HysrOneBall:
          _,__) = self._pressure_commands.read(desired=False)
         return pressures_ago,pressures_antago
 
+    
     def contact_occured(self):
         return self._ball_status.contact_occured()
 
+    
+    def load_ball(self,burst=True):
+        # "load" the ball means creating the o80 commands corresponding
+        # to the ball behavior (set by the "set_ball_behavior" method) 
+        ball_behavior = self._ball_behavior.get()
+        if self._ball_behavior.is_trajectory():
+            trajectory_points = self._ball_behavior.get_trajectory()
+            # setting the last trajectory point way below the table, to be sure
+            # end of episode will be detected
+            last_state = context.State([0,0,-10.00],[0,0,0])
+            trajectory_points.append(last_state)
+            # setting the ball to the first trajectory point
+            self._ball_communication.set(trajectory_points[0].position,
+                                         trajectory_points[0].velocity)
+            self._ball_status.ball_position = trajectory_points[0].position
+            self._ball_status.ball_velocity = trajectory_points[0].velocity
+            # shooting the ball
+            self._ball_communication.play_trajectory(trajectory_points,overwrite=True)
+            # moving the ball to initial position
+            if burst:
+                self._mirroring.burst(5)
+        else:
+            # ball behavior is a fixed point (x,y,z)
+            self._ball_communication.set(ball_behavior,
+                                         (0,0,0))
+            self._ball_status.ball_position = ball_behavior
+            self._ball_status.ball_velocity = (0,0,0)
+            # moving the ball to initial position
+            if burst:
+                self._mirroring.burst(5)
+
+                
+    def reset_contact(self):
+        pam_mujoco.reset_contact(SEGMENT_ID_CONTACT_ROBOT)
+
+        
     def reset(self):
 
         # in case the episode was forced to end by the
@@ -360,31 +397,7 @@ class HysrOneBall:
                                                  self._accelerated_time)
 
         # setting the ball behavior
-        ball_behavior = self._ball_behavior.get()
-        if self._ball_behavior.is_trajectory():
-            trajectory_points = self._ball_behavior.get_trajectory()
-            # setting the last trajectory point way below the table, to be sure
-            # end of episode will be detected
-            last_state = context.State([0,0,-10.00],[0,0,0])
-            trajectory_points.append(last_state)
-            # setting the ball to the first trajectory point
-            self._ball_communication.set(trajectory_points[0].position,
-                                         trajectory_points[0].velocity)
-            self._ball_status.ball_position = trajectory_points[0].position
-            self._ball_status.ball_velocity = trajectory_points[0].velocity
-            # moving the ball to initial position
-            self._mirroring.burst(5)
-            # shooting the ball
-            self._ball_communication.play_trajectory(trajectory_points,overwrite=True)
-        else:
-            # ball behavior is a fixed point (x,y,z)
-            self._ball_communication.set(ball_behavior,
-                                         (0,0,0))
-            self._ball_status.ball_position = ball_behavior
-            self._ball_status.ball_velocity = (0,0,0)
-            # moving the ball to initial position
-            self._mirroring.burst(5)
-
+        self.load_ball()
 
         # returning an observation
         return self._create_observation()
@@ -403,6 +416,12 @@ class HysrOneBall:
         if self._force_episode_over:
             over = True
         return over
+
+
+    def get_ball_position(self):
+        # returning current ball position
+        ball_position,_ = self._ball_communication.get()
+        return ball_position
 
     
     def create_observation(self):
