@@ -53,73 +53,48 @@ class HysrOneBallConfig:
 
 class _BallBehavior:
     '''
-    HYSROneBall supports 4 ball behavior:
-    fixed: a 3d tuple, corresponds to the ball at 
-           the corresponding fixed position
+    HYSROneBall supports 3 ball behaviors:
     line: (3d tuple, 3d tuple, float): ball going from
-          start to end position in straight line at 
-          the provided velocity
+          start to end position in straight line over the 
+          the provided duration (ms)
     index: (positive int) ball playing the pre-recorded trajectory
            corresponding to the index
     random: (True) ball playing a random pre-recorded trajectory
     '''
-    POSITION = 0
-    TRAJECTORY = 1
     LINE = -1
     INDEX = -2
     RANDOM = -3
     def __init__(self,
-                 fixed=False,
                  line=False,
                  index=False,
                  random=False):
-        # checking input
-        not_false = [a for a in (fixed,line,index,random)
+        not_false = [a for a in (line,index,random)
                       if a!=False]
         if not not_false:
             raise ValueError("type of ball behavior not specified")
         if len(not_false)>1:
             raise ValueError("type of ball behavior over-specified")
-        # setting primary type (fixed position or trajectory)
-        # and if trajectory, secondary type (line trajectory,
-        # indexed pre-recorded trajectory or randomly selected
-        # trajectory
-        if fixed!=False:
-            self.primary_type=self.POSITION
-            self.value = fixed
-        else:
-            self.primary_type=self.TRAJECTORY
-            if line!=False:
-                self.secondary_type=self.LINE
-                self.value = line
-            elif index!=False:
-                self.secondary_type=self.INDEX
-                self.value = index
-            elif random!=False:
-                self.secondary_type=self.RANDOM
-    def is_trajectory(self):
-        return self.primary_type == self.TRAJECTORY
-    def is_fixed(self):
-        return self.primary_type == self.POSITION
+        if line!=False:
+            self.type=self.LINE
+            self.value = line
+        elif index!=False:
+            self.type=self.INDEX
+            self.value = index
+        elif random!=False:
+            self.type=self.RANDOM
     def get_trajectory(self):
-        if not self.is_trajectory():
-            raise ValueError("requesting trajectory from a non trajectory ball behavior")
-        # ball behavior is a straight line, self.value is (start,end,velocity)
-        if self.secondary_type==self.LINE:
-            trajectory_points = context.line_trajectory(*self.value)
+        # ball behavior is a straight line, self.value is (start,end,duration ms)
+        if self.type==self.LINE:
+            trajectory_points = context.duration_line_trajectory(*self.value)
             return trajectory_points
         # ball behavior is a specified pre-recorded trajectory
-        if self.secondary_type==self.INDEX:
+        if self.type==self.INDEX:
             trajectory_points = context.BallTrajectories().get_trajectory(self.value)
             return trajectory_points
-        if self.secondary_type==self.RANDOM:
+        # ball behavior is a randomly selected pre-recorded trajectory
+        if self.type==self.RANDOM:
             _,trajectory_points = context.BallTrajectories().random_trajectory()
             return trajectory_points
-    def is_line(self):
-        if not self.primary_type==self.TRAJECTORY:
-            return False
-        if self.secondary_type==self.LINE:
-            return True
     def get(self):
         return self.value
         
@@ -209,7 +184,7 @@ class HysrOneBall:
         
         # to send mirroring commands to simulated robot
         self._mirroring = o80_pam.o80RobotMirroring(SEGMENT_ID_ROBOT_MIRROR)
-
+        
         # to move the hit point marker
         self._hit_point = o80_pam.o80HitPoint(SEGMENT_ID_HIT_POINT)
         
@@ -241,14 +216,12 @@ class HysrOneBall:
 
         
     def set_ball_behavior(self,
-                          fixed=False,
                           line=False,
                           index=False,
                           random=False):
         # overwrite the ball behavior (set to a trajectory in the constructor)
         # see comments in _BallBehavior, in this file
-        self._ball_behavior=_BallBehavior(fixed=fixed,
-                                          line=line,
+        self._ball_behavior=_BallBehavior(line=line,
                                           index=index,
                                           random=random)
 
@@ -288,31 +261,20 @@ class HysrOneBall:
         return self._ball_status.contact_occured()
 
     
-    def load_ball(self,burst=True):
+    def load_ball(self):
         # "load" the ball means creating the o80 commands corresponding
         # to the ball behavior (set by the "set_ball_behavior" method) 
-        if self._ball_behavior.is_trajectory():
-            trajectory_points = self._ball_behavior.get_trajectory()
-            # setting the last trajectory point way below the table, to be sure
-            # end of episode will be detected
-            last_state = context.State([0,0,-10.00],[0,0,0])
-            trajectory_points.append(last_state)
-            # setting the ball to the first trajectory point
-            self._ball_communication.set(trajectory_points[0].position,
-                                         trajectory_points[0].velocity)
-            self._ball_status.ball_position = trajectory_points[0].position
-            self._ball_status.ball_velocity = trajectory_points[0].velocity
-            # shooting the ball
-            self._ball_communication.play_trajectory(trajectory_points,overwrite=True)
-        else:
-            # ball behavior is a fixed point (x,y,z)
-            position = self._ball_behavior.get()
-            self._ball_communication.set(position,
-                                         (0,0,0))
-            self._ball_status.ball_position = position
-            self._ball_status.ball_velocity = (0,0,0)
+        trajectory_points = self._ball_behavior.get_trajectory()
+        # setting the ball to the first trajectory point
+        self._ball_communication.set(trajectory_points[0].position,
+                                     trajectory_points[0].velocity)
+        self._ball_status.ball_position = trajectory_points[0].position
+        self._ball_status.ball_velocity = trajectory_points[0].velocity
+        # shooting the ball
+        self._ball_communication.play_trajectory(trajectory_points,
+                                                 overwrite=False)
 
-                
+        
     def reset_contact(self):
         pam_mujoco.reset_contact(SEGMENT_ID_CONTACT_ROBOT)
 
@@ -323,10 +285,6 @@ class HysrOneBall:
         # user (see force_episode_over method)
         self._force_episode_over = False
 
-        # fixing ball position during reset
-        self._ball_communication.set((0,10,0),
-                                     (0,0,0))
-        
         # aligning the mirrored robot with
         # (pseudo) real robot
         mirroring.align_robots(self._pressure_commands,
@@ -337,13 +295,6 @@ class HysrOneBall:
         
         # resetting the hit point 
         self._hit_point.set([0,0,-0.62],[0,0,0])
-        
-        # resetting ball info, e.g. min distance ball/racket, etc
-        self._ball_status.reset()
-
-        # resetting ball/robot contact information
-        pam_mujoco.reset_contact(SEGMENT_ID_CONTACT_ROBOT)
-        time.sleep(0.1)
 
         # resetting real robot to "vertical" position
         # tripling down to ensure reproducibility
@@ -353,7 +304,7 @@ class HysrOneBall:
                                              max_pressures,
                                              duration, 
                                              self._accelerated_time)
-
+            
         # moving real robot back to reference posture
         if self._reference_posture:
             for duration in (0.5,1.0):
@@ -363,12 +314,20 @@ class HysrOneBall:
                                                  duration, # in 1 seconds
                                                  self._accelerated_time)
 
+        # resetting ball/robot contact information
+        pam_mujoco.activate_contact(SEGMENT_ID_CONTACT_ROBOT)
+        pam_mujoco.reset_contact(SEGMENT_ID_CONTACT_ROBOT)
+        time.sleep(0.1)
+
+        # resetting ball info, e.g. min distance ball/racket, etc
+        self._ball_status.reset()
+        
         # setting the ball behavior
         self.load_ball()
 
         # moving the ball to initial position
-        self._mirroring.burst(15)
-        
+        self._mirroring.burst(4)
+
         # returning an observation
         return self._create_observation()
         
@@ -435,12 +394,17 @@ class HysrOneBall:
         # having the simulated robot/ball performing the right number of iterations
         # (note: simulated expected to run accelerated time)
         self._mirroring.burst(self._nb_sim_bursts)
-
+        
         # getting ball/racket contact information
         # note : racket_contact_information is an instance
         #        of context.ContactInformation
         racket_contact_information = pam_mujoco.get_contact(SEGMENT_ID_CONTACT_ROBOT)
 
+        #print("contact:",racket_contact_information.position,
+        #      racket_contact_information.contact_occured,
+        #      racket_contact_information.time_stamp,
+        #      racket_contact_information.minimal_distance)
+        
         # updating ball status
         self._ball_status.update(ball_position,ball_velocity,
                                  racket_contact_information)
