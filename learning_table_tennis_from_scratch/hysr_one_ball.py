@@ -1,12 +1,13 @@
 import os,sys,time,math,random,json
 import o80,o80_pam,pam_mujoco,context,pam_interface
-from pam_mujoco import mirroring
 import numpy as np
+from pam_mujoco import mirroring
+from . import configure_mujoco
+
 
 SEGMENT_ID_BALL = pam_mujoco.segment_ids.ball
 SEGMENT_ID_GOAL = pam_mujoco.segment_ids.goal
 SEGMENT_ID_HIT_POINT = pam_mujoco.segment_ids.hit_point
-SEGMENT_ID_CONTACT_ROBOT = pam_mujoco.segment_ids.contact_robot
 SEGMENT_ID_ROBOT_MIRROR = pam_mujoco.segment_ids.mirroring
 SEGMENT_ID_PSEUDO_REAL_ROBOT = o80_pam.segment_ids.robot
 
@@ -15,7 +16,8 @@ class HysrOneBallConfig:
 
     __slots__ = ("o80_pam_time_step","mujoco_time_step","algo_time_step",
                  "target_position","reference_posture","world_boundaries",
-                 "pressure_change_range","trajectory")
+                 "pressure_change_range","trajectory","accelerated_time",
+                 "graphics_pseudo_real","graphics_simulation")
 
     def __init__(self):
         for s in self.__slots__:
@@ -125,25 +127,33 @@ class _Observation:
         self.pressures = pressures
         self.ball_position = ball_position
         self.ball_velocity = ball_velocity
-    
+
         
 class HysrOneBall:
 
     def __init__(self,
                  hysr_config,
-                 accelerated_time,
                  reward_function):
+
+        self._real_robot_handle = configure_mujoco.configure_pseudo_real(graphics=hysr_config.graphics_pseudo_real,
+                                                                         accelerated_time=hysr_config.accelerated_time)
+
+        # because the os sometimes does not like two instances of mujoco starting at the same time
+        if(hysr_config.graphics_pseudo_real and hysr_config.graphics_simulation):
+            time.sleep(2)
         
+        self._simulated_robot_handle = configure_mujoco.configure_simulation(graphics=hysr_config.graphics_simulation)
+
         # moving the goal to the target position
-        goal = o80_pam.o80Goal(SEGMENT_ID_GOAL)
+        goal = self._simulated_robot_handle.interfaces[SEGMENT_ID_GOAL]
         goal.set(hysr_config.target_position,[0,0,0])
 
         # if o80_pam (i.e. the pseudo real robot)
         # has been started in accelerated time,
         # the corresponding o80 backend will burst through
         # an algorithm time step
-        self._accelerated_time = accelerated_time
-        if accelerated_time:
+        self._accelerated_time = hysr_config.accelerated_time
+        if self._accelerated_time:
             self._o80_time_step = hysr_config.o80_pam_time_step
             self._nb_robot_bursts = int(hysr_config.algo_time_step/hysr_config.o80_pam_time_step)
 
@@ -169,10 +179,10 @@ class HysrOneBall:
         self._reward_function = reward_function
 
         # to get information regarding the ball
-        self._ball_communication = o80_pam.o80Ball(SEGMENT_ID_BALL)
+        self._ball_communication = self._simulated_robot_handle.interfaces[SEGMENT_ID_BALL]
         
         # to send pressure commands to the real or pseudo-real robot
-        self._pressure_commands = o80_pam.o80Pressures(SEGMENT_ID_PSEUDO_REAL_ROBOT)
+        self._pressure_commands = self._real_robot_handle.interfaces[SEGMENT_ID_PSEUDO_REAL_ROBOT]
 
         # the posture in which the robot will reset itself
         # upon reset (may be None if no posture reset)
@@ -183,10 +193,10 @@ class HysrOneBall:
         self._ball_status = context.BallStatus(hysr_config.target_position)
         
         # to send mirroring commands to simulated robot
-        self._mirroring = o80_pam.o80RobotMirroring(SEGMENT_ID_ROBOT_MIRROR)
+        self._mirroring = self._simulated_robot_handle.interfaces[SEGMENT_ID_ROBOT_MIRROR]
         
         # to move the hit point marker
-        self._hit_point = o80_pam.o80HitPoint(SEGMENT_ID_HIT_POINT)
+        self._hit_point = self._simulated_robot_handle.interfaces[SEGMENT_ID_HIT_POINT]
         
         # tracking if this is the first step of the episode
         # (a step sets it to false, reset sets it back to true)
@@ -195,7 +205,7 @@ class HysrOneBall:
         # when starting, the real robot and the pseudo robot
         # may not be aligned, which may result in graphical issues
         mirroring.align_robots(self._pressure_commands,
-                               self._mirroring)
+                                          self._mirroring)
 
         # will be used to move the robot to reference posture
         # between episodes
@@ -276,7 +286,7 @@ class HysrOneBall:
 
         
     def reset_contact(self):
-        pam_mujoco.reset_contact(SEGMENT_ID_CONTACT_ROBOT)
+        self._simulated_robot_handle.reset_contact(SEGMENT_ID_BALL)
 
         
     def reset(self):
@@ -315,8 +325,8 @@ class HysrOneBall:
                                                  self._accelerated_time)
 
         # resetting ball/robot contact information
-        pam_mujoco.activate_contact(SEGMENT_ID_CONTACT_ROBOT)
-        pam_mujoco.reset_contact(SEGMENT_ID_CONTACT_ROBOT)
+        self._simulated_robot_handle.activate_contact(SEGMENT_ID_BALL)
+        self._simulated_robot_handle.reset_contact(SEGMENT_ID_BALL)
         time.sleep(0.1)
 
         # resetting ball info, e.g. min distance ball/racket, etc
@@ -398,13 +408,8 @@ class HysrOneBall:
         # getting ball/racket contact information
         # note : racket_contact_information is an instance
         #        of context.ContactInformation
-        racket_contact_information = pam_mujoco.get_contact(SEGMENT_ID_CONTACT_ROBOT)
+        racket_contact_information = self._simulated_robot_handle.get_contact(SEGMENT_ID_BALL)
 
-        #print("contact:",racket_contact_information.position,
-        #      racket_contact_information.contact_occured,
-        #      racket_contact_information.time_stamp,
-        #      racket_contact_information.minimal_distance)
-        
         # updating ball status
         self._ball_status.update(ball_position,ball_velocity,
                                  racket_contact_information)

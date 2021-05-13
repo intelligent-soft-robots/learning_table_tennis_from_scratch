@@ -7,17 +7,14 @@ from learning_table_tennis_from_scratch.hysr_one_ball import HysrOneBall,HysrOne
 from learning_table_tennis_from_scratch.rewards import JsonReward
 
 
-def execute(accelerated_time,
-            reward_config_path,
+def execute(reward_config_path,
             hysr_config_path):
-
 
     hysr_config = HysrOneBallConfig.from_json(hysr_config_path)
     reward_function = JsonReward.get(reward_config_path)
     algo_time_step = hysr_config.algo_time_step
-    
+
     hysr = HysrOneBall(hysr_config,
-                       accelerated_time,
                        reward_function)
 
     trajectory_index = 49
@@ -37,7 +34,7 @@ def execute(accelerated_time,
         running=True
         while running:
             observation,reward,reset = hysr.step(pressures)
-            if not accelerated_time:
+            if not hysr_config.accelerated_time:
                 waited = frequency_manager.wait()
                 if waited<0:
                     print("! warning ! failed to maintain algorithm frequency")
@@ -53,8 +50,6 @@ def execute(accelerated_time,
 def _configure():
     config = BrightArgs(str("hysr dummy demo using swing motion.\n"+
                             "to be started after hysr_start_robots or hysr_start_robots_accelerated.\n"))
-    config.add_operation("accelerated",
-                         "if used, start_robot_accelerated must have been started.")
     config.add_option("reward_config_file",
                       JsonReward.default_path(),
                       "reward configuration file",
@@ -76,8 +71,7 @@ def _run():
     config = _configure()
     if config is None:
         return
-    execute(config.accelerated,
-            config.reward_config_file,
+    execute(config.reward_config_file,
             config.hysr_config_file)
     
 if __name__ == "__main__":
