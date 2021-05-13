@@ -17,7 +17,7 @@ class HysrOneBallConfig:
     __slots__ = ("o80_pam_time_step","mujoco_time_step","algo_time_step",
                  "target_position","reference_posture","world_boundaries",
                  "pressure_change_range","trajectory","accelerated_time",
-                 "graphics_pseudo_real","graphics_simulation")
+                 "graphics_pseudo_real","graphics_simulation","instant_reset")
 
     def __init__(self):
         for s in self.__slots__:
@@ -135,8 +135,7 @@ class HysrOneBall:
                  hysr_config,
                  reward_function):
 
-        self._real_robot_handle = configure_mujoco.configure_pseudo_real(graphics=hysr_config.graphics_pseudo_real,
-                                                                         accelerated_time=hysr_config.accelerated_time)
+        self._real_robot_handle = configure_mujoco.configure_pseudo_real(graphics=hysr_config.graphics_pseudo_real,accelerated_time=hysr_config.accelerated_time)
 
         # because the os sometimes does not like two instances of mujoco starting at the same time
         if(hysr_config.graphics_pseudo_real and hysr_config.graphics_simulation):
@@ -217,6 +216,11 @@ class HysrOneBall:
         # this is to allow user to force ending an episode
         # (see force_episode_over method)
         self._force_episode_over = False
+
+        # if false, the system will reset via execution of commands
+        # if true, the system will reset by resetting the simulations
+        # Only "false" is supported by the real robot
+        self._instant_reset = hysr_config.instant_reset
         
 
     def force_episode_over(self):
@@ -288,27 +292,21 @@ class HysrOneBall:
     def reset_contact(self):
         self._simulated_robot_handle.reset_contact(SEGMENT_ID_BALL)
 
+    def _do_natural_reset(self):
         
-    def reset(self):
-
-        # in case the episode was forced to end by the
-        # user (see force_episode_over method)
-        self._force_episode_over = False
-
         # aligning the mirrored robot with
         # (pseudo) real robot
         mirroring.align_robots(self._pressure_commands,
                                self._mirroring)
-        
-        # resetting first episode step
-        self._first_episode_step = True
         
         # resetting the hit point 
         self._hit_point.set([0,0,-0.62],[0,0,0])
 
         # resetting real robot to "vertical" position
         # tripling down to ensure reproducibility
-        for (max_pressures,duration) in zip( (self._max_pressures1,self._max_pressures2) , (0.5,2) ):
+        for (max_pressures,
+             duration) in zip( (self._max_pressures1,
+                                self._max_pressures2) , (0.5,2) ):
             mirroring.go_to_pressure_posture(self._pressure_commands,
                                              self._mirroring,
                                              max_pressures,
@@ -324,6 +322,27 @@ class HysrOneBall:
                                                  duration, # in 1 seconds
                                                  self._accelerated_time)
 
+
+    def _do_instant_reset(self):
+        
+        self._real_robot_handle.reset()
+        self._simulated_robot_handle.reset()
+
+        
+    def reset(self):
+
+        # in case the episode was forced to end by the
+        # user (see force_episode_over method)
+        self._force_episode_over = False
+        
+        # resetting first episode step
+        self._first_episode_step = True
+
+        if self._instant_reset:
+            self._do_instant_reset()
+        else:
+            self._do_natural_reset()
+        
         # resetting ball/robot contact information
         self._simulated_robot_handle.activate_contact(SEGMENT_ID_BALL)
         self._simulated_robot_handle.reset_contact(SEGMENT_ID_BALL)

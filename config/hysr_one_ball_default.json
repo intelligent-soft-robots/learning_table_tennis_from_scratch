@@ -11,6 +11,7 @@
     "pressure_change_range":1000,
     "trajectory":-1,
     "accelerated_time":true,
-    "graphics_pseudo_real":true,
-    "graphics_simulation":true
+    "graphics_pseudo_real":false,
+    "graphics_simulation":false,
+    "instant_reset":true
 }
