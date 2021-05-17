@@ -135,12 +135,8 @@ class HysrOneBall:
                  hysr_config,
                  reward_function):
 
-        self._real_robot_handle = configure_mujoco.configure_pseudo_real(graphics=hysr_config.graphics_pseudo_real,accelerated_time=hysr_config.accelerated_time)
-
-        # because the os sometimes does not like two instances of mujoco starting at the same time
-        if(hysr_config.graphics_pseudo_real and hysr_config.graphics_simulation):
-            time.sleep(2)
-        
+        self._real_robot_handle = configure_mujoco.configure_pseudo_real(graphics=hysr_config.graphics_pseudo_real,
+                                                                         accelerated_time=hysr_config.accelerated_time)
         self._simulated_robot_handle = configure_mujoco.configure_simulation(graphics=hysr_config.graphics_simulation)
 
         # moving the goal to the target position
@@ -243,11 +239,12 @@ class HysrOneBall:
     def _create_observation(self):
         (pressures_ago,pressures_antago,
          joint_positions,joint_velocities) = self._pressure_commands.read()
+        ball_position,ball_velocity = self._ball_communication.get()
         observation = _Observation(joint_positions,joint_velocities,
                                    _convert_pressures_out(pressures_ago,
                                                           pressures_antago),
-                                   self._ball_status.ball_position,
-                                   self._ball_status.ball_velocity)
+                                   ball_position,
+                                   ball_velocity)
         return observation
     
         
@@ -292,6 +289,7 @@ class HysrOneBall:
     def reset_contact(self):
         self._simulated_robot_handle.reset_contact(SEGMENT_ID_BALL)
 
+
     def _do_natural_reset(self):
         
         # aligning the mirrored robot with
@@ -299,8 +297,6 @@ class HysrOneBall:
         mirroring.align_robots(self._pressure_commands,
                                self._mirroring)
         
-        # resetting the hit point 
-        self._hit_point.set([0,0,-0.62],[0,0,0])
 
         # resetting real robot to "vertical" position
         # tripling down to ensure reproducibility
@@ -313,14 +309,6 @@ class HysrOneBall:
                                              duration, 
                                              self._accelerated_time)
             
-        # moving real robot back to reference posture
-        if self._reference_posture:
-            for duration in (0.5,1.0):
-                mirroring.go_to_pressure_posture(self._pressure_commands,
-                                                 self._mirroring,
-                                                 self._reference_posture,
-                                                 duration, # in 1 seconds
-                                                 self._accelerated_time)
 
 
     def _do_instant_reset(self):
@@ -338,24 +326,42 @@ class HysrOneBall:
         # resetting first episode step
         self._first_episode_step = True
 
+        # resetting the hit point 
+        self._hit_point.set([0,0,-0.62],[0,0,0])
+
+        # going back to vertical position
         if self._instant_reset:
             self._do_instant_reset()
         else:
             self._do_natural_reset()
-        
-        # resetting ball/robot contact information
-        self._simulated_robot_handle.activate_contact(SEGMENT_ID_BALL)
+
+        # moving real robot back to reference posture
+        if self._reference_posture:
+            for duration in (0.5,1.0):
+                mirroring.go_to_pressure_posture(self._pressure_commands,
+                                                 self._mirroring,
+                                                 self._reference_posture,
+                                                 duration, # in 1 seconds
+                                                 self._accelerated_time)
+            
+        # setting the ball behavior
+        self.load_ball()
+
+        # control post contact was lost, restoring it
         self._simulated_robot_handle.reset_contact(SEGMENT_ID_BALL)
+        self._simulated_robot_handle.deactivate_contact(SEGMENT_ID_BALL)
+        
+        # moving the ball to initial position
+        self._mirroring.burst(4)
+
+        # resetting ball/robot contact information
+        self._simulated_robot_handle.reset_contact(SEGMENT_ID_BALL)
+        self._simulated_robot_handle.activate_contact(SEGMENT_ID_BALL)
+
         time.sleep(0.1)
 
         # resetting ball info, e.g. min distance ball/racket, etc
         self._ball_status.reset()
-        
-        # setting the ball behavior
-        self.load_ball()
-
-        # moving the ball to initial position
-        self._mirroring.burst(4)
 
         # returning an observation
         return self._create_observation()
@@ -382,17 +388,6 @@ class HysrOneBall:
         return ball_position
 
     
-    def create_observation(self):
-        # reading current real (or pseudo real) robot state
-        (pressures_ago,pressures_antago,
-         joint_positions,joint_velocities) = self._pressure_commands.read()
-        # getting information about simulated ball
-        return _Observation( joint_positions,joint_velocities,
-                             pressures_ago,pressures_antago,
-                             self._ball_status.ball_position,
-                             self._ball_status.ball_velocity )
-
-        
     # action assumed to be np.array(ago1,antago1,ago2,antago2,...)
     def step(self,action):
 

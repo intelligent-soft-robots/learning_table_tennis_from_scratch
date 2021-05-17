@@ -2,6 +2,6 @@
 
 # starting mujoco instances for the pseudo real robot and for the simulated robot
 pam_mujoco pseudo-real simulation &
-# starting a mujoco instance for the visualization of the simulated robot
-#pam_mujoco_visualization simulation visualization
+
+
 

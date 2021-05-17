@@ -1,6 +1,0 @@
-#! /bin/bash
-
-(o80_mujoco --no_graphics --accelerated --bursting_mode) & \
-    (pam_mujoco --accelerated --bursting_mode) & \
-    (pam_visualization -mujoco_id pam_robot_mujoco)
-
