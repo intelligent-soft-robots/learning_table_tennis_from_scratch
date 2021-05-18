@@ -12,6 +12,6 @@
     "trajectory":-1,
     "accelerated_time":true,
     "graphics_pseudo_real":false,
-    "graphics_simulation":true,
+    "graphics_simulation":false,
     "instant_reset":true
 }
