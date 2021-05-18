@@ -139,10 +139,10 @@ class HysrOneBall:
                                                                          accelerated_time=hysr_config.accelerated_time)
         self._simulated_robot_handle = configure_mujoco.configure_simulation(graphics=hysr_config.graphics_simulation)
 
-        # moving the goal to the target position
-        goal = self._simulated_robot_handle.interfaces[SEGMENT_ID_GOAL]
-        goal.set(hysr_config.target_position,[0,0,0])
+        self._target_position = hysr_config.target_position
 
+        self._goal = self._simulated_robot_handle.interfaces[SEGMENT_ID_GOAL]
+        
         # if o80_pam (i.e. the pseudo real robot)
         # has been started in accelerated time,
         # the corresponding o80 backend will burst through
@@ -335,6 +335,9 @@ class HysrOneBall:
         else:
             self._do_natural_reset()
 
+        # moving the goal to the target position
+        self._goal.set(self._target_position,[0,0,0])
+            
         # moving real robot back to reference posture
         if self._reference_posture:
             for duration in (0.5,1.0):
