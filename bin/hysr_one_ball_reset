@@ -1,62 +1,66 @@
 #!/usr/bin/env python3
 
-import sys,random
-import o80,context
-from lightargs import BrightArgs,FileExists
-from learning_table_tennis_from_scratch.hysr_one_ball import HysrOneBall,HysrOneBallConfig
+import sys, random
+import o80, context
+from lightargs import BrightArgs, FileExists
+from learning_table_tennis_from_scratch.hysr_one_ball import (
+    HysrOneBall,
+    HysrOneBallConfig,
+)
 from learning_table_tennis_from_scratch.rewards import JsonReward
 
-
-def execute(reward_config_path,
-            hysr_config_path):
-
+def execute(reward_config_path, hysr_config_path):
 
     hysr_config = HysrOneBallConfig.from_json(hysr_config_path)
     reward_function = JsonReward.get(reward_config_path)
     algo_time_step = hysr_config.algo_time_step
 
-    hysr = HysrOneBall(hysr_config,
-                       reward_function)
+    hysr = HysrOneBall(hysr_config, reward_function)
 
     trajectory_index = 49
-    print("using ball trajectory file: ",
-          context.BallTrajectories().get_file_name(trajectory_index))
+    print(
+        "using ball trajectory file: ",
+        context.BallTrajectories().get_file_name(trajectory_index),
+    )
     hysr.set_ball_behavior(index=trajectory_index)
-    
-    hysr.reset()
-    hysr.reset()
-    hysr.reset()
-    hysr.reset()
-    
 
-    
+    hysr.reset()
+    hysr.reset()
+    hysr.reset()
+    hysr.reset()
+
 def _configure():
-    config = BrightArgs(str("hysr dummy demo using swing motion.\n"+
-                            "to be started after hysr_start_robots or hysr_start_robots_accelerated.\n"))
-    config.add_option("reward_config_file",
-                      JsonReward.default_path(),
-                      "reward configuration file",
-                      str,
-                      integrity_checks= [FileExists()])
-    config.add_option("hysr_config_file",
-                      HysrOneBallConfig.default_path(),
-                      "hysr configuration file",
-                      str,
-                      integrity_checks= [FileExists()])
-    change_all=False
-    finished  = config.dialog(change_all,sys.argv[1:])
+    config = BrightArgs(
+        str(
+            "hysr dummy demo using swing motion.\n"
+            + "to be started after hysr_start_robots or hysr_start_robots_accelerated.\n"
+        )
+    )
+    config.add_option(
+        "reward_config_file",
+        JsonReward.default_path(),
+        "reward configuration file",
+        str,
+        integrity_checks=[FileExists()],
+    )
+    config.add_option(
+        "hysr_config_file",
+        HysrOneBallConfig.default_path(),
+        "hysr configuration file",
+        str,
+        integrity_checks=[FileExists()],
+    )
+    change_all = False
+    finished = config.dialog(change_all, sys.argv[1:])
     if not finished:
         return None
     return config
-
 
 def _run():
     config = _configure()
     if config is None:
         return
-    execute(config.reward_config_file,
-            config.hysr_config_file)
-    
+    execute(config.reward_config_file, config.hysr_config_file)
+
 if __name__ == "__main__":
     _run()
-
