@@ -53,7 +53,6 @@ class _ObservationSpace:
 class HysrOneBallEnv(gym.Env):
 
     def __init__(self,
-                 accelerated_time=None,
                  pam_config_file=None,
                  reward_config_file=None,
                  hysr_one_ball_config_file=None):
@@ -65,12 +64,11 @@ class HysrOneBallEnv(gym.Env):
 
         self._config = pam_interface.JsonConfiguration(pam_config_file)
         self._nb_dofs = len(self._config.max_pressures_ago)
-        self._accelerated_time = accelerated_time
         self._algo_time_step = hysr_one_ball_config.algo_time_step 
         self._pressure_change_range = hysr_one_ball_config.pressure_change_range
+        self._accelerated_time = hysr_one_ball_config.accelerated_time
         
         self._hysr = HysrOneBall(hysr_one_ball_config,
-                                 accelerated_time,
                                  reward_function)
         
         self.action_space = gym.spaces.Box(low=-1.0,

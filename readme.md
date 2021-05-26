@@ -1,14 +1,10 @@
 
 
-# Installing
+# Installing PAM robot software
 
-The below assumes your default version of python3 is python3.6.*
+Follow the instructions [here](http://people.tuebingen.mpg.de/mpi-is-software/pam/docs/pam_documentation/index.html).
 
-## install pam_mujoco
-
-see instructions [here](https://github.com/intelligent-soft-robots/intelligent-soft-robots.github.io/wiki/01_installation-from-debian)
-
-## install learning_table_tennis_from_scratch
+# Installing learning_table_tennis_from_scratch
 
 ```
 git clone https://github.com/intelligent-soft-robots/learning_table_tennis_from_scratch.git
@@ -18,56 +14,42 @@ pip3 install .
 
 # Running
 
-## Demos
+In a first terminal:
 
-### "normal" time
-
-```
-# in a terminal
+```bash
 hysr_start_robots
-# in another terminal
-hysr_one_ball_swing # or hysr_one_ball_random
 ```
 
-### "accelerated" time
+In a second terminal, optionnaly (for graphics):
 
-```
-# in a terminal
-hysr_start_robots_accelerated
-# in another terminal
-hysr_one_ball_swing --accelerated  # or hysr_one_ball_random --accelerated
+```bash
+hysr_visualization
 ```
 
-**known issue** : sometimes the simulated robots will not exit properly on "ctrl+c" or even on closing the terminal. Running ```killall python3``` after each run helps.
+and finally:
 
-### seeing all simulated robots
-
-The commands *hysr_start_robots* and *hysr_start_robots_accelerated* start 3 mujoco simulations, even if only one is displayed. To display all the simulated robots, run instead in 3 different terminals:
-
-```
-# starts the pressure controlled robot ("pseudo-real" robot)
-o80_mujoco
-```
-```
-# starts the position controlled robot that will 
-# mirror the "pseudo-real" robot.
-pam_mujoco --accelerated --bursting_mode --graphics
-```
-```
-# (optional)
-# starts a simulation that display the position
-# controlled robot, but with smoother graphics
-pam_visualization -mujoco_id pam_robot_mujoco
+```bash
+hysr_one_ball_ppo
 ```
 
-## learning
+# Configuration files
 
-### starting
+When starting *hysr_one_ball_ppo*, a dialog allows to select the configuration files:
 
-Same as above, but using *hysr_one_ball_ppo* instead of *hysr_one_ball_swing*.
+- hysr_config_file: configuration of the mujoco simulated robot (e.g. accelerated time, graphics, etc)
+- pam_config_file: configuration of the simulated muscles
+- ppo_config_file: configuration of the ppo algorithm
+- reward_config_file: configuration of the reward function
+
+It is possible to start the executable without using the dialog, for example:
+
+```bash
+hysr_on_ball_ppo -hysr_config_file /path/to/config/file.json -reward_config_file /path/to/other/config/file.json 
+```
 
 
-### tensorboard
+
+# tensorboard
 
 In a terminal:
 
@@ -83,3 +65,12 @@ in the repository root directory, run:
 pip install .
 python -m unittest discover .
 ```
+
+# Other executables
+
+Can be also run after *hysr_start_robots* (executabled created for debug purposes):
+
+- hysr_one_ball_rewards: plays several scenario with different ball trajectories and compute the corresponding reward
+- hysr_one_ball_swing: has the racket performing some swing motions
+- hysr_one_ball_reset: has the environment performing resets
+- hysr_one_ball_random: the robot makes random moves

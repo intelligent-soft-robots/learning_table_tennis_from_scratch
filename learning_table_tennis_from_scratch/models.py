@@ -1,8 +1,7 @@
 from learning_table_tennis_from_scratch.hysr_one_ball_env import HysrOneBallEnv
 from learning_table_tennis_from_scratch.ppo_config import PPOConfig
 
-def run_stable_baselines(accelerated_time,
-                         pam_config_file,
+def run_stable_baselines(pam_config_file,
                          reward_config_file,
                          hysr_one_ball_config_file,
                          ppo_config_file,
@@ -14,8 +13,7 @@ def run_stable_baselines(accelerated_time,
     from stable_baselines import PPO2
     from stable_baselines.common.env_checker import check_env
 
-    env_config = { "accelerated_time":accelerated_time,
-                   "pam_config_file":pam_config_file,
+    env_config = { "pam_config_file":pam_config_file,
                    "reward_config_file":reward_config_file,
                    "hysr_one_ball_config_file":hysr_one_ball_config_file }
     env = make_vec_env(HysrOneBallEnv,env_kwargs=env_config)

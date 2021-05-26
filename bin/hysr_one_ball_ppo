@@ -2,68 +2,67 @@
 
 import sys
 import pam_interface
-from lightargs import BrightArgs,FileExists
+from lightargs import BrightArgs, FileExists
 from learning_table_tennis_from_scratch.rewards import JsonReward
 from learning_table_tennis_from_scratch.models import run_stable_baselines
 from learning_table_tennis_from_scratch.hysr_one_ball import HysrOneBallConfig
 from learning_table_tennis_from_scratch.ppo_config import PPOConfig
 
-
-def execute(accelerated,
-            pam_config,
-            reward_config,
-            hysr_config,
-            ppo_config):
-    run_stable_baselines(accelerated,
-                         pam_config,
-                         reward_config,
-                         hysr_config,
-                         ppo_config)
-    
+def execute(pam_config, reward_config, hysr_config, ppo_config):
+    run_stable_baselines(pam_config, reward_config, hysr_config, ppo_config)
 
 def _configure():
-    config = BrightArgs(str("learning table tennis from scratch.\n"+
-                            "to be started after start_robots or start_robots_accelerated.\n"+
-                            "(in same folder)"))
-    config.add_operation("accelerated",
-                         "if used, start_robot_accelerated must have been started.")
-    config.add_option("pam_config_file",
-                      pam_interface.DefaultConfiguration.get_path(),
-                      "pam configuration file",
-                      str,
-                      integrity_checks= [FileExists()])
-    config.add_option("reward_config_file",
-                      JsonReward.default_path(),
-                      "reward configuration file",
-                      str,
-                      integrity_checks= [FileExists()])
-    config.add_option("hysr_config_file",
-                      HysrOneBallConfig.default_path(),
-                      "hysr configuration file",
-                      str,
-                      integrity_checks= [FileExists()])
-    config.add_option("ppo_config_file",
-                      PPOConfig.default_path(),
-                      "ppo configuration file",
-                      str,
-                      integrity_checks= [FileExists()])
-    change_all=False
-    finished  = config.dialog(change_all,sys.argv[1:])
+    config = BrightArgs(
+        str(
+            "learning table tennis from scratch.\n"
+            + "to be started after start_robots or start_robots_accelerated.\n"
+            + "(in same folder)"
+        )
+    )
+    config.add_option(
+        "pam_config_file",
+        pam_interface.DefaultConfiguration.get_path(),
+        "pam configuration file",
+        str,
+        integrity_checks=[FileExists()],
+    )
+    config.add_option(
+        "reward_config_file",
+        JsonReward.default_path(),
+        "reward configuration file",
+        str,
+        integrity_checks=[FileExists()],
+    )
+    config.add_option(
+        "hysr_config_file",
+        HysrOneBallConfig.default_path(),
+        "hysr configuration file",
+        str,
+        integrity_checks=[FileExists()],
+    )
+    config.add_option(
+        "ppo_config_file",
+        PPOConfig.default_path(),
+        "ppo configuration file",
+        str,
+        integrity_checks=[FileExists()],
+    )
+    change_all = False
+    finished = config.dialog(change_all, sys.argv[1:])
     if not finished:
         return None
     return config
-
 
 def _run():
     config = _configure()
     if config is None:
         return
-    execute(config.accelerated,
-            config.pam_config_file,
-            config.reward_config_file,
-            config.hysr_config_file,
-            config.ppo_config_file)
-
+    execute(
+        config.pam_config_file,
+        config.reward_config_file,
+        config.hysr_config_file,
+        config.ppo_config_file,
+    )
 
 if __name__ == "__main__":
     _run()

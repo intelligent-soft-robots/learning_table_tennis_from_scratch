@@ -1,35 +1,34 @@
 #!/usr/bin/env python3
 
-import sys,random
+import sys, random
 import o80
-from lightargs import BrightArgs,FileExists
-from learning_table_tennis_from_scratch.hysr_one_ball import HysrOneBall,HysrOneBallConfig
+from lightargs import BrightArgs, FileExists
+from learning_table_tennis_from_scratch.hysr_one_ball import (
+    HysrOneBall,
+    HysrOneBallConfig,
+)
 from learning_table_tennis_from_scratch.rewards import JsonReward
 
-
-def execute(accelerated_time,
-            reward_config_path,
-            hysr_config_path):
+def execute(reward_config_path, hysr_config_path):
 
     hysr_config = HysrOneBallConfig.from_json(hysr_config_path)
     reward_function = JsonReward.get(reward_config_path)
     algo_time_step = hysr_config.algo_time_step
 
-    hysr = HysrOneBall(hysr_config,
-                       accelerated_time,
-                       reward_function)
-    
+    hysr = HysrOneBall(hysr_config, reward_function)
+
     hysr.reset()
-    frequency_manager = o80.FrequencyManager(1.0/algo_time_step)
-    pressures = [ [ random.randrange(14000,20000),
-                    random.randrange(14000,20000) ]
-                  for _ in range(4) ]
+    frequency_manager = o80.FrequencyManager(1.0 / algo_time_step)
+    pressures = [
+        [random.randrange(14000, 20000), random.randrange(14000, 20000)]
+        for _ in range(4)
+    ]
     pressure_max_diff = 300
-    nb_episodes = 3    
-    
+    nb_episodes = 3
+
     for episode in range(nb_episodes):
 
-        print(episode+1," / ",nb_episodes)
+        print(episode + 1, " / ", nb_episodes)
         running = True
 
         while running:
@@ -37,56 +36,57 @@ def execute(accelerated_time,
             for dof in range(4):
                 for ago in range(2):
                     pressure = pressures[dof][ago]
-                    diff = random.randrange(-pressure_max_diff,
-                                            pressure_max_diff)
+                    diff = random.randrange(-pressure_max_diff, pressure_max_diff)
                     pressure += diff
-                    pressure = max(min(pressure,20000),14000)
+                    pressure = max(min(pressure, 20000), 14000)
                     pressures[dof][ago] = pressure
 
             pressures_ = [p for sublist in pressures for p in sublist]
-            observation,reward,reset = hysr.step(pressures_)
+            observation, reward, reset = hysr.step(pressures_)
 
-            if not accelerated_time:
+            if not hysr_config.accelerated_time:
                 waited = frequency_manager.wait()
 
             running = not reset
 
         hysr.reset()
-        frequency_manager = o80.FrequencyManager(1.0/algo_time_step)
+        frequency_manager = o80.FrequencyManager(1.0 / algo_time_step)
 
     hysr.close()
 
-
 def _configure():
-    config = BrightArgs(str("hysr dummy demo using random motions.\n"+
-                            "to be started after start_robots or start_robots_accelerated.\n"+
-                            "(in same folder)"))
-    config.add_operation("accelerated",
-                         "if used, start_robot_accelerated must have been started.")
-    config.add_option("reward_config_file",
-                      JsonReward.default_path(),
-                      "reward configuration file",
-                      str,
-                      integrity_checks= [FileExists()])
-    config.add_option("hysr_config_file",
-                      HysrOneBallConfig.default_path(),
-                      "hysr configuration file",
-                      str,
-                      integrity_checks= [FileExists()])
-    change_all=False
-    finished  = config.dialog(change_all,sys.argv[1:])
+    config = BrightArgs(
+        str(
+            "hysr dummy demo using random motions.\n"
+            + "to be started after start_robots or start_robots_accelerated.\n"
+            + "(in same folder)"
+        )
+    )
+    config.add_option(
+        "reward_config_file",
+        JsonReward.default_path(),
+        "reward configuration file",
+        str,
+        integrity_checks=[FileExists()],
+    )
+    config.add_option(
+        "hysr_config_file",
+        HysrOneBallConfig.default_path(),
+        "hysr configuration file",
+        str,
+        integrity_checks=[FileExists()],
+    )
+    change_all = False
+    finished = config.dialog(change_all, sys.argv[1:])
     if not finished:
         return None
     return config
-
 
 def _run():
     config = _configure()
     if config is None:
         return
-    execute(config.accelerated,
-            config.reward_config_file,
-            config.hysr_config_file)
-    
+    execute(config.reward_config_file, config.hysr_config_file)
+
 if __name__ == "__main__":
     _run()
