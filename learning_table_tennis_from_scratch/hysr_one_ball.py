@@ -1,4 +1,4 @@
-import os, sys, time, math, random, json
+import os, sys, time, math, random, json, site
 import o80, o80_pam, pam_mujoco, context, pam_interface
 import numpy as np
 from pam_mujoco import mirroring
@@ -67,11 +67,18 @@ class HysrOneBallConfig:
 
     @staticmethod
     def default_path():
-        return os.path.join(
-            sys.prefix,
-            "learning_table_tennis_from_scratch_config",
-            "hysr_one_ball_default.json",
-        )
+        global_install = os.path.join(sys.prefix,
+                                      "local",
+                                      "learning_table_tennis_from_scratch_config",
+                                      "hysr_one_ball_default.json")
+        local_install = os.path.join(site.USER_BASE,
+                                     "learning_table_tennis_from_scratch_config",
+                                     "hysr_one_ball_default.json")
+
+        if os.path.isfile(local_install):
+            return local_install
+        if os.path.isfile(global_install):
+            return global_install
 
 
 class _BallBehavior:
@@ -190,7 +197,7 @@ class _Observation:
         self.ball_position = ball_position
         self.ball_velocity = ball_velocity
         self.ball_positions = ball_positions
-        self.ball_velocities = ball_velicites
+        self.ball_velocities = ball_velocities
 
 
 class HysrOneBall:
@@ -265,8 +272,6 @@ class HysrOneBall:
         self._mirrorings = [
             self._simulated_robot_handle.interfaces[SEGMENT_ID_ROBOT_MIRROR]
         ]
-        for ball_set in self._extra_balls_sets:
-            self._mirrorings.append(ball_set.mirroring)
 
         # to move the hit point marker
         self._hit_point = self._simulated_robot_handle.interfaces[SEGMENT_ID_HIT_POINT]
@@ -328,10 +333,8 @@ class HysrOneBall:
         # overwrite the ball behavior (set to a trajectory in the constructor)
         # see comments in _BallBehavior, in this file
         self._ball_behavior = _BallBehavior(line=line, index=index, random=random)
-        for ball_set in self._extra_balls_set:
-            ball_set.ball_behaviors = [
-                _BallBehavior(random=True) for _ in range(ball_set.nb_balls)
-            ]
+        for ball in self._extra_balls:
+            ball.ball_behavior = _BallBehavior(random=True)
 
     def _create_observation(self):
         (
@@ -379,7 +382,7 @@ class HysrOneBall:
         return self._ball_status.contact_occured()
 
     def load_ball(self):
-        def _load(ball_behavior, ball_communication):
+        def _load(ball_behavior, ball_communication, ball_status):
             # "load" the ball means creating the o80 commands corresponding
             # to the ball behavior (set by the "set_ball_behavior" method)
             trajectory_points = ball_behavior.get_trajectory()
@@ -392,9 +395,9 @@ class HysrOneBall:
             # shooting the ball
             ball_communication.play_trajectory(trajectory_points, overwrite=False)
 
-        _load(self._ball_behavior, self._ball_communication)
+        _load(self._ball_behavior, self._ball_communication, self._ball_status)
         for ball in self._extra_balls:
-            _load(ball.ball_communication, ball.ball_behaviors)
+            _load(ball.ball_communication, ball.ball_behaviors, ball.ball_status)
 
     def reset_contact(self):
         self._simulated_robot_handle.reset_contact(SEGMENT_ID_BALL)
@@ -470,8 +473,8 @@ class HysrOneBall:
             ball.handle.deactivate_contact(ball.segment_id)
 
         # moving the ball to initial position
-        for mirroring in self._mirrorings:
-            mirroring.burst(4)
+        for mirroring_ in self._mirrorings:
+            mirroring_.burst(4)
 
         # resetting ball/robot contact information
         self._simulated_robot_handle.reset_contact(SEGMENT_ID_BALL)
@@ -484,7 +487,7 @@ class HysrOneBall:
 
         # resetting ball info, e.g. min distance ball/racket, etc
         self._ball_status.reset()
-        for ball in self.extra_balls:
+        for ball in self._extra_balls:
             ball.ball_status.reset()
 
         # returning an observation
@@ -542,13 +545,13 @@ class HysrOneBall:
             self._pressure_commands.set(pressures, burst=False)
 
         # sending mirroring state to simulated robot(s)
-        for mirroring in self._mirrorings:
-            self._mirroring.set(joint_positions, joint_velocities)
+        for mirroring_ in self._mirrorings:
+            mirroring_.set(joint_positions, joint_velocities)
 
         # having the simulated robot(s)/ball(s) performing the right number of iterations
         # (note: simulated expected to run accelerated time)
-        for mirroring in self._mirrorings:
-            self._mirroring.burst(self._nb_sim_bursts)
+        for mirroring_ in self._mirrorings:
+            mirroring_.burst(self._nb_sim_bursts)
 
         def _update_ball_status(handle, segment_id, ball_status):
             # getting ball/racket contact information
