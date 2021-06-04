@@ -1,4 +1,4 @@
-import os,sys,time,math,random,json
+import os,sys,time,math,random,json,site
 import o80,o80_pam,pam_mujoco,context,pam_interface
 import numpy as np
 from pam_mujoco import mirroring
@@ -48,9 +48,22 @@ class HysrOneBallConfig:
 
     @staticmethod
     def default_path():
-        return os.path.join(sys.prefix,
-                            "learning_table_tennis_from_scratch_config",
-                            "hysr_one_ball_default.json")
+       global_install = os.path.join(
+            sys.prefix,
+            "local",
+            "learning_table_tennis_from_scratch_config",
+            "hysr_one_ball_default.json",
+        )
+       local_install = os.path.join(
+            site.USER_BASE,
+            "learning_table_tennis_from_scratch_config",
+            "hysr_one_ball_default.json",
+        )
+
+       if os.path.isfile(local_install):
+           return local_install
+       if os.path.isfile(global_install):
+           return global_install
     
 
 class _BallBehavior:
