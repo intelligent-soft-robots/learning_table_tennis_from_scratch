@@ -133,46 +133,6 @@ class _BallBehavior:
         return self.value
 
 
-class _ParallelBurst:
-    def __init__(self, mirrorings, wait=0.001):
-        self._size = len(mirrorings)
-        self._running = True
-        self._mirrorings = mirrorings
-        self._burst_done = None
-        self._nb_bursts = None
-        self._wait = wait
-        self._threads = [
-            threading.Thread(target=self._run, args=(index,))
-            for index in range(self._size)
-        ]
-        for thread in self._threads:
-            thread.start()
-
-    def _run(self, index):
-        while self._running:
-            if (self._nb_bursts is not None) and not self._burst_done[index]:
-                self._mirrorings[index].burst(self._nb_bursts)
-                self._burst_done[index] = True
-            else:
-                time.sleep(self._wait)
-
-    def burst(self, nb_bursts):
-        self._burst_done = [False] * self._size
-        self._nb_bursts = nb_bursts
-        while not all(self._burst_done):
-            time.sleep(self._wait)
-        self._burst_done = [False] * self._size
-        self._nb_bursts = None
-
-    def stop(self):
-        self._running = False
-        for thread in self._threads:
-            thread.join()
-
-    def __del__(self):
-        self.stop()
-
-
 class _ExtraBall:
     def __init__(self, ball_communication, handle, segment_id):
 
@@ -364,13 +324,14 @@ class HysrOneBall:
             self._extra_balls = []
             self._extra_handles = []
 
+        # for running all simulations (main + for extra balls)
+        # in parallel
+        self._parallel_burst = pam_mujoco.mirroring.ParallelBurst(self._mirrorings)
+        
         # when starting, the real robot and the virtual robot(s)
         # may not be aligned, which may result in graphical issues
         mirroring.align_robots(self._pressure_commands, self._mirrorings)
 
-        # for running all simulations (main + for extra balls)
-        # in parallel
-        self._parallel_burst = _ParallelBurst(self._mirrorings)
 
     def force_episode_over(self):
         # will trigger the method _episode_over
@@ -469,6 +430,7 @@ class HysrOneBall:
                 max_pressures,
                 duration,
                 self._accelerated_time,
+                parallel_burst=self._parallel_burst
             )
 
     def _do_instant_reset(self):
@@ -508,6 +470,7 @@ class HysrOneBall:
                     self._reference_posture,
                     duration,  # in 1 seconds
                     self._accelerated_time,
+                    parallel_burst=self._parallel_burst
                 )
 
         # setting the ball behavior
