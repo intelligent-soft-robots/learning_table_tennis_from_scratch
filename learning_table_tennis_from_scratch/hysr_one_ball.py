@@ -133,23 +133,23 @@ class _BallBehavior:
         return self.value
 
 
-class _ParralelBurst:
+class _ParallelBurst:
     def __init__(self, mirrorings, wait=0.001):
         self._size = len(mirrorings)
-        self._run = True
+        self._running = True
         self._mirrorings = mirrorings
         self._burst_done = None
         self._nb_bursts = None
         self._wait = wait
         self._threads = [
-            threading.Thread(target=self._run, args=(self, index))
+            threading.Thread(target=self._run, args=(index,))
             for index in range(self._size)
         ]
         for thread in self._threads:
             thread.start()
 
     def _run(self, index):
-        while self._run():
+        while self._running:
             if (self._nb_bursts is not None) and not self._burst_done[index]:
                 self._mirrorings[index].burst(self._nb_bursts)
                 self._burst_done[index] = True
@@ -165,7 +165,7 @@ class _ParralelBurst:
         self._nb_bursts = None
 
     def stop(self):
-        self._run = False
+        self._running = False
         for thread in self._threads:
             thread.join()
 
@@ -370,7 +370,7 @@ class HysrOneBall:
 
         # for running all simulations (main + for extra balls)
         # in parallel
-        self._parralel_burst = _ParallelBurst(self._mirrorings)
+        self._parallel_burst = _ParallelBurst(self._mirrorings)
 
     def force_episode_over(self):
         # will trigger the method _episode_over
@@ -521,7 +521,7 @@ class HysrOneBall:
             ball.handle.deactivate_contact(ball.segment_id)
 
         # moving the ball(s) to initial position
-        self._parralel_burst.burst(4)
+        self._parallel_burst.burst(4)
 
         # resetting ball/robot contact information
         self._simulated_robot_handle.reset_contact(SEGMENT_ID_BALL)
@@ -653,4 +653,4 @@ class HysrOneBall:
         return observation, reward, episode_over
 
     def close(self):
-        self._parallel_bursts.stop()
+        self._parallel_burst.stop()
