@@ -3,6 +3,7 @@ import os
 import json
 import site
 
+
 def _no_hit_reward(min_distance_ball_racket):
     return -min_distance_ball_racket
 
@@ -146,16 +147,19 @@ class JsonReward:
 
     @staticmethod
     def default_path():
-        global_install = os.path.join(sys.prefix,
-                                      "local",
-                                      "learning_table_tennis_from_scratch_config",
-                                      "reward_default.json")
-        local_install = os.path.join(site.USER_BASE,
-                                     "learning_table_tennis_from_scratch_config",
-                                     "reward_default.json")
+        global_install = os.path.join(
+            sys.prefix,
+            "local",
+            "learning_table_tennis_from_scratch_config",
+            "reward_default.json",
+        )
+        local_install = os.path.join(
+            site.USER_BASE,
+            "learning_table_tennis_from_scratch_config",
+            "reward_default.json",
+        )
 
         if os.path.isfile(local_install):
             return local_install
         if os.path.isfile(global_install):
             return global_install
-

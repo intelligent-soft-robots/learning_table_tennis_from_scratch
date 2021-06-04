@@ -1,4 +1,4 @@
-import os, sys, time, math, random, json, site
+import os, sys, time, math, random, json, site, threading
 import o80, o80_pam, pam_mujoco, context, pam_interface
 import numpy as np
 from pam_mujoco import mirroring
@@ -67,13 +67,17 @@ class HysrOneBallConfig:
 
     @staticmethod
     def default_path():
-        global_install = os.path.join(sys.prefix,
-                                      "local",
-                                      "learning_table_tennis_from_scratch_config",
-                                      "hysr_one_ball_default.json")
-        local_install = os.path.join(site.USER_BASE,
-                                     "learning_table_tennis_from_scratch_config",
-                                     "hysr_one_ball_default.json")
+        global_install = os.path.join(
+            sys.prefix,
+            "local",
+            "learning_table_tennis_from_scratch_config",
+            "hysr_one_ball_default.json",
+        )
+        local_install = os.path.join(
+            site.USER_BASE,
+            "learning_table_tennis_from_scratch_config",
+            "hysr_one_ball_default.json",
+        )
 
         if os.path.isfile(local_install):
             return local_install
@@ -127,6 +131,46 @@ class _BallBehavior:
 
     def get(self):
         return self.value
+
+
+class _ParralelBurst:
+    def __init__(self, mirrorings, wait=0.001):
+        self._size = len(mirrorings)
+        self._run = True
+        self._mirrorings = mirrorings
+        self._burst_done = None
+        self._nb_bursts = None
+        self._wait = wait
+        self._threads = [
+            threading.Thread(target=self._run, args=(self, index))
+            for index in range(self._size)
+        ]
+        for thread in self._threads:
+            thread.start()
+
+    def _run(self, index):
+        while self._run():
+            if (self._nb_bursts is not None) and not self._burst_done[index]:
+                self._mirrorings[index].burst(self._nb_bursts)
+                self._burst_done[index] = True
+            else:
+                time.sleep(self._wait)
+
+    def burst(self, nb_bursts):
+        self._burst_done = [False] * self._size
+        self._nb_bursts = nb_bursts
+        while not all(self._burst_done):
+            time.sleep(self._wait)
+        self._burst_done = [False] * self._size
+        self._nb_bursts = None
+
+    def stop(self):
+        self._run = False
+        for thread in self._threads:
+            thread.join()
+
+    def __del__(self):
+        self.stop()
 
 
 class _ExtraBall:
@@ -280,10 +324,6 @@ class HysrOneBall:
         # (a step sets it to false, reset sets it back to true)
         self._first_episode_step = True
 
-        # when starting, the real robot and the virtual robot(s)
-        # may not be aligned, which may result in graphical issues
-        mirroring.align_robots(self._pressure_commands, self._mirrorings)
-
         # will be used to move the robot to reference posture
         # between episodes
         self._max_pressures1 = [(18000, 18000)] * 4
@@ -323,6 +363,14 @@ class HysrOneBall:
         else:
             self._extra_balls = []
             self._extra_handles = []
+
+        # when starting, the real robot and the virtual robot(s)
+        # may not be aligned, which may result in graphical issues
+        mirroring.align_robots(self._pressure_commands, self._mirrorings)
+
+        # for running all simulations (main + for extra balls)
+        # in parallel
+        self._parralel_burst = _ParallelBurst(self._mirrorings)
 
     def force_episode_over(self):
         # will trigger the method _episode_over
@@ -472,9 +520,8 @@ class HysrOneBall:
             ball.handle.reset_contact(ball.segment_id)
             ball.handle.deactivate_contact(ball.segment_id)
 
-        # moving the ball to initial position
-        for mirroring_ in self._mirrorings:
-            mirroring_.burst(4)
+        # moving the ball(s) to initial position
+        self._parralel_burst.burst(4)
 
         # resetting ball/robot contact information
         self._simulated_robot_handle.reset_contact(SEGMENT_ID_BALL)
@@ -550,8 +597,7 @@ class HysrOneBall:
 
         # having the simulated robot(s)/ball(s) performing the right number of iterations
         # (note: simulated expected to run accelerated time)
-        for mirroring_ in self._mirrorings:
-            mirroring_.burst(self._nb_sim_bursts)
+        self._parallel_burst.burst(self._nb_sim_bursts)
 
         def _update_ball_status(handle, segment_id, ball_status):
             # getting ball/racket contact information
@@ -607,4 +653,4 @@ class HysrOneBall:
         return observation, reward, episode_over
 
     def close(self):
-        pass
+        self._parallel_bursts.stop()
