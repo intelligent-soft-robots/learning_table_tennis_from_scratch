@@ -8,57 +8,60 @@ SEGMENT_ID_HIT_POINT = pam_mujoco.segment_ids.hit_point
 SEGMENT_ID_ROBOT_MIRROR = pam_mujoco.segment_ids.mirroring
 SEGMENT_ID_PSEUDO_REAL_ROBOT = o80_pam.segment_ids.robot
 
-SEGMENT_ID_EXTRA_BALLS_SETS_PREFIX = "extra_balls"
-SEGMENT_ID_EXTRA_ROBOTS_PREFIX = "extra_robot"
-SEGMENT_ID_EXTRA_ROBOT_PREFIX = "extra_ball"
+MUJOCO_ID_EXTRA_BALLS_SETS_PREFIX = "extra_balls"
+SEGMENT_ID_EXTRA_BALLS_SETS_PREFIX = "extra_balls_sid"
+SEGMENT_ID_EXTRA_ROBOTS_PREFIX = "extra_robot_sid"
+
+def get_extra_balls_set_mujoco_id(setid,
+                                  mujoco_id_prefix=MUJOCO_ID_EXTRA_BALLS_SETS_PREFIX):
+    return "_".join([mujoco_id_prefix, str(setid)])
 
 
-def get_extra_balls_set_mujoco_id(
-    setid, mujoco_id_prefix=SEGMENT_ID_EXTRA_BALLS_SETS_PREFIX
-):
-    return "_".join(mujoco_id_prefix, setid)
+def get_extra_robot_segment_id(setid,
+                               segment_id_prefix=SEGMENT_ID_EXTRA_ROBOTS_PREFIX):
+    return "_".join([segment_id_prefix, str(setid)])
 
 
-def get_extra_robot_segment_id(setid, segment_id_prefix=SEGMENT_ID_EXTRA_ROBOTS_PREFIX):
-    return "_".join(segment_id_prefix, setid)
+def get_extra_balls_segment_id(setid,
+                              segment_id_prefix=SEGMENT_ID_EXTRA_BALLS_SETS_PREFIX):
+    return "_".join([segment_id_prefix, str(setid)])
 
-
-def get_extra_ball_segment_id(
-    setid, ballid, segment_id_prefix=SEGMENT_ID_EXTRA_ROBOT_PREFIX
-):
-    return "_".join(segment_id_prefix, setid, ballid)
-
+def get_ball_segment_id(set_id,index):
+    return "ball_"+str(set_id)+"_"+str(index)
 
 def configure_extra_set(setid, nb_balls, graphics):
 
     accelerated_time = True
     burst_mode = True
 
-    segment_id_robot = get_extra_robot_segment_id(setid)
+    robot_segment_id = get_extra_robot_segment_id(setid)
     robot = pam_mujoco.MujocoRobot(
-        segment_id_robot, control=pam_mujoco.MujocoRobot.JOINT_CONTROL
+        robot_segment_id, control=pam_mujoco.MujocoRobot.JOINT_CONTROL
     )
 
-    balls = [
-        pam_mujoco.MujocoItem(
-            get_extra_ball_segment_id(setid, ballid),
-            control=pam_mujoco.MujocoItem.COMMAND_ACTIVE_CONTROL,
-            contact_type=pam_mujoco.ContactTypes.racket1,
-        )
-        for ballid in range(nb_balls)
-    ]
+    extra_balls_segment_id = get_extra_balls_segment_id(setid)
+    balls = pam_mujoco.MujocoItems(extra_balls_segment_id)
+    
+    ball_segment_ids = [get_ball_segment_id(setid,index) for index in
+                   range(nb_balls)]
+    
+    
+    for index,ball_segment_id in enumerate(ball_segment_ids):
+        ball = pam_mujoco.MujocoItem(ball_segment_id,
+                                     control=pam_mujoco.MujocoItem.CONSTANT_CONTROL,
+                                     contact_type=pam_mujoco.ContactTypes.racket1)
+        balls.add_ball(ball)
 
-    mujoco_id = get_extra_balls_set_mujoco_id(setid)
     handle = pam_mujoco.MujocoHandle(
-        mujoco_id,
+        get_extra_balls_set_mujoco_id(setid),
         graphics=graphics,
         accelerated_time=accelerated_time,
         burst_mode=burst_mode,
         table=True,
         robot1=robot,
-        balls=balls,
-    )
-    return handle
+        combined=balls)
+    
+    return handle,mujoco_id,extra_balls_segment_id,robot_segment_id,ball_segment_ids
 
 
 def configure_pseudo_real(

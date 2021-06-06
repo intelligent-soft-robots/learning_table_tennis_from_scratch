@@ -10,7 +10,7 @@
     },
     "pressure_change_range":1000,
     "trajectory":-1,
-    "accelerated_time":true,
+    "accelerated_time":false,
     "instant_reset":true,
     "extra_balls_sets":0,
     "extra_balls_per_set":5,
