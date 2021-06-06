@@ -134,12 +134,12 @@ class _BallBehavior:
 
 
 class _ExtraBall:
-    def __init__(self, ball_communication, handle, segment_id):
+    def __init__(self, ball_status, ball_communication, handle, segment_id):
 
         self.handle = handle
         self.segment_id = segment_id
         self.ball_communication = ball_communication
-        self.ball_status = None
+        self.ball_status = ball_status
         self.ball_behavior = _BallBehavior(random=True)
 
 
@@ -150,24 +150,28 @@ class _ExtraBallsSet:
         self.nb_balls = nb_balls
         self.target_position = target_position
 
-        self.handle = configure_mujoco.config_extra_sets(
+        self.handle = configure_mujoco.configure_extra_set(
             setid, nb_balls, graphics=graphics
         )
         self.ball_segment_ids = [
-            get_extra_ball_segment_id(setid, ballid) for ballid in range(nb_balls)
+            configure_mujoco.get_extra_ball_segment_id(setid, ballid) for ballid in range(nb_balls)
         ]
         self.robot_segment_id = configure_mujoco.get_extra_robot_segment_id(setid)
 
         self.mirroring = self.handle.interfaces[self.robot_segment_id]
         self.ball_communications = [
             self.handle.interfaces[ball_segment_id]
-            for ball_segment_id in ball_segment_ids
+            for ball_segment_id in self.ball_segment_ids
+        ]
+        self.ball_status = [
+            context.BallStatus(target_position)
+            for _ in range(nb_balls)
         ]
 
         self.balls = [
-            _ExtraBall(ball_communication, self.handle, segment_id)
-            for ball_communication, segment_id in zip(
-                self.ball_communications, self.ball_segment_ids
+            _ExtraBall(ball_status, ball_communication, self.handle, segment_id)
+            for ball_status, ball_communication, segment_id in zip(
+                    self.ball_status, self.ball_communications, self.ball_segment_ids
             )
         ]
 
@@ -216,6 +220,8 @@ class HysrOneBall:
             graphics=hysr_config.graphics_simulation
         )
 
+        print("A")
+        
         self._target_position = hysr_config.target_position
 
         self._goal = self._simulated_robot_handle.interfaces[SEGMENT_ID_GOAL]
@@ -231,6 +237,8 @@ class HysrOneBall:
                 hysr_config.algo_time_step / hysr_config.o80_pam_time_step
             )
 
+        print("B")
+            
         # pam_mujoco (i.e. simulated ball and robot) should have been
         # started in accelerated time. It burst through algorithm
         # time steps
@@ -254,6 +262,9 @@ class HysrOneBall:
         # reward configuration
         self._reward_function = reward_function
 
+
+        print("C")
+        
         # to get information regarding the ball
         self._ball_communication = self._simulated_robot_handle.interfaces[
             SEGMENT_ID_BALL
@@ -272,6 +283,8 @@ class HysrOneBall:
         # about the ball (e.g. min distance with racket, etc)
         self._ball_status = context.BallStatus(hysr_config.target_position)
 
+        print("D")
+        
         # to send mirroring commands to simulated robots
         self._mirrorings = [
             self._simulated_robot_handle.interfaces[SEGMENT_ID_ROBOT_MIRROR]
@@ -300,13 +313,15 @@ class HysrOneBall:
         # Only "false" is supported by the real robot
         self._instant_reset = hysr_config.instant_reset
 
+        print("E")
+        
         # adding extra balls (if any)
         if (
             hysr_config.extra_balls_sets is not None
             and hysr_config.extra_balls_sets > 0
         ):
             ball_sets = [
-                _ExtraBallSet(
+                _ExtraBallsSet(
                     setid,
                     hysr_config.extra_balls_per_set,
                     hysr_config.target_position,
@@ -324,14 +339,20 @@ class HysrOneBall:
             self._extra_balls = []
             self._extra_handles = []
 
+        print("F")
+            
         # for running all simulations (main + for extra balls)
         # in parallel
         self._parallel_burst = pam_mujoco.mirroring.ParallelBurst(self._mirrorings)
+
+        print("G")
         
         # when starting, the real robot and the virtual robot(s)
         # may not be aligned, which may result in graphical issues
         mirroring.align_robots(self._pressure_commands, self._mirrorings)
 
+        print("H")
+        
 
     def force_episode_over(self):
         # will trigger the method _episode_over
@@ -406,7 +427,7 @@ class HysrOneBall:
 
         _load(self._ball_behavior, self._ball_communication, self._ball_status)
         for ball in self._extra_balls:
-            _load(ball.ball_communication, ball.ball_behaviors, ball.ball_status)
+            _load(ball.ball_behavior, ball.ball_communication, ball.ball_status)
 
     def reset_contact(self):
         self._simulated_robot_handle.reset_contact(SEGMENT_ID_BALL)
