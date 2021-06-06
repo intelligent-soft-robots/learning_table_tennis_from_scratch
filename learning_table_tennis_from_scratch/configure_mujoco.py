@@ -52,8 +52,10 @@ def configure_extra_set(setid, nb_balls, graphics):
                                      contact_type=pam_mujoco.ContactTypes.racket1)
         balls.add_ball(ball)
 
+    mujoco_id = get_extra_balls_set_mujoco_id(setid)
+        
     handle = pam_mujoco.MujocoHandle(
-        get_extra_balls_set_mujoco_id(setid),
+        mujoco_id,
         graphics=graphics,
         accelerated_time=accelerated_time,
         burst_mode=burst_mode,

@@ -336,9 +336,9 @@ class HysrOneBall:
         if ( hysr_config.extra_balls_sets is not None
              and hysr_config.extra_balls_sets > 0) :
 
-            self.extra_balls = []
+            self._extra_balls = []
             
-            for setid in range(hysr_config.extra_balls_set):
+            for setid in range(hysr_config.extra_balls_sets):
 
                 # balls: list of instances of _ExtraBalls (defined in this file)
                 # mirroring : for sending mirroring command to the robot
@@ -349,8 +349,8 @@ class HysrOneBall:
                                                    hysr_config.target_position,
                                                    hysr_config.graphics_extra_balls)
 
-                self.extra_balls.extend(balls)
-                
+                self._extra_balls.extend(balls)
+                self._mirrorings.append(mirroring)
         else:
             self._extra_balls = []
 
@@ -434,7 +434,7 @@ class HysrOneBall:
         duration = o80.Duration_us.milliseconds(int(sampling_rate_ms))
         trajectories = self._trajectory_reader.get_different_random_trajectories(
             len(self._extra_balls) )
-        for ball,trajectories in zip(self._extra_balls,trajectories):
+        for index_ball,(ball,trajectory) in enumerate(zip(self._extra_balls,trajectories)):
             # going to first trajectory point
             item3d.set_position(trajectory[0].position)
             item3d.set_velocity([0]*3)
@@ -463,6 +463,11 @@ class HysrOneBall:
         self._simulated_robot_handle.reset_contact(SEGMENT_ID_BALL)
         for ball in self._extra_balls:
             ball.reset_contact()
+
+    def deactivate_contact(self):
+        self._simulated_robot_handle.deactivate_contact(SEGMENT_ID_BALL)
+        for ball in self._extra_balls:
+            ball.deactivate_contact()
 
     def _do_natural_reset(self):
 
@@ -538,7 +543,7 @@ class HysrOneBall:
         # control post contact was lost, restoring it
         self._simulated_robot_handle.reset_contact(SEGMENT_ID_BALL)
         self._simulated_robot_handle.deactivate_contact(SEGMENT_ID_BALL)
-        for handle in _ExtraBall.handles.values():
+        for ball in self._extra_balls:
             ball.handle.reset_contact(ball.segment_id)
             ball.handle.deactivate_contact(ball.segment_id)
 
@@ -594,11 +599,6 @@ class HysrOneBall:
 
         # getting information about simulated ball
         ball_position, ball_velocity = self._ball_communication.get()
-        ball_positions, ball_velocities = [], []
-        for ball in self._extra_balls:
-            p, v = ball.ball_communication.get()
-            ball_positions.append(p)
-            ball_velocities.append(v)
 
         # convert action [ago1,antago1,ago2] to list suitable for
         # o80 ([(ago1,antago1),(),...])
