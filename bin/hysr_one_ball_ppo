@@ -5,11 +5,23 @@ import pam_interface
 from lightargs import BrightArgs, FileExists
 from learning_table_tennis_from_scratch.rewards import JsonReward
 from learning_table_tennis_from_scratch.models import run_stable_baselines
+from learning_table_tennis_from_scratch.models import run_openai_baselines
 from learning_table_tennis_from_scratch.hysr_one_ball import HysrOneBallConfig
 from learning_table_tennis_from_scratch.ppo_config import PPOConfig
+from learning_table_tennis_from_scratch.ppo_config import OpenAIPPOConfig
 
-def execute(pam_config, reward_config, hysr_config, ppo_config):
-    run_stable_baselines(pam_config, reward_config, hysr_config, ppo_config)
+
+def execute(pam_config,
+            reward_config,
+            hysr_config,
+            ppo_config,
+            use_openai_baselines,
+            log_episodes,
+            log_tensorboard):
+    if use_openai_baselines:
+        run_openai_baselines(pam_config, reward_config, hysr_config, ppo_config, log_episodes, log_tensorboard)
+    else:
+        run_stable_baselines(pam_config, reward_config, hysr_config, ppo_config, log_episodes, log_tensorboard)
 
 def _configure():
     config = BrightArgs(
@@ -47,6 +59,24 @@ def _configure():
         str,
         integrity_checks=[FileExists()],
     )
+    config.add_option(
+        "use_openai_baselines",
+        True,
+        "use openai baselines (instead of stable baselines)",
+        bool,
+    )
+    config.add_option(
+        "log_episodes",
+        False,
+        "log episodes in env",
+        bool,
+    )
+    config.add_option(
+        "log_tensorboard",
+        False,
+        "log for tensorboard",
+        bool,
+    )
     change_all = False
     finished = config.dialog(change_all, sys.argv[1:])
     if not finished:
@@ -62,6 +92,9 @@ def _run():
         config.reward_config_file,
         config.hysr_config_file,
         config.ppo_config_file,
+        config.use_openai_baselines,
+        config.log_episodes,
+        config.log_tensorboard
     )
 
 if __name__ == "__main__":
