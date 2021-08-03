@@ -44,7 +44,7 @@ When starting *hysr_one_ball_ppo*, a dialog allows to select the configuration f
 It is possible to start the executable without using the dialog, for example:
 
 ```bash
-hysr_on_ball_ppo -hysr_config_file /path/to/config/file.json -reward_config_file /path/to/other/config/file.json 
+hysr_one_ball_ppo -hysr_config_file /path/to/config/file.json -reward_config_file /path/to/other/config/file.json 
 ```
 
 
