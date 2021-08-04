@@ -20,17 +20,36 @@ In a first terminal:
 hysr_start_robots
 ```
 
-In a second terminal, optionnaly (for graphics):
+press enter to get the prompt back and optionally:
 
 ```bash
-hysr_visualization
+# display stats regarding frequencies at which
+# steps are running
+hysr_step_frequencies
 ```
 
-and finally:
+and / or:
 
 ```bash
-hysr_one_ball_ppo
+# display stats regarding frequencies at which
+# episodes are running
+hysr_episode_frequencies
 ```
+
+In a *second* terminal, run one of these executables:
+
+- hysr_one_ball_ppo
+- hysr_one_ball_random
+- hysr_one_ball_swing
+- hysr_one_ball_reward_tests
+- hysr_one_ball_reset
+
+The terminal should prompt you to select some configuration file. Modify these configuration based on your needs (see below)
+
+Note:
+- For as long the configuration files are not changed, several executables can be run in sequence without the need to restart ```hysr_start_robot``` (i.e. the same mujoco instances can be reused)
+- For each time a new executable is started, ```hysr_episode_frequencies``` and ```hysr_step_frequencies``` need to be restarted. If the executable did not start correctly, it may be necessary to clean the shared memory (```rm /etc/shm/*```)
+- The preferred way to stop the mujoco simulation is to call: ```pam_mujoco_stop_all``` (in any terminal)
 
 # Configuration files
 
