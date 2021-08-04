@@ -1,5 +1,5 @@
 import os,sys,time,math,random,json,site
-import o80,o80_pam,pam_mujoco,context,pam_interface
+import o80,o80_pam,pam_mujoco,context,pam_interface,frequency_monitoring,shared_memory
 import numpy as np
 from pam_mujoco import mirroring
 from . import configure_mujoco
@@ -10,6 +10,8 @@ SEGMENT_ID_GOAL = pam_mujoco.segment_ids.goal
 SEGMENT_ID_HIT_POINT = pam_mujoco.segment_ids.hit_point
 SEGMENT_ID_ROBOT_MIRROR = pam_mujoco.segment_ids.mirroring
 SEGMENT_ID_PSEUDO_REAL_ROBOT = o80_pam.segment_ids.robot
+SEGMENT_ID_EPISODE_FREQUENCY = "hysr_episode_frequency"
+SEGMENT_ID_STEP_FREQUENCY = "hysr_step_frequency"
 
 
 class HysrOneBallConfig:
@@ -17,7 +19,8 @@ class HysrOneBallConfig:
     __slots__ = ("o80_pam_time_step","mujoco_time_step","algo_time_step",
                  "target_position","reference_posture","world_boundaries",
                  "pressure_change_range","trajectory","accelerated_time",
-                 "graphics_pseudo_real","graphics_simulation","instant_reset")
+                 "graphics_pseudo_real","graphics_simulation","instant_reset",
+                 "frequency_monitoring_step","frequency_monitoring_episode")
 
     def __init__(self):
         for s in self.__slots__:
@@ -155,7 +158,24 @@ class HysrOneBall:
         self._target_position = hysr_config.target_position
 
         self._goal = self._simulated_robot_handle.interfaces[SEGMENT_ID_GOAL]
-        
+
+        # if requested, logging info about the frequencies of the steps and/or the
+        # episodes
+        if hysr_config.frequency_monitoring_step:
+            segment_id = hysr_config.frequency_monitoring_step
+            size=1000
+            self._frequency_monitoring_step = frequency_monitoring.FrequencyMonitoring(SEGMENT_ID_STEP_FREQUENCY,
+                                                                                       size)
+        else:
+            self._frequency_monitoring_step = None
+        if hysr_config.frequency_monitoring_episode:
+            segment_id = hysr_config.frequency_monitoring_episode
+            size=1000
+            self._frequency_monitoring_episode = frequency_monitoring.FrequencyMonitoring(SEGMENT_ID_EPISODE_FREQUENCY,
+                                                                                       size)
+        else:
+            self._frequency_monitoring_episode = None
+            
         # if o80_pam (i.e. the pseudo real robot)
         # has been started in accelerated time,
         # the corresponding o80 backend will burst through
@@ -332,6 +352,11 @@ class HysrOneBall:
         
     def reset(self):
 
+        # exporting episode frequency
+        if self._frequency_monitoring_episode:
+            self._frequency_monitoring_episode.ping()
+            self._frequency_monitoring_episode.share()
+        
         # in case the episode was forced to end by the
         # user (see force_episode_over method)
         self._force_episode_over = False
@@ -470,11 +495,17 @@ class HysrOneBall:
         # (reset will set this back to True)
         self._first_episode_step = False
 
-            
+        # exporting step frequency
+        if self._frequency_monitoring_step:
+            self._frequency_monitoring_step.ping()
+            self._frequency_monitoring_step.share()
+           
         # returning
         return observation,reward,episode_over
 
     
     def close(self):
+        shared_memory.clear_shared_memory(SEGMENT_ID_EPISODE_FREQUENCY)
+        shared_memory.clear_shared_memory(SEGMENT_ID_STEP_FREQUENCY)
         pass
 

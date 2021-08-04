@@ -10,8 +10,10 @@
     },
     "pressure_change_range":18000,
     "trajectory":-1,
-    "accelerated_time":true,
+    "accelerated_time":false,
     "graphics_pseudo_real":false,
-    "graphics_simulation":false,
-    "instant_reset":true
+    "graphics_simulation":true,
+    "instant_reset":true,
+    "frequency_monitoring_episode":true,
+    "frequency_monitoring_step":true
 }

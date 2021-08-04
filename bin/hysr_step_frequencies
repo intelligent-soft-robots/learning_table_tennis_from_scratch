@@ -1,0 +1,3 @@
+#! /bin/bash
+
+xterm -e frequency_monitoring -segment_id hysr_step_frequency &
