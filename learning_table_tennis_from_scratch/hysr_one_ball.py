@@ -352,6 +352,10 @@ class HysrOneBall:
         
     def reset(self):
 
+        # resetting the measure of step frequency monitoring
+        if self._frequency_monitoring_step:
+            self._frequency_monitoring_step.reset()
+        
         # exporting episode frequency
         if self._frequency_monitoring_episode:
             self._frequency_monitoring_episode.ping()

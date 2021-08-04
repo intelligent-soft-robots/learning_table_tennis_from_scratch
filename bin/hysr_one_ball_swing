@@ -30,7 +30,7 @@ def execute(reward_config_path, hysr_config_path):
     swing_posture = [[14000, 22000], [14000, 22000], [17000, 13000], [14000, 16000]]
     pressures = [p for sublist in swing_posture for p in sublist]
 
-    for episode in range(3):
+    for episode in range(5):
         print("EPISODE", episode)
         running = True
         while running:

@@ -26,8 +26,8 @@ setup( name='learning_table_tennis_from_scratch',
                 'bin/hysr_one_ball_reward_tests',
                 "bin/hysr_start_robots",
                 "bin/hysr_visualization",
-                "bin/hysr_episode_frequencies",
-                "bin/hysr_step_frequencies"]
+                "bin/hysr_step_frequencies",
+                "bin/hysr_episode_frequencies"]
 )
 
 
