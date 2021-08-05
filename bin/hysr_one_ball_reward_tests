@@ -39,6 +39,7 @@ def execute(reward_config_path, hysr_config_path):
         hysr.force_episode_over()
         _, reward, __ = hysr.step(pressures)
         return reward
+
     print("ball staying far from racket")
     reward = _fixed_position([1.2, 2.7, 0.17])
     print("\t\treward: ", reward)
@@ -99,7 +100,8 @@ def execute(reward_config_path, hysr_config_path):
                 hysr.load_ball()
                 # after contact, mujoco takes over the ball trajectory (i.e. gravity),
                 # resetting the contact allows to keep control of the ball
-                hysr.reset_contact()
+                hysr.deactivate_contact()
+                #hysr.reset_contact()
                 reloaded = True
         print(
             "\t\treward: *",
@@ -109,6 +111,8 @@ def execute(reward_config_path, hysr_config_path):
             " | nb of time the frequency was not maintained:",
             nb_frequency_fail,
         )
+
+        
     print("ball flying far from racket")
     _moving([1.5, 2.7, 0.17], [1.5, -1.0, 0.17], 3000)
 
@@ -125,6 +129,7 @@ def execute(reward_config_path, hysr_config_path):
     print("ball flying to racket, and bouncing")
     _moving([0.75, 2.7, 0.25], [0.75, -1.0, 0.25], 3000)
 
+    
     print("repeat")
     _moving([0.75, 2.7, 0.25], [0.75, -1.0, 0.25], 3000)
 

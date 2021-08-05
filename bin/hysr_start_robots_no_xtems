@@ -1,0 +1,7 @@
+#! /bin/bash
+
+# starting mujoco instances for the pseudo real robot and for the simulated robot
+pam_mujoco_no_xterms pseudo-real simulation &
+
+
+

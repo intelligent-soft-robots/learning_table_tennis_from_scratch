@@ -25,7 +25,10 @@ setup( name='learning_table_tennis_from_scratch',
                 'bin/hysr_one_ball_reset',
                 'bin/hysr_one_ball_reward_tests',
                 "bin/hysr_start_robots",
-                "bin/hysr_visualization"]
+                "bin/hysr_start_robots_no_xterms",
+                "bin/hysr_visualization",
+                "bin/hysr_visualization_no_xterms"
+       ]
 )
 
 

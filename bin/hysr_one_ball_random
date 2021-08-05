@@ -33,7 +33,7 @@ def execute(reward_config_path, hysr_config_path):
 
         while running:
 
-            for dof in range(4):
+            for dof in [3]:
                 for ago in range(2):
                     pressure = pressures[dof][ago]
                     diff = random.randrange(-pressure_max_diff, pressure_max_diff)
