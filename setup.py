@@ -13,7 +13,7 @@ setup( name='learning_table_tennis_from_scratch',
        author_email='vberenz@tuebingen.mpg.de',
        license='MIT',
        packages=['learning_table_tennis_from_scratch'],
-       install_requires=['tensorflow==1.15','gym'],
+       #install_requires=['tensorflow==1.15','gym'],
        zip_safe=True,
        data_files=[('learning_table_tennis_from_scratch_config/',
                     ["config/hysr_one_ball_default.json",
@@ -28,7 +28,8 @@ setup( name='learning_table_tennis_from_scratch',
                 "bin/hysr_start_robots_no_xterms",
                 "bin/hysr_visualization",
                 "bin/hysr_visualization_no_xterms"
-       ]
+                "bin/hysr_step_frequencies",
+                "bin/hysr_episode_frequencies"]
 )
 
 
