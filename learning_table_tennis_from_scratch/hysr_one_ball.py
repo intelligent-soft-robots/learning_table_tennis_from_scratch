@@ -19,7 +19,8 @@ class HysrOneBallConfig:
     __slots__ = ("o80_pam_time_step","mujoco_time_step","algo_time_step",
                  "target_position","reference_posture","world_boundaries",
                  "pressure_change_range","trajectory","accelerated_time",
-                 "graphics_pseudo_real","graphics_simulation","instant_reset",
+                 "graphics_pseudo_real","graphics_simulation","graphics_extra_balls",
+                 "instant_reset","extra_balls_sets","extra_balls_per_set",
                  "frequency_monitoring_step","frequency_monitoring_episode")
 
     def __init__(self):
@@ -187,7 +188,7 @@ def _get_extra_balls(setid,nb_balls,target_position,graphics):
     _ExtraBall.handles[setid]=handle
     _ExtraBall.frontends[setid]=frontend
     
-    return balls,mirroring
+    return balls,mirroring,mujoco_id
     
     
         
@@ -221,16 +222,27 @@ class _Observation:
 class HysrOneBall:
     def __init__(self, hysr_config, reward_function):
 
+        # we will track the episode number
+        self._episode_number=-1 
+
+        # this instance of HysrOneBall interacts with several
+        # instances of mujoco (pseudo real robot, simulated robot,
+        # possibly instances of mujoco for extra balls).
+        # Listing all the corresponding mujoco_ids
+        self._mujoco_ids = []
+        
         # to control the real (or pseudo-real) robot (pressure control)
         self._real_robot_handle = configure_mujoco.configure_pseudo_real(
             graphics=hysr_config.graphics_pseudo_real,
             accelerated_time=hysr_config.accelerated_time,
         )
-
+        self._mujoco_ids.append(self._real_robot_handle.get_mujoco_id())
+        
         # to control the simulated robot (joint control)
         self._simulated_robot_handle = configure_mujoco.configure_simulation(
             graphics=hysr_config.graphics_simulation
         )
+        self._mujoco_ids.append(self._simulated_robot_handle.get_mujoco_id())
 
         # where we want to shoot the ball
         self._target_position = hysr_config.target_position
@@ -351,13 +363,14 @@ class HysrOneBall:
                 # mirroring : for sending mirroring command to the robot
                 #             of the set (joint controlled)
                 #             (instance of o80_pam.o80_robot_mirroring.o80RobotMirroring)
-                balls,mirroring = _get_extra_balls(setid,
+                balls,mirroring,mujoco_id = _get_extra_balls(setid,
                                                    hysr_config.extra_balls_per_set,
                                                    hysr_config.target_position,
                                                    hysr_config.graphics_extra_balls)
 
                 self._extra_balls.extend(balls)
                 self._mirrorings.append(mirroring)
+                self._mujoco_ids.append(mujoco_id)
         else:
             self._extra_balls = []
 
@@ -373,7 +386,14 @@ class HysrOneBall:
         # and set values to all simulated robot via self._mirrorings)
         # source of mirroring in pam_mujoco.mirroring.py
         pam_mujoco.mirroring.align_robots(self._pressure_commands, self._mirrorings)
+
         
+    def _share_episode_number(self,episode_number):
+        # write the episode number in a memory shared
+        # with the instances of mujoco
+        for mujoco_id in self._mujoco_ids:
+            shared_memory.set_long_int(mujoco_id,"episode",episode_number)
+    
 
     def force_episode_over(self):
         # will trigger the method _episode_over
@@ -513,6 +533,10 @@ class HysrOneBall:
 
     def reset(self):
 
+        # what happens during reset does not correspond
+        # to any episode
+        self._share_episode_number(-1)
+        
         # resetting the measure of step frequency monitoring
         if self._frequency_monitoring_step:
             self._frequency_monitoring_step.reset()
@@ -580,6 +604,10 @@ class HysrOneBall:
         for ball in self._extra_balls:
             ball.ball_status.reset()
 
+        # a new episode starts
+        self._episode_number += 1
+        self._share_episode_number(self._episode_number)
+            
         # returning an observation
         return self._create_observation()
 

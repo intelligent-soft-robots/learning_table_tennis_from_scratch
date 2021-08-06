@@ -1,13 +1,14 @@
 #!/usr/bin/env python3
 
-import sys, random
+import sys, random, logging
 import o80, context
 from lightargs import BrightArgs, FileExists
 from learning_table_tennis_from_scratch.hysr_one_ball import (
     HysrOneBall,
-    HysrOneBallConfig,
+    HysrOneBallConfig
 )
 from learning_table_tennis_from_scratch.rewards import JsonReward
+from learning_table_tennis_from_scratch.jsonconfig import get_json_config
 
 def execute(reward_config_path, hysr_config_path):
 
@@ -48,37 +49,17 @@ def execute(reward_config_path, hysr_config_path):
     hysr.close()
 
 def _configure():
-    config = BrightArgs(
-        str(
-            "hysr dummy demo using swing motion.\n"
-            + "to be started after hysr_start_robots or hysr_start_robots_accelerated.\n"
-        )
-    )
-    config.add_option(
-        "reward_config_file",
-        JsonReward.default_path(),
-        "reward configuration file",
-        str,
-        integrity_checks=[FileExists()],
-    )
-    config.add_option(
-        "hysr_config_file",
-        HysrOneBallConfig.default_path(),
-        "hysr configuration file",
-        str,
-        integrity_checks=[FileExists()],
-    )
-    change_all = False
-    finished = config.dialog(change_all, sys.argv[1:])
-    if not finished:
-        return None
-    return config
-
+    files = get_json_config(expected_keys=["reward_config",
+                                           "hysr_config"])
+    
+    return files["reward_config"],files["hysr_config"]
+    
 def _run():
-    config = _configure()
-    if config is None:
-        return
-    execute(config.reward_config_file, config.hysr_config_file)
+    logging.basicConfig(format='hysr_one_ball_swing | %(message)s',level=logging.INFO)
+    reward_config,hysr_config = _configure()
+    print("\nusing configuration files:\n- {}\n- {}\n".format(reward_config,
+                                                              hysr_config))
+    execute(reward_config,hysr_config)
 
 if __name__ == "__main__":
     _run()
