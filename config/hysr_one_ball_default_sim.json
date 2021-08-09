@@ -11,7 +11,13 @@
     "pressure_change_range":18000,
     "trajectory":-1,
     "accelerated_time":true,
+    "instant_reset":true,
+    "extra_balls_sets":1,
+    "extra_balls_per_set":20,
     "graphics_pseudo_real":false,
     "graphics_simulation":false,
-    "instant_reset":true
+    "graphics_extra_balls":true,
+    "frequency_monitoring_episode":true,
+    "frequency_monitoring_step":true
+
 }
