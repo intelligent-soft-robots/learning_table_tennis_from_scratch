@@ -57,14 +57,9 @@ class TriFingerPush(gym.Env):
 
         #: the number of times the same action is to be applied to
         #: the robot in one step.
-        self.steps_per_control = int(
-            round(control_rate_s / self.finger.time_step_s)
-        )
+        self.steps_per_control = int(round(control_rate_s / self.finger.time_step_s))
         assert (
-            abs(
-                control_rate_s
-                - self.steps_per_control * self.finger.time_step_s
-            )
+            abs(control_rate_s - self.steps_per_control * self.finger.time_step_s)
             <= 0.000001
         )
 
@@ -98,9 +93,7 @@ class TriFingerPush(gym.Env):
             separate_goals=False,
         )
 
-        self.unscaled_observation_space = (
-            self.spaces.get_unscaled_observation_space()
-        )
+        self.unscaled_observation_space = self.spaces.get_unscaled_observation_space()
         self.unscaled_action_space = self.spaces.get_unscaled_action_space()
 
         self.observation_space = self.spaces.get_scaled_observation_space()
@@ -154,18 +147,14 @@ class TriFingerPush(gym.Env):
         """
         joint_positions = observation.position
         joint_velocities = observation.velocity
-        tip_positions = self.finger.kinematics.forward_kinematics(
-            joint_positions
-        )
+        tip_positions = self.finger.kinematics.forward_kinematics(joint_positions)
         end_effector_position = np.concatenate(tip_positions)
         flat_goals = np.concatenate([self.goal] * self.num_fingers)
 
         if self.num_fingers == 1:
             flat_goals = self.goal
 
-        end_effector_to_goal = list(
-            np.subtract(flat_goals, end_effector_position)
-        )
+        end_effector_to_goal = list(np.subtract(flat_goals, end_effector_position))
 
         # populate this observation dict from which you can select which
         # observation types to finally choose depending on the keys
@@ -189,9 +178,7 @@ class TriFingerPush(gym.Env):
             )
 
         observation = [
-            v
-            for key in self.spaces.observations_keys
-            for v in observation_dict[key]
+            v for key in self.spaces.observations_keys for v in observation_dict[key]
         ]
 
         return observation
@@ -228,9 +215,7 @@ class TriFingerPush(gym.Env):
         reward, done = self._compute_reward(key_observation, self.goal)
         info = {"is_success": np.float32(done)}
 
-        scaled_observation = utils.scale(
-            state, self.unscaled_observation_space
-        )
+        scaled_observation = utils.scale(state, self.unscaled_observation_space)
         print("reward", reward)
 
         return scaled_observation, reward, done, info
@@ -254,9 +239,7 @@ class TriFingerPush(gym.Env):
 
         #: the position from which the object is initialized at the
         #: beginning of each episode
-        self.block_position = sample.random_position_in_arena(
-            height_limits=0.0425
-        )
+        self.block_position = sample.random_position_in_arena(height_limits=0.0425)
 
         self.goal_marker.set_state([self.goal])
         self.block.set_state(self.block_position, [0, 0, 0, 1])

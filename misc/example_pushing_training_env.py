@@ -119,9 +119,7 @@ class ExamplePushingTrainingEnv(gym.Env):
             raise RuntimeError("Call `reset()` before starting to step.")
 
         if not self.action_space.contains(action):
-            raise ValueError(
-                "Given action is not contained in the action space."
-            )
+            raise ValueError("Given action is not contained in the action space.")
 
         num_steps = self.frameskip
 
@@ -163,12 +161,8 @@ class ExamplePushingTrainingEnv(gym.Env):
             # we can initialize in any way desired. here, we initialize the cube always
             # in the center of the arena, instead of randomly, as this appears to help
             # training
-            initial_robot_position = (
-                TriFingerPlatform.spaces.robot_position.default
-            )
-            default_object_position = (
-                TriFingerPlatform.spaces.object_position.default
-            )
+            initial_robot_position = TriFingerPlatform.spaces.robot_position.default
+            default_object_position = TriFingerPlatform.spaces.object_position.default
             default_object_orientation = (
                 TriFingerPlatform.spaces.object_orientation.default
             )
@@ -181,9 +175,7 @@ class ExamplePushingTrainingEnv(gym.Env):
             # if an initializer is given, i.e. during evaluation, we need to initialize
             # according to it, to make sure we remain coherent with the standard CubeEnv.
             # otherwise the trajectories produced during evaluation will be invalid.
-            initial_robot_position = (
-                TriFingerPlatform.spaces.robot_position.default
-            )
+            initial_robot_position = TriFingerPlatform.spaces.robot_position.default
             initial_object_pose = self.initializer.get_initial_state()
             goal_object_pose = self.initializer.get_goal()
 
@@ -247,14 +239,11 @@ class ExamplePushingTrainingEnv(gym.Env):
             - previous_observation["object_position"]
         )
 
-        reward_term_1 = (
-            previous_distance_from_block - current_distance_from_block
-        )
+        reward_term_1 = previous_distance_from_block - current_distance_from_block
 
         # calculate second reward term
         current_dist_to_goal = np.linalg.norm(
-            observation["goal_object_position"]
-            - observation["object_position"]
+            observation["goal_object_position"] - observation["object_position"]
         )
         previous_dist_to_goal = np.linalg.norm(
             previous_observation["goal_object_position"]

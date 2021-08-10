@@ -11,90 +11,65 @@ from learning_table_tennis_from_scratch.ppo_config import PPOConfig
 from learning_table_tennis_from_scratch.ppo_config import OpenAIPPOConfig
 
 
-def execute(pam_config,
+def _read_ppo_common_config(jsonpath):
+
+    if not os.path.isfile(jsonpath):
+            raise FileNotFoundError("failed to find reward configuration file: {}".format(jsonpath))
+    try :
+        with open(jsonpath) as f:
+            conf=json.load(f)
+    except Exception as e:
+        raise ValueError("failed to parse reward json configuration file {}: {}".format(jsonpath,e))
+    
+    expected_keys = ("use_openai_baselines",
+                     "log_episodes",
+                     "log_tensorboard")
+
+    for key in expected_keys:
+        if not key in conf.keys():
+            raise KeyError("failed to find key {} in {}".format(key,jsonpath))
+
+    return conf
+    
+
+def _execute(pam_config,
             reward_config,
             hysr_config,
             ppo_config,
-            use_openai_baselines,
-            log_episodes,
-            log_tensorboard):
-    if use_openai_baselines:
-        run_openai_baselines(pam_config, reward_config, hysr_config, ppo_config, log_episodes, log_tensorboard)
+            ppo_common_config):
+
+    common_conf = _read_ppo_common_config(ppo_common_config)
+    
+    if common_conf["use_openai_baselines"]:
+        run_openai_baselines(pam_config, reward_config, hysr_config, ppo_config,
+                             common_conf["log_episodes"], common_conf["log_tensorboard"])
     else:
-        run_stable_baselines(pam_config, reward_config, hysr_config, ppo_config, log_episodes, log_tensorboard)
+        run_stable_baselines(pam_config, reward_config, hysr_config, ppo_config,
+                             common_conf["log_episodes"], common_conf["log_tensorboard"])
+
+        
+
 
 def _configure():
-    config = BrightArgs(
-        str(
-            "learning table tennis from scratch.\n"
-            + "to be started after start_robots or start_robots_accelerated.\n"
-            + "(in same folder)"
-        )
-    )
-    config.add_option(
-        "pam_config_file",
-        pam_interface.DefaultConfiguration.get_path(),
-        "pam configuration file",
-        str,
-        integrity_checks=[FileExists()],
-    )
-    config.add_option(
-        "reward_config_file",
-        JsonReward.default_path(),
-        "reward configuration file",
-        str,
-        integrity_checks=[FileExists()],
-    )
-    config.add_option(
-        "hysr_config_file",
-        HysrOneBallConfig.default_path(),
-        "hysr configuration file",
-        str,
-        integrity_checks=[FileExists()],
-    )
-    config.add_option(
-        "ppo_config_file",
-        PPOConfig.default_path(),
-        "ppo configuration file",
-        str,
-        integrity_checks=[FileExists()],
-    )
-    config.add_option(
-        "use_openai_baselines",
-        True,
-        "use openai baselines (instead of stable baselines)",
-        bool,
-    )
-    config.add_option(
-        "log_episodes",
-        False,
-        "log episodes in env",
-        bool,
-    )
-    config.add_option(
-        "log_tensorboard",
-        False,
-        "log for tensorboard",
-        bool,
-    )
-    change_all = False
-    finished = config.dialog(change_all, sys.argv[1:])
-    if not finished:
-        return None
-    return config
+    files = get_json_config(expected_keys=["pam_config",
+                                           "reward_config",
+                                           "hysr_config",
+                                           "ppo_config",
+                                           "ppo_common_config"])
+    
+    return files
+
 
 def _run():
     config = _configure()
     if config is None:
         return
-    execute(
-        config.pam_config_file,
-        config.reward_config_file,
-        config.hysr_config_file,
-        config.ppo_config_file,
-        config.use_openai_baselines,
-        config.log_episodes,
-        config.log_tensorboard
+    _execute(
+        config.pam_config,
+        config.reward_config,
+        config.hysr_config,
+        config.ppo_config,
+        config.ppo_common_config
     )
 
 if __name__ == "__main__":

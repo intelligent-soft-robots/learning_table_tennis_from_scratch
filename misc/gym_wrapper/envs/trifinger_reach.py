@@ -88,14 +88,9 @@ class TriFingerReach(gym.Env):
 
         #: the number of times the same action is to be applied to
         #: the robot.
-        self.steps_per_control = int(
-            round(control_rate_s / self.finger.time_step_s)
-        )
+        self.steps_per_control = int(round(control_rate_s / self.finger.time_step_s))
         assert (
-            abs(
-                control_rate_s
-                - self.steps_per_control * self.finger.time_step_s
-            )
+            abs(control_rate_s - self.steps_per_control * self.finger.time_step_s)
             <= 0.000001
         )
 
@@ -126,9 +121,7 @@ class TriFingerReach(gym.Env):
             separate_goals=True,
         )
 
-        self.unscaled_observation_space = (
-            self.spaces.get_unscaled_observation_space()
-        )
+        self.unscaled_observation_space = self.spaces.get_unscaled_observation_space()
         self.unscaled_action_space = self.spaces.get_unscaled_action_space()
 
         self.observation_space = self.spaces.get_scaled_observation_space()
@@ -145,13 +138,11 @@ class TriFingerReach(gym.Env):
             self.smoothing_stop_episode = math.inf
         else:
             self.smoothing_stop_episode = int(
-                smoothing_params["num_episodes"]
-                * smoothing_params["stop_after"]
+                smoothing_params["num_episodes"] * smoothing_params["stop_after"]
             )
 
             self.smoothing_start_episode = int(
-                smoothing_params["num_episodes"]
-                * smoothing_params["start_after"]
+                smoothing_params["num_episodes"] * smoothing_params["start_after"]
             )
             num_smoothing_increase_steps = (
                 self.smoothing_stop_episode - self.smoothing_start_episode
@@ -168,9 +159,7 @@ class TriFingerReach(gym.Env):
         #: is to which the tip link(s) of the robot should reach
         self.enable_visualization = enable_visualization
         if self.enable_visualization:
-            self.goal_marker = visual_objects.Marker(
-                number_of_goals=self.num_fingers
-            )
+            self.goal_marker = visual_objects.Marker(number_of_goals=self.num_fingers)
 
         # set up synchronization if it's set to true
         self.synchronize = synchronize
@@ -197,9 +186,7 @@ class TriFingerReach(gym.Env):
         Returns:
             the reward, and the done signal
         """
-        joint_positions = observation[
-            self.spaces.key_to_index["joint_positions"]
-        ]
+        joint_positions = observation[self.spaces.key_to_index["joint_positions"]]
 
         end_effector_positions = self.finger.kinematics.forward_kinematics(
             np.array(joint_positions)
@@ -226,16 +213,12 @@ class TriFingerReach(gym.Env):
             observation (list): comprising of the observations corresponding
                 to the key values in the observation_keys
         """
-        tip_positions = self.finger.kinematics.forward_kinematics(
-            observation.position
-        )
+        tip_positions = self.finger.kinematics.forward_kinematics(observation.position)
         end_effector_position = np.concatenate(tip_positions)
         joint_positions = observation.position
         joint_velocities = observation.velocity
         flat_goals = np.concatenate(self.goal)
-        end_effector_to_goal = list(
-            np.subtract(flat_goals, end_effector_position)
-        )
+        end_effector_to_goal = list(np.subtract(flat_goals, end_effector_position))
 
         # populate this observation dict from which you can select which
         # observation types to finally choose depending on the keys
@@ -249,9 +232,7 @@ class TriFingerReach(gym.Env):
         observation_dict["action_joint_positions"] = action
 
         if log_observation:
-            self.logger.append(
-                joint_positions, end_effector_position, time.time()
-            )
+            self.logger.append(joint_positions, end_effector_position, time.time())
 
         # returns only the observations corresponding to the keys that were
         # used for constructing the observation space
@@ -301,16 +282,12 @@ class TriFingerReach(gym.Env):
             # get observation from first iteration (when action is applied the
             # first time)
             if state is None:
-                state = self._get_state(
-                    observation, self.smoothed_action, True
-                )
+                state = self._get_state(observation, self.smoothed_action, True)
             if self.synchronize:
                 self.observation = observation
         reward, done = self._compute_reward(state, self.goal)
         info = {"is_success": np.float32(done)}
-        scaled_observation = utils.scale(
-            state, self.unscaled_observation_space
-        )
+        scaled_observation = utils.scale(state, self.unscaled_observation_space)
         return scaled_observation, reward, done, info
 
     def reset(self):
@@ -351,9 +328,7 @@ class TriFingerReach(gym.Env):
                 self.finger, self.spaces.action_bounds
             )
         )
-        self.goal = self.finger.kinematics.forward_kinematics(
-            target_joint_config
-        )
+        self.goal = self.finger.kinematics.forward_kinematics(target_joint_config)
 
         if self.enable_visualization:
             self.goal_marker.set_state(self.goal)

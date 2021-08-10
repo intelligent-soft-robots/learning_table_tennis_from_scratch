@@ -213,9 +213,7 @@ class CubeEnv(gym.GoalEnv):
             raise RuntimeError("Call `reset()` before starting to step.")
 
         if not self.action_space.contains(action):
-            raise ValueError(
-                "Given action is not contained in the action space."
-            )
+            raise ValueError("Given action is not contained in the action space.")
 
         num_steps = self.frameskip
 
@@ -255,9 +253,7 @@ class CubeEnv(gym.GoalEnv):
         del self.platform
 
         # initialize simulation
-        initial_robot_position = (
-            TriFingerPlatform.spaces.robot_position.default
-        )
+        initial_robot_position = TriFingerPlatform.spaces.robot_position.default
         initial_object_pose = self.initializer.get_initial_state()
         goal_object_pose = self.initializer.get_goal()
 

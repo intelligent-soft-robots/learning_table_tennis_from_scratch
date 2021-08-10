@@ -1,0 +1,5 @@
+{
+    "use_openai_baselines":true,
+    "log_episodes":false,
+    "log_tensorboard":false
+}
