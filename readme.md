@@ -2,7 +2,7 @@
 
 # Installing PAM robot software
 
-Follow the instructions [here](http://people.tuebingen.mpg.de/mpi-is-software/pam/docs/pam_documentation/index.html).
+Follow the instructions [here](http://people.tuebingen.mpg.de/mpi-is-software/pam/docs/).
 
 # Installing learning_table_tennis_from_scratch
 
