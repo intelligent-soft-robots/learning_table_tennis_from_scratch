@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-import sys
+import sys,os,json
 import pam_interface
 from lightargs import BrightArgs, FileExists
 from learning_table_tennis_from_scratch.rewards import JsonReward
@@ -9,6 +9,7 @@ from learning_table_tennis_from_scratch.models import run_openai_baselines
 from learning_table_tennis_from_scratch.hysr_one_ball import HysrOneBallConfig
 from learning_table_tennis_from_scratch.ppo_config import PPOConfig
 from learning_table_tennis_from_scratch.ppo_config import OpenAIPPOConfig
+from learning_table_tennis_from_scratch.jsonconfig import get_json_config
 
 
 def _read_ppo_common_config(jsonpath):
@@ -65,11 +66,11 @@ def _run():
     if config is None:
         return
     _execute(
-        config.pam_config,
-        config.reward_config,
-        config.hysr_config,
-        config.ppo_config,
-        config.ppo_common_config
+        config["pam_config"],
+        config["reward_config"],
+        config["hysr_config"],
+        config["ppo_config"],
+        config["ppo_common_config"]
     )
 
 if __name__ == "__main__":

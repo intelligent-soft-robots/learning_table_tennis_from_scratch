@@ -41,7 +41,7 @@ def get_json_config(expected_keys: list = []):
     # ! no json file
     if not json_files:
         raise FileNotFoundError(
-            str("failed to find a json file" "in the current directory")
+            str("failed to find a json file in the current directory")
         )
 
     # too many json files !
