@@ -16,7 +16,7 @@ pip3 install .
 
 ## starting the robots
 
-In a first terminal, start either of these executable:
+In a first terminal, start either of these executables:
 
 ```bash
 # start the robots in new terminals
@@ -32,7 +32,7 @@ hysr_start_robots_no_xterms
 
 press enter to get the prompt back.
 
-The executable above initialize two instances of mujoco.
+The executable above initializes two instances of mujoco.
 
 - the pseudo real robot: a pressure controlled robot
 - the simulated robot: a joint control robot, plus a table tennis, a ball; and a visual marker
@@ -41,7 +41,7 @@ During runtime of the learning algorithm, pressures commands will be sent to the
 and the simulated robot will mirror the motion of the pseudo-real robot (HYSR - HYbrid Sim to Real,
 see this [publication](https://arxiv.org/pdf/2006.05935.pdf)).
 
-After start, the mujoco simulation hangs and wait for a configuration.
+After starting, the mujoco simulations hang and wait for configuration.
 
 ## start the control executables
 
@@ -69,7 +69,7 @@ The executables requires a configuration json file to be in the current folder. 
 can be named anything, and just requires a *.json extension.
 The content of the configuration file is a dictionary pointing to other json configuration files.
 
-For executables for testing and debug, the json must have this content:
+For executables for testing and debug, the json file must have this content:
 
 ```json
 {
@@ -184,7 +184,7 @@ the simulated robots and to the executable.
 
 See the file ```hysr_display_extra_balls``` in the bin folder for an example.
 
-```hysr_display_extra_balls``` can started at any time after the executable, and from the
+```hysr_display_extra_balls``` can be started at any time after the executable, and from the
 same folder (i.e. using the same json configuration file).
 
 
