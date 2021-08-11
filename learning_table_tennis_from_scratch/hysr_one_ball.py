@@ -1,5 +1,5 @@
-import os,sys,time,math,random,json,site,threading
-import o80,o80_pam,pam_mujoco,context,pam_interface,frequency_monitoring,shared_memory
+import os, sys, time, math, random, json, site, threading
+import o80, o80_pam, pam_mujoco, context, pam_interface, frequency_monitoring, shared_memory
 import numpy as np
 from pam_mujoco import mirroring
 from . import configure_mujoco
@@ -16,11 +16,25 @@ SEGMENT_ID_STEP_FREQUENCY = "hysr_step_frequency"
 
 class HysrOneBallConfig:
 
-    __slots__ = ("o80_pam_time_step","mujoco_time_step","algo_time_step",
-                 "target_position","reference_posture","world_boundaries",
-                 "pressure_change_range","trajectory","accelerated_time",
-                 "graphics_pseudo_real","graphics_simulation","instant_reset",
-                 "frequency_monitoring_step","frequency_monitoring_episode")
+    __slots__ = (
+        "o80_pam_time_step",
+        "mujoco_time_step",
+        "algo_time_step",
+        "target_position",
+        "reference_posture",
+        "world_boundaries",
+        "pressure_change_range",
+        "trajectory",
+        "accelerated_time",
+        "graphics_pseudo_real",
+        "graphics_simulation",
+        "graphics_extra_balls",
+        "instant_reset",
+        "extra_balls_sets",
+        "extra_balls_per_set",
+        "frequency_monitoring_step",
+        "frequency_monitoring_episode",
+    )
 
     def __init__(self):
         for s in self.__slots__:
@@ -131,11 +145,11 @@ class _ExtraBall:
     # setid : handle
     handles = {}
     # setid: frontend to extra balls
-    frontends = {} 
-    
+    frontends = {}
+
     def __init__(self, handle, frontend, ball_status, segment_id):
-        self.handle = handle # shared between all balls of same setid
-        self.frontend = frontend # shared between all balls of same setid
+        self.handle = handle  # shared between all balls of same setid
+        self.frontend = frontend  # shared between all balls of same setid
         self.segment_id = segment_id
         self.ball_status = ball_status
 
@@ -153,10 +167,10 @@ class _ExtraBall:
         for handle in cls.handles.values():
             handle.reset()
 
-        
-def _get_extra_balls(setid,nb_balls,target_position,graphics):
 
-    values = configure_mujoco.configure_extra_set(setid,nb_balls,graphics)
+def _get_extra_balls(setid, nb_balls, target_position, graphics):
+
+    values = configure_mujoco.configure_extra_set(setid, nb_balls, graphics)
 
     handle = values[0]
     mujoco_id = values[1]
@@ -171,26 +185,20 @@ def _get_extra_balls(setid,nb_balls,target_position,graphics):
     # (one frontend to control all the balls,
     #  one ball 'corresponds' to one dof)
     frontend = handle.frontends[extra_balls_segment_id]
-    
-    ball_status = [
-        context.BallStatus(target_position)
-        for _ in range(nb_balls)
-    ]
+
+    ball_status = [context.BallStatus(target_position) for _ in range(nb_balls)]
 
     balls = [
-        _ExtraBall(handle,frontend,ball_status, segment_id)
-        for ball_status, segment_id in zip(
-                ball_status, ball_segment_ids
-        )
+        _ExtraBall(handle, frontend, ball_status, segment_id)
+        for ball_status, segment_id in zip(ball_status, ball_segment_ids)
     ]
 
-    _ExtraBall.handles[setid]=handle
-    _ExtraBall.frontends[setid]=frontend
-    
-    return balls,mirroring
-    
-    
-        
+    _ExtraBall.handles[setid] = handle
+    _ExtraBall.frontends[setid] = frontend
+
+    return balls, mirroring, mujoco_id
+
+
 def _convert_pressures_in(pressures):
     # convert pressure from [ago1, antago1, ago2, antago2, ...]
     # to [(ago1, antago1), (ago2, antago2), ...]
@@ -221,16 +229,27 @@ class _Observation:
 class HysrOneBall:
     def __init__(self, hysr_config, reward_function):
 
+        # we will track the episode number
+        self._episode_number = -1
+
+        # this instance of HysrOneBall interacts with several
+        # instances of mujoco (pseudo real robot, simulated robot,
+        # possibly instances of mujoco for extra balls).
+        # Listing all the corresponding mujoco_ids
+        self._mujoco_ids = []
+
         # to control the real (or pseudo-real) robot (pressure control)
         self._real_robot_handle = configure_mujoco.configure_pseudo_real(
             graphics=hysr_config.graphics_pseudo_real,
             accelerated_time=hysr_config.accelerated_time,
         )
+        self._mujoco_ids.append(self._real_robot_handle.get_mujoco_id())
 
         # to control the simulated robot (joint control)
         self._simulated_robot_handle = configure_mujoco.configure_simulation(
             graphics=hysr_config.graphics_simulation
         )
+        self._mujoco_ids.append(self._simulated_robot_handle.get_mujoco_id())
 
         # where we want to shoot the ball
         self._target_position = hysr_config.target_position
@@ -238,24 +257,28 @@ class HysrOneBall:
 
         # read all recorded trajectory files
         self._trajectory_reader = context.BallTrajectories()
-        
+
         # if requested, logging info about the frequencies of the steps and/or the
         # episodes
         if hysr_config.frequency_monitoring_step:
             segment_id = hysr_config.frequency_monitoring_step
-            size=1000
-            self._frequency_monitoring_step = frequency_monitoring.FrequencyMonitoring(SEGMENT_ID_STEP_FREQUENCY,
-                                                                                       size)
+            size = 1000
+            self._frequency_monitoring_step = frequency_monitoring.FrequencyMonitoring(
+                SEGMENT_ID_STEP_FREQUENCY, size
+            )
         else:
             self._frequency_monitoring_step = None
         if hysr_config.frequency_monitoring_episode:
             segment_id = hysr_config.frequency_monitoring_episode
-            size=1000
-            self._frequency_monitoring_episode = frequency_monitoring.FrequencyMonitoring(SEGMENT_ID_EPISODE_FREQUENCY,
-                                                                                       size)
+            size = 1000
+            self._frequency_monitoring_episode = (
+                frequency_monitoring.FrequencyMonitoring(
+                    SEGMENT_ID_EPISODE_FREQUENCY, size
+                )
+            )
         else:
             self._frequency_monitoring_episode = None
-            
+
         # if o80_pam (i.e. the pseudo real robot)
         # has been started in accelerated time,
         # the corresponding o80 backend will burst through
@@ -289,7 +312,7 @@ class HysrOneBall:
 
         # reward configuration
         self._reward_function = reward_function
-        
+
         # to get information regarding the ball
         # (instance of o80_pam.o80_ball.o80Ball)
         self._ball_communication = self._simulated_robot_handle.interfaces[
@@ -338,26 +361,31 @@ class HysrOneBall:
         # if true, the system will reset by resetting the simulations
         # Only "false" is supported by the real robot
         self._instant_reset = hysr_config.instant_reset
-        
+
         # adding extra balls (if any)
-        if ( hysr_config.extra_balls_sets is not None
-             and hysr_config.extra_balls_sets > 0) :
+        if (
+            hysr_config.extra_balls_sets is not None
+            and hysr_config.extra_balls_sets > 0
+        ):
 
             self._extra_balls = []
-            
+
             for setid in range(hysr_config.extra_balls_sets):
 
                 # balls: list of instances of _ExtraBalls (defined in this file)
                 # mirroring : for sending mirroring command to the robot
                 #             of the set (joint controlled)
                 #             (instance of o80_pam.o80_robot_mirroring.o80RobotMirroring)
-                balls,mirroring = _get_extra_balls(setid,
-                                                   hysr_config.extra_balls_per_set,
-                                                   hysr_config.target_position,
-                                                   hysr_config.graphics_extra_balls)
+                balls, mirroring, mujoco_id = _get_extra_balls(
+                    setid,
+                    hysr_config.extra_balls_per_set,
+                    hysr_config.target_position,
+                    hysr_config.graphics_extra_balls,
+                )
 
                 self._extra_balls.extend(balls)
                 self._mirrorings.append(mirroring)
+                self._mujoco_ids.append(mujoco_id)
         else:
             self._extra_balls = []
 
@@ -373,7 +401,12 @@ class HysrOneBall:
         # and set values to all simulated robot via self._mirrorings)
         # source of mirroring in pam_mujoco.mirroring.py
         pam_mujoco.mirroring.align_robots(self._pressure_commands, self._mirrorings)
-        
+
+    def _share_episode_number(self, episode_number):
+        # write the episode number in a memory shared
+        # with the instances of mujoco
+        for mujoco_id in self._mujoco_ids:
+            shared_memory.set_long_int(mujoco_id, "episode", episode_number)
 
     def force_episode_over(self):
         # will trigger the method _episode_over
@@ -388,16 +421,20 @@ class HysrOneBall:
             ball.ball_behavior = _BallBehavior(random=True)
 
     def _create_observation(self):
-        ( pressures_ago,
-          pressures_antago,
-          joint_positions,
-          joint_velocities) = self._pressure_commands.read()
+        (
+            pressures_ago,
+            pressures_antago,
+            joint_positions,
+            joint_velocities,
+        ) = self._pressure_commands.read()
         ball_position, ball_velocity = self._ball_communication.get()
-        observation = _Observation( joint_positions,
-                                    joint_velocities,
-                                    _convert_pressures_out(pressures_ago, pressures_antago),
-                                    ball_position,
-                                    ball_velocity )
+        observation = _Observation(
+            joint_positions,
+            joint_velocities,
+            _convert_pressures_out(pressures_ago, pressures_antago),
+            ball_position,
+            ball_velocity,
+        )
         return observation
 
     def get_robot_iteration(self):
@@ -440,27 +477,32 @@ class HysrOneBall:
         sampling_rate_ms = self._trajectory_reader.get_sampling_rate_ms()
         duration = o80.Duration_us.milliseconds(int(sampling_rate_ms))
         trajectories = self._trajectory_reader.get_different_random_trajectories(
-            len(self._extra_balls) )
-        for index_ball,(ball,trajectory) in enumerate(zip(self._extra_balls,trajectories)):
+            len(self._extra_balls)
+        )
+        for index_ball, (ball, trajectory) in enumerate(
+            zip(self._extra_balls, trajectories)
+        ):
             # going to first trajectory point
             item3d.set_position(trajectory[0].position)
-            item3d.set_velocity([0]*3)
-            ball.frontend.add_command(index_ball,item3d,o80.Duration_us.seconds(1),o80.Mode.QUEUE)
+            item3d.set_velocity([0] * 3)
+            ball.frontend.add_command(
+                index_ball, item3d, o80.Duration_us.seconds(1), o80.Mode.QUEUE
+            )
             # loading full trajectory
             for item in trajectory[1:]:
                 item3d.set_position(item.position)
                 item3d.set_velocity(item.velocity)
-                ball.frontend.add_command(index_ball,item3d,duration,o80.Mode.QUEUE)
+                ball.frontend.add_command(index_ball, item3d, duration, o80.Mode.QUEUE)
         for frontend in _ExtraBall.frontends.values():
             frontend.pulse()
-        
+
     def load_ball(self):
         # loading ball: setting all trajectories points
         # to the ball controllers
         self._load_main_ball()
         if self._extra_balls:
             self._load_extra_balls()
-        
+
     def reset_contact(self):
         # after contact with the racket, o80 control of the ball
         # is disabled (and customized contact happen). This
@@ -481,7 +523,7 @@ class HysrOneBall:
         # "natural": can be applied on the real robot
         # (i.e. send pressures commands to get the robot
         # in a vertical position)
-        
+
         # aligning the mirrored robot with
         # (pseudo) real robot
         mirroring.align_robots(self._pressure_commands, self._mirrorings)
@@ -497,7 +539,7 @@ class HysrOneBall:
                 max_pressures,
                 duration,
                 self._accelerated_time,
-                parallel_burst=self._parallel_burst
+                parallel_burst=self._parallel_burst,
             )
 
     def _do_instant_reset(self):
@@ -505,7 +547,7 @@ class HysrOneBall:
         # "instant": reset all mujoco instances
         # to their starting state. Not applicable
         # to real robot
-        
+
         self._real_robot_handle.reset()
         self._simulated_robot_handle.reset()
         for handle in _ExtraBall.handles.values():
@@ -513,15 +555,19 @@ class HysrOneBall:
 
     def reset(self):
 
+        # what happens during reset does not correspond
+        # to any episode
+        self._share_episode_number(-1)
+
         # resetting the measure of step frequency monitoring
         if self._frequency_monitoring_step:
             self._frequency_monitoring_step.reset()
-        
+
         # exporting episode frequency
         if self._frequency_monitoring_episode:
             self._frequency_monitoring_episode.ping()
             self._frequency_monitoring_episode.share()
-        
+
         # in case the episode was forced to end by the
         # user (see force_episode_over method)
         self._force_episode_over = False
@@ -550,7 +596,7 @@ class HysrOneBall:
                     self._reference_posture,
                     duration,  # in 1 seconds
                     self._accelerated_time,
-                    parallel_burst=self._parallel_burst
+                    parallel_burst=self._parallel_burst,
                 )
 
         # setting the ball behavior
@@ -579,6 +625,10 @@ class HysrOneBall:
         self._ball_status.reset()
         for ball in self._extra_balls:
             ball.ball_status.reset()
+
+        # a new episode starts
+        self._episode_number += 1
+        self._share_episode_number(self._episode_number)
 
         # returning an observation
         return self._create_observation()
@@ -663,7 +713,8 @@ class HysrOneBall:
             joint_velocities,
             _convert_pressures_out(pressures_ago, pressures_antago),
             self._ball_status.ball_position,
-            self._ball_status.ball_velocity)
+            self._ball_status.ball_velocity,
+        )
 
         # checking if episode is over
         episode_over = self._episode_over()
@@ -685,7 +736,7 @@ class HysrOneBall:
         if self._frequency_monitoring_step:
             self._frequency_monitoring_step.ping()
             self._frequency_monitoring_step.share()
-           
+
         # returning
         return observation, reward, episode_over
 
@@ -694,4 +745,3 @@ class HysrOneBall:
         shared_memory.clear_shared_memory(SEGMENT_ID_EPISODE_FREQUENCY)
         shared_memory.clear_shared_memory(SEGMENT_ID_STEP_FREQUENCY)
         pass
-

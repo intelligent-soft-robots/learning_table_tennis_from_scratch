@@ -14,61 +14,181 @@ pip3 install .
 
 # Running
 
-In a first terminal:
+## starting the robots
+
+In a first terminal, start either of these executables:
 
 ```bash
+# start the robots in new terminals
 hysr_start_robots
 ```
 
-press enter to get the prompt back and optionally:
+or
 
 ```bash
-# display stats regarding frequencies at which
-# steps are running
-hysr_step_frequencies
+# start the robots in current terminal
+hysr_start_robots_no_xterms
 ```
 
-and / or:
+press enter to get the prompt back.
+
+The executable above initializes two instances of mujoco.
+
+- the pseudo real robot: a pressure controlled robot
+- the simulated robot: a joint control robot, plus a table tennis, a ball; and a visual marker
+
+During runtime of the learning algorithm, pressures commands will be sent to the pseudo real robot;
+and the simulated robot will mirror the motion of the pseudo-real robot (HYSR - HYbrid Sim to Real,
+see this [publication](https://arxiv.org/pdf/2006.05935.pdf)).
+
+After starting, the mujoco simulations hang and wait for configuration.
+
+## start the control executables
+
+The executables will configure the mujoco instances, and then send control commmands to the pseudo-real robot
+and / or to the simulated robot.
+
+### list of executables
+
+The source of the executables are in the bin folder of the repository.
+
+Executables for testing and debug:
+
+- hysr_one_ball_swing : the ball plays prerecorded-trajectories, and the robot performs swing motions
+- hysr_one_ball_random: the ball plays prerecorded-trajectories, and the robot performs random motions
+- hysr_one ball_reset: the mujoco simulations perform several resets
+- hysr_one_ball_reward_tests: the robot moves, the ball performs trajectories and the corresponding rewards are computed
+ 
+Executable for learning:
+
+- hysr_one_ball_ppo: learning table tennis using PPO and HYSR.
+
+### Configuring and starting the executable
+
+The executables requires a configuration json file to be in the current folder. The configuration file
+can be named anything, and just requires a *.json extension.
+The content of the configuration file is a dictionary pointing to other json configuration files.
+
+For executables for testing and debug, the json file must have this content:
+
+```json
+{
+    "reward_config":"/path/to/reward/json/config/file",
+    "hysr_config":"/path/to/hysr/json/config/file"
+}
+```
+
+The paths can be relative or absolute. You can find example of configuration files in the config folder
+of the repository.
+
+*Note*: if the ```hysr_config``` file requests the use of extra balls (```extra_balls_set``` and ```extra_balls_per_set```)
+key, please refer to the ```Extra balls``` section somewhere below.
+
+The learning executable configuration json file requires this content:
+
+```json
+{
+    "reward_config":"/path/to/reward/json/config/file",
+    "hysr_config":"/path/to/hysr/json/config/file",
+    "pam_config":"/path/to/pam/json/config/file",
+    "ppo_config":"/path/to/ppo/json/config/file",
+    "ppo_common_config":"/path/to/ppo-common/json/config/file"
+}
+```
+
+The bin folder has exemple of configuration files, except for the ```pam_config```
+configuration file, which has an example in ```/opt/mpi-is/pam_models/```
+(very possibly you will want to use ```/opt/mpi-is/pam_models/hill.json```).
+
+Once the configuration file has been set in the current directory, the executable can be started, e.g.:
+
+```
+hysr_one_ball_ppo
+```
+
+This will trigger the start of the mujoco simulations. Whether or not the simulations open a graphical display
+depends of the content of the "hysr_config" json file.
+
+*Note*: for as long as the configuration does not change, it is possible to run several executables in
+a row without restarting the robots. If the configuration is changed, then the robots need to be restarted (see below).
+
+## Exiting the robots
+
+In any terminal, type:
+
+```
+pam_mujoco_stop_all
+```
+
+## Extra executables
+
+The following executables can be started after the robot:
+
+- hysr_episode_frequency: displaying stats regarding the frequency at which episodes run
+- hysr_step_frequency: displaying stats regarding the frequency at which simulation steps run
+- hysr_visualization: if the robots are started with graphical displays, you may notice these displays
+are laggy. It is adviced to start the robots without graphical display, and run hysr_visualization instead
+
+## Extra balls
+
+It is possible to start a third instance of mujoco (i.e. on top of pseudo-real and simulated robot) which,
+similarly to the simulated robot, will manages a joint controlled robot that will mirror the pseudo-real robot.
+This third instance will also be used to managed extra balls.
+
+### configuration
+
+To add the support of extra balls, the ```hysr_config```  json files has to be updated:
+
+```json
+{
+	...,
+	"extra_balls_sets":1,
+    	"extra_balls_per_set":20,
+        "graphics_extra_balls":false,
+	...
+}
+```
+
+- for ```extra_balls_sets```, only the values 1 (extra balls) or 0 (no extra balls) are supported
+- for ```extra_balls_per_set```, only the values 3, 10 and 20 are supported.
+
+
+### starting robots with extra balls
+
+On top of ```hysr_start_robots```, a supplementary instance of pam_mujoco has to be started:
 
 ```bash
-# display stats regarding frequencies at which
-# episodes are running
-hysr_episode_frequencies
+pam_mujoco extra_balls_0
 ```
 
-In a *second* terminal, run one of these executables:
-
-- hysr_one_ball_ppo
-- hysr_one_ball_random
-- hysr_one_ball_swing
-- hysr_one_ball_reward_tests
-- hysr_one_ball_reset
-
-The terminal should prompt you to select some configuration file. Modify these configuration based on your needs (see below)
-
-Note:
-- For as long the configuration files are not changed, several executables can be run in sequence without the need to restart ```hysr_start_robot``` (i.e. the same mujoco instances can be reused)
-- For each time a new executable is started, ```hysr_episode_frequencies``` and ```hysr_step_frequencies``` need to be restarted. If the executable did not start correctly, it may be necessary to clean the shared memory (```rm /etc/shm/*```)
-- The preferred way to stop the mujoco simulation is to call: ```pam_mujoco_stop_all``` (in any terminal)
-
-# Configuration files
-
-When starting *hysr_one_ball_ppo*, a dialog allows to select the configuration files:
-
-- hysr_config_file: configuration of the mujoco simulated robot (e.g. accelerated time, graphics, etc)
-- pam_config_file: configuration of the simulated muscles
-- ppo_config_file: configuration of the ppo algorithm
-- reward_config_file: configuration of the reward function
-
-It is possible to start the executable without using the dialog, for example:
+or
 
 ```bash
-hysr_one_ball_ppo -hysr_config_file /path/to/config/file.json -reward_config_file /path/to/other/config/file.json 
+pam_mujoco_no_xterms extra_balls_0
 ```
 
+It is possible to start everything at the same time:
+
+```
+hysr_start_robots_no_xterms & pam_mujoco_no_xterms extra_balls_0
+```
+
+### starting executables
+
+The executables are started in a similar way.
+
+### accessing extra balls data
+
+Data related to the extra balls can be accessed via python code running in parallel to
+the simulated robots and to the executable.
+
+See the file ```hysr_display_extra_balls``` in the bin folder for an example.
+
+```hysr_display_extra_balls``` can be started at any time after the executable, and from the
+same folder (i.e. using the same json configuration file).
 
 
-# tensorboard
+# Tensorboard
 
 In a terminal:
 
@@ -76,20 +196,3 @@ In a terminal:
 tensorboard --logdir /tmp/ppo2
 ```
 
-# Unit tests
-
-in the repository root directory, run:
-
-```bash
-pip install .
-python -m unittest discover .
-```
-
-# Other executables
-
-Can be also run after *hysr_start_robots* (executabled created for debug purposes):
-
-- hysr_one_ball_rewards: plays several scenario with different ball trajectories and compute the corresponding reward
-- hysr_one_ball_swing: has the racket performing some swing motions
-- hysr_one_ball_reset: has the environment performing resets
-- hysr_one_ball_random: the robot makes random moves

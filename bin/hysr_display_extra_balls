@@ -1,0 +1,97 @@
+#!/usr/bin/env python3
+
+import math
+import pam_mujoco
+from learning_table_tennis_from_scratch import configure_mujoco
+from learning_table_tennis_from_scratch.hysr_one_ball import HysrOneBallConfig
+from learning_table_tennis_from_scratch.rewards import JsonReward
+from learning_table_tennis_from_scratch.jsonconfig import get_json_config
+
+def velocity_norm(velocity):
+    return math.sqrt(sum([v ** 2 for v in velocity]))
+
+
+def distance(p1, p2):
+    return math.sqrt(sum([(a - b) ** 2 for a, b in zip(p1, p2)]))
+
+
+def min_distance(traj1, traj2):
+    return min([distance(p1, p2) for p1, p2 in zip(traj1, traj2)])
+
+
+def compute_reward(reward_function, target, index, observations):
+    ball_positions = [o.get_observed_states().get(index).get_position() for o in observations]
+    ball_velocities = [
+        o.get_observed_states().get(index).get_velocity() for o in observations
+    ]
+    robot_positions = [o.get_extended_state().robot_position for o in observations]
+    contacts = [o.get_extended_state().contacts[index] for o in observations]
+
+    if any(contacts):
+        contact = True
+    else:
+        contact = False
+
+    if not contact:
+        min_distance_ball_racket = min_distance(ball_positions, robot_positions)
+        min_distance_ball_target = None
+        max_ball_velocity = None
+    else:
+        min_distance_ball_racket = None
+        min_distance_ball_target = min([distance([p for p in ball_positions], target)])
+        max_ball_velocity = max([velocity_norm(v) for v in ball_velocities])
+
+    return reward_function(
+        min_distance_ball_racket, min_distance_ball_target, max_ball_velocity
+    )
+
+
+def run(setid, nb_balls, target, reward_function):
+
+    segment_id = configure_mujoco.get_extra_balls_segment_id(0)
+    frontend = pam_mujoco.MujocoHandle.get_extra_balls_frontend(segment_id, nb_balls)
+
+    # getting the last 5000 iterations (or less if less data in the shared memory)
+    observations = frontend.get_latest_observations(5000)
+
+    # getting related episodes
+    episodes = [(o, o.get_extended_state().episode) for o in observations]
+
+    # removing observations that do not correspond to an episode
+    # (most likely collected during reset)
+    episodes = [e for e in episodes if e[1] > 0]
+
+    # listing all episodes
+    episode_numbers = sorted(list(set([e[1] for e in episodes])))
+
+    # for each episode, computing the reward of each ball
+    for episode in episode_numbers:
+        print("\nEpisode:", episode)
+        observations = [e[0] for e in episodes if e[1] == episode]
+        rewards = [
+            compute_reward(reward_function, target, index, observations)
+            for index in range(nb_balls)
+        ]
+        for index, reward in enumerate(rewards):
+            print("ball {}:\t{}".format(index, reward))
+
+
+def _configure():
+    files = get_json_config(expected_keys=["reward_config", "hysr_config"])
+    return files["reward_config"], files["hysr_config"]
+
+
+def _run():
+    reward_path, hysr_path = _configure()
+    print(
+        "\nusing configuration files:\n- {}\n- {}\n".format(reward_path, hysr_path)
+    )
+    reward_function = JsonReward.get(reward_path)
+    hysr_config = HysrOneBallConfig.from_json(hysr_path)
+    target = hysr_config.target_position
+    nb_balls = hysr_config.extra_balls_per_set
+    setid=0
+    run(setid, nb_balls, target, reward_function)
+
+if __name__ == "__main__":
+    _run()
