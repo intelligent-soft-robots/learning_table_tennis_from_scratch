@@ -1,0 +1,65 @@
+#!/usr/bin/env python3
+
+import math
+import signal_handler
+import o80
+import pam_mujoco
+from learning_table_tennis_from_scratch import configure_mujoco
+from learning_table_tennis_from_scratch.hysr_one_ball import HysrOneBallConfig
+from learning_table_tennis_from_scratch.rewards import JsonReward
+from learning_table_tennis_from_scratch.jsonconfig import get_json_config
+
+
+def _configure():
+    files = get_json_config(expected_keys=["hysr_config"])
+    return files["hysr_config"]
+
+def log_entry(nb_balls,observation,f):
+    episode = observation.get_extended_state().episode
+    observed_states = observation.get_observed_states()
+    positions = [observed_states.get(index).get_position() for index in range(nb_balls)]
+    velocities = [observed_states.get(index).get_velocity() for index in range(nb_balls)]
+    f.write(repr((episode,positions,velocities)))
+    
+
+def run(setid, nb_balls, filepath="/tmp/extraballs_log", frequency=50):
+
+    segment_id = configure_mujoco.get_extra_balls_segment_id(0)
+    frontend = pam_mujoco.MujocoHandle.get_extra_balls_frontend(segment_id, nb_balls)
+    frequency_manager = o80.FrequencyManager(frequency)
+    latest=None
+
+    with open(str(filepath),"w") as f:
+        print("starting logging in:",filepath)
+        signal_handler.init() # for detecting ctrl+c
+        while not signal_handler.has_received_sigint():
+            if latest is None:
+                # first call
+                observations = [frontend.latest()]
+            else:
+                # reading all new observations written by the backend
+                # since the last pass of this loop
+                observations = frontend.get_observations_since(latest+1)
+            if observations:
+                # writing in file
+                for observation in observations:
+                    log_entry(nb_balls,observation,f)
+                f.flush()
+                # keeping track of the latest observation written
+                latest = observations[-1].get_iteration()
+            # running at desired frequency
+            frequency_manager.wait()
+
+def _run():
+    hysr_path = _configure()
+    print(
+        "\nusing configuration file:\n- {}\n".format(hysr_path)
+    )
+    hysr_config = HysrOneBallConfig.from_json(hysr_path)
+    target = hysr_config.target_position
+    nb_balls = hysr_config.extra_balls_per_set
+    setid=0
+    run(setid, nb_balls)
+
+if __name__ == "__main__":
+    _run()
