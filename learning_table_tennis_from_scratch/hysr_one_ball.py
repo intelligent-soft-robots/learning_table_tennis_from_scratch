@@ -30,6 +30,7 @@ class HysrOneBallConfig:
         "graphics_simulation",
         "graphics_extra_balls",
         "instant_reset",
+        "nb_steps_per_episode",
         "extra_balls_sets",
         "extra_balls_per_set",
         "frequency_monitoring_step",
@@ -232,6 +233,13 @@ class HysrOneBall:
         # we will track the episode number
         self._episode_number = -1
 
+        # we will track the step number (reset at the start
+        # of each episode)
+        self._step_number = -1
+
+        # we end an episode after a fixed number of steps
+        self._nb_steps_per_episode = hysr_config.nb_steps_per_episode
+        
         # this instance of HysrOneBall interacts with several
         # instances of mujoco (pseudo real robot, simulated robot,
         # possibly instances of mujoco for extra balls).
@@ -556,7 +564,7 @@ class HysrOneBall:
     def reset(self):
 
         # what happens during reset does not correspond
-        # to any episode
+        # to any episode (-1 means: no active episode)
         self._share_episode_number(-1)
 
         # resetting the measure of step frequency monitoring
@@ -627,24 +635,34 @@ class HysrOneBall:
             ball.ball_status.reset()
 
         # a new episode starts
+        self._step_number = 0
         self._episode_number += 1
         self._share_episode_number(self._episode_number)
-
+        
         # returning an observation
         return self._create_observation()
 
     def _episode_over(self):
         over = False
-        # ball falled below the table
-        # note : all prerecorded trajectories are added a last ball position
-        # with z = -10.0, to insure this always occurs.
-        # see: function reset
-        if self._ball_status.ball_position[2] < -0.5:
-            over = True
-        # in case the user called the method
-        # force_episode_over
-        if self._force_episode_over:
-            over = True
+
+        if self._step_number>= self._nb_steps_per_episode:
+            return True
+        
+        # another way of checking end of episode
+        # is to put a threshold on the z value
+        # of the ball position
+        def _deprecated():
+            # ball falled below the table
+            # note : all prerecorded trajectories are added a last ball position
+            # with z = -10.0, to insure this always occurs.
+            # see: function reset
+            if self._ball_status.ball_position[2] < -0.5:
+                over = True
+            # in case the user called the method
+            # force_episode_over
+            if self._force_episode_over:
+                over = True
+
         return over
 
     def get_ball_position(self):
@@ -736,6 +754,9 @@ class HysrOneBall:
         if self._frequency_monitoring_step:
             self._frequency_monitoring_step.ping()
             self._frequency_monitoring_step.share()
+
+        # this step is done
+        self._step_number += 1
 
         # returning
         return observation, reward, episode_over
