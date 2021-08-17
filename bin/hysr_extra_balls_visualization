@@ -1,0 +1,187 @@
+#!/usr/bin/env python3
+
+import time, sys, loggin
+import shared_memory, signal_handler, o80, o80_pam, pam_mujoco
+from lightargs import BrightArgs,Set,Range,Positive,FileExists
+from learning_table_tennis_from_scratch import configure_mujoco
+
+
+def _get_handle(mujoco_id,
+                segment_id_robot,
+                segment_id_ball,
+                segment_id_goal,
+                segment_id_hit_point,
+                segment_id_extra_balls,
+                extra_balls_segment_ids):
+    
+    robot = pam_mujoco.MujocoRobot(segment_id_robot,
+                                   control=pam_mujoco.MujocoRobot.JOINT_CONTROL)
+    ball = pam_mujoco.MujocoItem(segment_id_ball,
+                                 control=pam_mujoco.MujocoItem.CONSTANT_CONTROL)
+    goal = pam_mujoco.MujocoItem(segment_id_goal,
+                                 control=pam_mujoco.MujocoItem.CONSTANT_CONTROL)
+    hit_point = pam_mujoco.MujocoItem(segment_id_hit_point,
+                                      control=pam_mujoco.MujocoItem.CONSTANT_CONTROL)
+
+    if segment_id_extra_balls>0:
+        segment_id_extra_balls = configure_mujoco.get_extra_balls_segment_id(0)
+        balls = pam_mujoco.MujocoItems(segment_id_extra_balls)
+        for index, ball_segment_id in enumerate(extra_balls_segment_ids):
+            ball = pam_mujoco.MujocoItem(
+                ball_segment_id,
+                control=pam_mujoco.MujocoItem.CONSTANT_CONTROL
+            )
+            balls.add_ball(ball)
+        
+    handle = pam_mujoco.MujocoHandle(mujoco_id,
+                                     table=True,
+                                     robot1=robot,
+                                     balls=(ball,),
+                                     goals=(goal,),
+                                     hit_points=(hit_point,),
+                                     combined=balls)
+    return handle
+    
+
+def _execute_visualization(config):
+
+    if config.nb_extra_balls > 0:
+        extra_balls = config.nb_extra_balls
+        segment_id_extra_balls = configure_mujoco.get_extra_balls_segment_id(0)
+        extra_balls_segment_ids = [ configure_mujoco.get_ball_segment_id(0,index)
+                                    for index in range(config.nb_extra_balls) ]
+        extra_balls_frontend_to = handle_from.frontends[segment_id_extra_balls]
+        mujoco_id_extra_balls_from = configure_mujoco.get_extra_balls_set_mukoco_id(0)
+        extra_balls_handle_from = pam_mujoco.MujocoHandle(mujoco_id_extra_balls_from,
+                                                          read_only=True)
+        extra_balls_frontend_from = extra_balls_handle_from.frontends[segment_id_extra_balls] 
+
+    else:
+        extra_balls = False
+        segment_id_extra_balls = None
+        extra_balls_segment_ids = None
+        
+    handle_to = _get_handle(config.mujoco_id_to,
+                            config.mujoco_id_to+config.segment_id_robot,
+                            config.mujoco_id_to+config.segment_id_ball,
+                            config.mujoco_id_to+config.segment_id_goal,
+                            config.mujoco_id_to+config.segment_id_hit_point,
+                            segment_id_extra_balls,
+                            extra_balls_segment_ids)
+    
+    handle_from = pam_mujoco.MujocoHandle(config.mujoco_id_from,
+                                          read_only=True)
+
+    robot_get = handle_from.interfaces[config.segment_id_robot]
+    robot_set = handle_to.interfaces[config.mujoco_id_to+config.segment_id_robot]
+
+    ball_get = handle_from.interfaces[config.segment_id_ball]
+    ball_set = handle_to.interfaces[config.mujoco_id_to+config.segment_id_ball]
+
+    goal_get = handle_from.interfaces[config.segment_id_goal]
+    goal_set = handle_to.interfaces[config.mujoco_id_to+config.segment_id_goal]
+
+    hit_point_get = handle_from.interfaces[config.segment_id_hit_point]
+    hit_point_set = handle_to.interfaces[config.mujoco_id_to+config.segment_id_hit_point]
+
+    frequency = 100.0
+    frequency_manager = o80.FrequencyManager(frequency)
+    duration_ms = int(1.0e3/frequency)
+
+    if extra_balls:
+        duration = o80.Duration_ms.milliseconds(duration_ms)
+        def update_extra_balls():
+            observed_from = extra_balls_frontend_from.latest().get_observed_state()
+            for index in range(extra_balls):
+                extra_balls_frontend_to.add_command(index,
+                                                    observed_from.get(index),
+                                                    duration,
+                                                    o80.Mode.OVERWRITE)
+                )
+            extra_balls.pulse()
+    
+    class UpdateIfChange:
+        def __init__(self,
+                     interface_get,
+                     interface_set,
+                     duration_ms):
+            self._interface_get = interface_get
+            self._interface_set = interface_set
+            self._duration_ms = duration_ms
+            self._previous1,self._previous2 = None,None
+        def __call__(self):
+            v1,v2=self._interface_get.get()
+            if v1!=self._previous1 or v2!=self._previous2:
+                self._interface_set.set(v1,
+                                        v2,
+                                        duration_ms=self._duration_ms)
+                self._previous1,self._previous2=v1,v2
+
+    update_if_changes = [UpdateIfChange(get_,set_,duration_ms)
+                         for get_,set_ in ((ball_get,ball_set),
+                                           (goal_get,goal_set),
+                                           (hit_point_get,hit_point_set),
+                                           (robot_get,robot_set))]
+                
+    signal_handler.init()
+    while not signal_handler.has_received_sigint():
+        for uic in update_if_changes:
+            uic()
+        if extra_balls:
+            update_extra_balls()
+        frequency_manager.wait()
+            
+    handle_to.mujoco_exit()
+
+
+def _configure():
+    config = BrightArgs("pam mujoco visualization: graphics for an instance of pam_mujoco")
+    config.add_option("mujoco_id_from",
+                      "simulation",
+                      "mujoco id of the pam_mujoco instance to represent ",
+                      str)
+    config.add_option("mujoco_id_to",
+                      "visualization",
+                      "mujoco id of the mujoco simulation spawned for visualization",
+                      str)
+    config.add_option("segment_id_robot",
+                      "robot",
+                      "segment_id of the robot controller to represent",
+                      str)
+    config.add_option("segment_id_ball",
+                      "ball",
+                      "segment_id of the ball controller to represent",
+                      str)
+    config.add_option("segment_id_goal",
+                      "goal",
+                      "segment_id of the goal controller to represent",
+                      str)
+    config.add_option("segment_id_hit_point",
+                      "hit_point",
+                      "segment_id of the hit point controller to represent",
+                      str)
+
+    change_all = False
+    finished = config.dialog(change_all,sys.argv[1:])
+    print()
+    if finished:
+        return config
+    return None
+
+
+def execute():
+
+    config = _configure()
+
+    if config is None:
+        print()
+        return
+    
+    _execute_visualization(config)
+
+    print()
+
+    
+if __name__ == "__main__":
+
+    execute()
