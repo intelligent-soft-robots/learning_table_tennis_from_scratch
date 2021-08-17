@@ -239,6 +239,10 @@ class HysrOneBall:
 
         # we end an episode after a fixed number of steps
         self._nb_steps_per_episode = hysr_config.nb_steps_per_episode
+        # note: if self._nb_steps_per_episode is 0 or less,
+        #       an episode will end based on a threshold
+        #       in the z component of the ball position
+        #       (see method _episode_over)
         
         # this instance of HysrOneBall interacts with several
         # instances of mujoco (pseudo real robot, simulated robot,
@@ -643,27 +647,30 @@ class HysrOneBall:
         return self._create_observation()
 
     def _episode_over(self):
-        over = False
 
-        if self._step_number>= self._nb_steps_per_episode:
+        # if self._nb_steps_per_episode is positive,
+        # exiting based on the number of steps
+        if self._nb_steps_per_episode>0:
+            if self._step_number>= self._nb_steps_per_episode:
+                return True
+            else:
+                return False
+
+        # otherwise exiting based on a threshold on the
+        # z position of the ball
+
+        # ball falled below the table
+        # note : all prerecorded trajectories are added a last ball position
+        # with z = -10.0, to insure this always occurs.
+        # see: function reset
+        if self._ball_status.ball_position[2] < -0.5:
             return True
-        
-        # another way of checking end of episode
-        # is to put a threshold on the z value
-        # of the ball position
-        def _deprecated():
-            # ball falled below the table
-            # note : all prerecorded trajectories are added a last ball position
-            # with z = -10.0, to insure this always occurs.
-            # see: function reset
-            if self._ball_status.ball_position[2] < -0.5:
-                over = True
-            # in case the user called the method
-            # force_episode_over
-            if self._force_episode_over:
-                over = True
+        # in case the user called the method
+        # force_episode_over
+        if self._force_episode_over:
+            return True
 
-        return over
+        return False
 
     def get_ball_position(self):
         # returning current ball position
