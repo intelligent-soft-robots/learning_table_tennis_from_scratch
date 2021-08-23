@@ -1,7 +1,148 @@
 #! /bin/bash
 
-# starting mujoco instances for the pseudo real robot and for the simulated robot
-pam_mujoco pseudo-real simulation &
+# this executable starts all instances of pam_mujoco.
+# it configures itself based on the json file that should be
+# present in the current directory. This json file should
+# have an entry "hysr_config", pointing to a json file. This json
+# file should have the entries:
+# extra_balls_set : indication if an instance of pam_mujoco for
+#                   extra balls should be started
+# graphics : indication if an instance pam_mujoco with graphics
+#            should be started
+# xterms: indication if the instances of pam_mujoco should be
+#         started in the current terminal, or in separated terminals
+
+# typically, hysr_start_robots will be started in a folder,
+# then a "hysr executable" (e.g. hysr_one_ball_ppo) will be started
+# from the same folder, so both use the same config files.
+
+
+# list json files in current directory
+json_files=( $(ls *.json) )
+
+# exiting if no json file
+if [ ! $? -eq 0 ]; then
+    >&2 echo "failed to find a json file in the current directory"
+    exit 1
+fi
+
+nb_json_files=${#json_files[@]}
+
+# exiting if more than 1 json file
+if [ ! $nb_json_files -eq 1 ]; then
+    >&2 echo "failed more than one json file in the current directory"
+    >&2 echo "${json_files}"
+    exit 1
+fi
+    
+# only 1 json file, going forward
+json_file=$(ls *.json)
+
+# reading the "hysr_config" entry from it
+hysr_config=$(jq -r .hysr_config ${json_file})
+
+# if not found, exit
+if [ "$hysr_config" = "null" ]; then
+    >&2 echo "failed to find the key hysr_config in ${json_file}"
+    exit 1
+fi
+
+# the file "hysr_config" should exists (as relative or absolute path)
+relative_path=$(pwd)/${hysr_config}
+if [ -f ${relative_path} ]; then
+    hysr_config=${relative_path}
+fi
+if [ ! -f ${hysr_config} ]; then
+    >&2 echo "failed to find ${hysr_config} (tested both relative and absolute path)"
+fi
+
+# checking from hysr_config if extra ball sets are active
+extra_balls=$(jq -r .extra_balls_sets ${hysr_config})
+
+# if no "extra_balls_sets" key in hysr_config, exit
+if [ "$extra_balls" = "null" ]; then
+    >&2 echo "failed to find the key extra_balls_sets in ${hysr_config}"
+    exit 1
+fi
+
+# cast extra_balls from int to bool
+if [ $extra_balls -gt 0 ]; then
+    extra_balls=true
+else
+    extra_balls=false
+fi
+
+# checking if graphics set to true in hysr_config
+graphics=$(jq -r .graphics ${hysr_config})
+
+# if no "graphics" key in hysr_config, exit
+if [ "$graphics" = "null" ]; then
+    >&2 echo "failed to find the key graphics in ${hysr_config}"
+    exit 1
+fi
+
+# checking if xterms set to true in hysr_config
+xterms=$(jq -r .xterms ${hysr_config})
+
+# if no "xterms" key in hysr_config, exit
+if [ "$xterms" = "null" ]; then
+    >&2 echo "failed to find the key xterms in ${hysr_config}"
+    exit 1
+fi
+
+# building the command
+
+
+if [ "$xterms" = true ]; then
+    # all mujoco instances started in a
+    # separate terminal
+    pam_mujoco="pam_mujoco"
+else
+    # all instances started in the current terminal
+    # (mixed output)
+    pam_mujoco="pam_mujoco_no_xterms"
+fi
+
+# pseudo-real and simulation used in any case
+mujoco_ids=( "pseudo-real" "simulation" )
+
+# adding extra balls (first set only) 
+if [ "$extra_balls" = true ]; then
+    mujoco_ids+=("extra_balls_0")
+fi
+
+# adding graphics
+if [ "$graphics" = true ]; then
+    # we add an instance of mujoco (that will have graphics) 
+    mujoco_ids+=("visualization")
+    # we add an executable that will forward data from
+    # simulation (and extra_balls) to visualization
+    visualization="& hysr_visualization"
+else
+    visualization=""
+fi
+
+command1="${pam_mujoco} ${mujoco_ids[@]}"
+
+if [ "$graphics" = true ]; then
+    command2="hysr_visualization"
+else
+    command2=""
+fi
+
+# running command
+
+echo ""
+echo "running command: ${command1} & ${command2} "
+echo "(call pam_mujoco_stop_all to stop all instances of mujoco)"
+echo ""
+
+${command1} &
+if [ ! "$command2" = "" ]; then
+    ${command2} &
+fi
+
+
 
 
 

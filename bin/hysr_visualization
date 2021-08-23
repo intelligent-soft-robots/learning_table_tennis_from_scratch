@@ -1,4 +1,222 @@
-#! /bin/bash
+#!/usr/bin/env python3
 
-# starting a mujoco instance for the visualization of the simulated robot
-pam_mujoco_visualization simulation visualization &
+import time, sys, logging
+import shared_memory, signal_handler, o80, o80_pam, pam_mujoco, pam_mujoco_wrp
+from lightargs import BrightArgs,Set,Range,Positive,FileExists
+from learning_table_tennis_from_scratch import configure_mujoco
+from learning_table_tennis_from_scratch.hysr_one_ball import HysrOneBallConfig
+from learning_table_tennis_from_scratch.rewards import JsonReward
+from learning_table_tennis_from_scratch.jsonconfig import get_json_config
+
+
+'''
+This executable forward states from:
+
+- pam_mujoco with mujoco_id "simulation" (i.e. pseudo robot)
+      - robot
+      - ball
+      - hit point
+      - goal
+- pam_mujoco with mujoco_id "extra_balls_0"
+      - extra balls (if any)
+to :
+- pam_mujoco with mujoco_id "visualization"
+
+The "visualization" instance of pam_mujoco starts with graphics,
+and thus allows visualization of both the "simulation" and
+"extra_balls_0" mujoco.
+
+This is useful because "simulation" and "extra_balls_0" run in 
+bursting mode, which results in low framerate graphics. "visualization"
+does not run in bursting mode, resulting in smoother graphics
+
+'''
+
+
+class _Config:
+    mujoco_id_to = "visualization"
+    mujoco_id_from = "simulation"
+    segment_id_robot = pam_mujoco.segment_ids.mirroring
+    segment_id_ball = pam_mujoco.segment_ids.ball
+    segment_id_hit_point = pam_mujoco.segment_ids.hit_point
+    segment_id_goal = pam_mujoco.segment_ids.goal
+    nb_extra_balls = 0
+    
+
+def _get_handle_to(mujoco_id,
+                   segment_id_robot,
+                   segment_id_ball,
+                   segment_id_goal,
+                   segment_id_hit_point,
+                   segment_id_extra_balls,
+                   extra_balls_segment_ids):
+    
+    if segment_id_extra_balls is not None:
+        balls = pam_mujoco.MujocoItems(segment_id_extra_balls)
+        balls.contact_type = pam_mujoco_wrp.ContactTypes.no_contact
+        for index, ball_segment_id in enumerate(extra_balls_segment_ids):
+            ball = pam_mujoco.MujocoItem(
+                ball_segment_id,
+                control=pam_mujoco.MujocoItem.CONSTANT_CONTROL,
+                contact_type=pam_mujoco_wrp.ContactTypes.no_contact
+            )
+            balls.add_ball(ball)
+    else:
+        balls = []
+
+    robot = pam_mujoco.MujocoRobot(segment_id_robot,
+                                   control=pam_mujoco.MujocoRobot.JOINT_CONTROL)
+    ball = pam_mujoco.MujocoItem(segment_id_ball,
+                                 control=pam_mujoco.MujocoItem.CONSTANT_CONTROL,
+                                 color=[1.,0.,0.,1.])
+    goal = pam_mujoco.MujocoItem(segment_id_goal,
+                                 control=pam_mujoco.MujocoItem.CONSTANT_CONTROL)
+    hit_point = pam_mujoco.MujocoItem(segment_id_hit_point,
+                                      control=pam_mujoco.MujocoItem.CONSTANT_CONTROL)
+        
+    handle = pam_mujoco.MujocoHandle(mujoco_id,
+                                     table=True,
+                                     robot1=robot,
+                                     balls=(ball,),
+                                     goals=(goal,),
+                                     hit_points=(hit_point,),
+                                     combined=balls)
+    return handle
+    
+
+def _execute_visualization(config):
+
+    #########################################################
+    # config of mujoco data are sent to (for visualization) #
+    #########################################################
+    
+    if config.nb_extra_balls > 0:
+        extra_balls = config.nb_extra_balls
+        segment_id_extra_balls_to = "visualization_extra_balls"
+        extra_balls_segment_ids_to = [ "vis_extra_balls_{}".format(index)
+                                    for index in range(config.nb_extra_balls) ]
+
+    else:
+        extra_balls = False
+        segment_id_extra_balls_to = None
+        extra_balls_segment_ids_to = None
+
+    segment_id_robot_to = "visualization_robot"
+    segment_id_ball_to = "visualization_ball"
+    segment_id_goal_to = "visualization_goal"
+    segment_id_hit_point_to = "visualization_hit_point"
+        
+    handle_to = _get_handle_to(config.mujoco_id_to,
+                               segment_id_robot_to,
+                               segment_id_ball_to,
+                               segment_id_goal_to,
+                               segment_id_hit_point_to,
+                               segment_id_extra_balls_to,
+                               extra_balls_segment_ids_to)
+
+    ################################
+    # config of mujoco data source #
+    ################################
+    
+    handle_from = pam_mujoco.MujocoHandle(config.mujoco_id_from,
+                                          read_only=True)
+
+    if extra_balls:
+        mujoco_id_extra_balls_from = configure_mujoco.get_extra_balls_set_mujoco_id(0)
+        extra_balls_handle_from = pam_mujoco.MujocoHandle(mujoco_id_extra_balls_from,
+                                                          read_only=True)
+
+    #################
+    # the frontends #
+    #################
+    
+    if extra_balls:
+        extra_balls_segment_id = configure_mujoco.get_extra_balls_segment_id(0)
+        extra_balls_frontend_from = extra_balls_handle_from.frontends[extra_balls_segment_id]
+        extra_balls_frontend_to = handle_to.frontends[segment_id_extra_balls_to]
+    
+    robot_get = handle_from.interfaces[config.segment_id_robot]
+    robot_set = handle_to.interfaces[segment_id_robot_to]
+
+    ball_get = handle_from.interfaces[config.segment_id_ball]
+    ball_set = handle_to.interfaces[segment_id_ball_to]
+
+    goal_get = handle_from.interfaces[config.segment_id_goal]
+    goal_set = handle_to.interfaces[segment_id_goal_to]
+
+    hit_point_get = handle_from.interfaces[config.segment_id_hit_point]
+    hit_point_set = handle_to.interfaces[segment_id_hit_point_to]
+
+    ###########
+    # running #
+    ###########
+    
+    frequency = 100.0
+    frequency_manager = o80.FrequencyManager(frequency)
+    duration_ms = int(1.0e3/frequency)
+    
+    if extra_balls:
+        duration = o80.Duration_us.milliseconds(duration_ms)
+        def update_extra_balls():
+            observed_from = extra_balls_frontend_from.latest().get_observed_states()
+            for index in range(extra_balls):
+                extra_balls_frontend_to.add_command(index,
+                                                    observed_from.get(index),
+                                                    duration,
+                                                    o80.Mode.OVERWRITE)
+
+            extra_balls_frontend_to.pulse()
+    
+    class UpdateIfChange:
+        def __init__(self,
+                     interface_get,
+                     interface_set,
+                     duration_ms):
+            self._interface_get = interface_get
+            self._interface_set = interface_set
+            self._duration_ms = duration_ms
+            self._previous1,self._previous2 = None,None
+        def __call__(self):
+            v1,v2=self._interface_get.get()
+            if v1!=self._previous1 or v2!=self._previous2:
+                self._interface_set.set(v1,
+                                        v2,
+                                        duration_ms=self._duration_ms)
+                self._previous1,self._previous2=v1,v2
+
+    update_if_changes = [UpdateIfChange(get_,set_,duration_ms)
+                         for get_,set_ in ((ball_get,ball_set),
+                                           (goal_get,goal_set),
+                                           (hit_point_get,hit_point_set),
+                                           (robot_get,robot_set))]
+                
+    signal_handler.init()
+    while not signal_handler.has_received_sigint():
+        for uic in update_if_changes:
+            uic()
+        if extra_balls:
+            update_extra_balls()
+        frequency_manager.wait()
+            
+    handle_to.mujoco_exit()
+
+
+
+def execute():
+
+    files = get_json_config(expected_keys=["hysr_config"])
+    hysr_path = files["hysr_config"]
+    print(
+        "\nusing configuration file:\n- {}\n".format(hysr_path)
+    )
+    hysr_config = HysrOneBallConfig.from_json(hysr_path)
+    config = _Config()
+    if hysr_config.extra_balls_sets>0:
+        config.nb_extra_balls = hysr_config.extra_balls_per_set
+    _execute_visualization(config)
+    print()
+
+    
+if __name__ == "__main__":
+
+    execute()

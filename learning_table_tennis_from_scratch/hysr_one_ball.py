@@ -496,9 +496,9 @@ class HysrOneBall:
         ):
             # going to first trajectory point
             item3d.set_position(trajectory[0].position)
-            item3d.set_velocity([0] * 3)
+            item3d.set_velocity(trajectory[0].velocity)
             ball.frontend.add_command(
-                index_ball, item3d, o80.Duration_us.seconds(1), o80.Mode.QUEUE
+                index_ball, item3d, o80.Mode.OVERWRITE
             )
             # loading full trajectory
             for item in trajectory[1:]:
