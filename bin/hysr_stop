@@ -1,0 +1,4 @@
+#!/bin/bash
+
+pam_mujoco_stop_all
+killall -q hysr_visualization
