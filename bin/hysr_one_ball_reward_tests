@@ -28,11 +28,12 @@ def execute(reward_config_path, hysr_config_path):
     ###################################
     # fixed ball position, no contact #
     ###################################
+    
     def _fixed_position(ball_position):
         hysr.set_ball_behavior(line=(ball_position, ball_position, 5000))
         hysr.reset()
         frequency_manager = o80.FrequencyManager(1.0 / algo_time_step)
-        for episode in range(5):
+        for step in range(5):
             hysr.step(pressures)
             if not accelerated_time:
                 waited = frequency_manager.wait()
@@ -114,7 +115,6 @@ def execute(reward_config_path, hysr_config_path):
             nb_frequency_fail,
         )
 
-        
     print("ball flying far from racket")
     _moving([1.5, 2.7, 0.17], [1.5, -1.0, 0.17], 3000)
 
@@ -129,53 +129,54 @@ def execute(reward_config_path, hysr_config_path):
     ########################
 
     print("ball flying to racket, and bouncing")
-    _moving([0.75, 2.7, 0.25], [0.75, -1.0, 0.25], 3000)
+    _moving([0.70, 2.7, 0.28], [0.70, -1.0, 0.28], 3000)
 
-    
+
     print("repeat")
-    _moving([0.75, 2.7, 0.25], [0.75, -1.0, 0.25], 3000)
+    _moving([0.70, 2.7, 0.28], [0.70, -1.0, 0.28], 3000)
 
     print("ball flying to racket, then flying far to target")
     _moving(
-        [0.75, 2.7, 0.25], [0.75, -1.0, 0.25], 3000, contact_ball_end=[0.6, 1.5, -1.0]
+        [0.70, 2.7, 0.28], [0.70, -1.0, 0.28], 3000, contact_ball_end=[0.6, 1.5, -1.0]
     )
 
     print("ball flying to racket, then flying closer to target")
     _moving(
-        [0.75, 2.7, 0.25], [0.75, -1.0, 0.25], 3000, contact_ball_end=[0.5, 2.7, -1.0]
+        [0.70, 2.7, 0.28], [0.70, -1.0, 0.28], 3000, contact_ball_end=[0.5, 2.7, -1.0]
     )
 
     print("repeat")
     _moving(
-        [0.75, 2.7, 0.25], [0.75, -1.0, 0.25], 3000, contact_ball_end=[0.5, 2.7, -1.0]
+        [0.70, 2.7, 0.28], [0.70, -1.0, 0.28], 3000, contact_ball_end=[0.5, 2.7, -1.0]
     )
 
     print("ball flying to racket, then flying even closer to target")
     _moving(
-        [0.75, 2.7, 0.25], [0.75, -1.0, 0.25], 3000, contact_ball_end=[0.45, 4.1, -1.0]
+        [0.70, 2.7, 0.28], [0.70, -1.0, 0.28], 3000, contact_ball_end=[0.45, 4.1, -1.0]
     )
 
     print("ball flying to racket, then flying even (even) closer to target")
     _moving(
-        [0.75, 2.7, 0.25],
-        [0.75, -1.0, 0.25],
+        [0.70, 2.7, 0.28],
+        [0.70, -1.0, 0.28],
         3000,
         contact_ball_end=[0.45, 2.71, -0.45],
     )
 
     print("ball flying to racket, then flying even (even) closer to target, but faster")
     _moving(
-        [0.75, 2.7, 0.25],
-        [0.75, -1.0, 0.25],
+        [0.70, 2.7, 0.28],
+        [0.70, -1.0, 0.28],
         2000,
         contact_ball_end=[0.45, 2.71, -0.45],
     )
 
     print("ball flying to racket, then flying exactly at the target")
     _moving(
-        [0.75, 2.7, 0.25], [0.75, -1.0, 0.25], 3000, contact_ball_end=[0.45, 2.7, -0.45]
+        [0.70, 2.7, 0.28], [0.70, -1.0, 0.28], 3000, contact_ball_end=[0.45, 2.7, -0.45]
     )
 
+    hysr.close()
     
 def _configure():
     files = get_json_config(expected_keys=["reward_config",
@@ -190,7 +191,6 @@ def _run():
     print("\nusing configuration files:\n- {}\n- {}\n".format(reward_config,
                                                               hysr_config))
     execute(reward_config,hysr_config)
-
 
 if __name__ == "__main__":
     _run()

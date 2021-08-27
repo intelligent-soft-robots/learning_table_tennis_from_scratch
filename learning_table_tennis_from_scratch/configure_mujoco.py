@@ -33,14 +33,16 @@ def get_ball_segment_id(set_id, index):
     return "ball_" + str(set_id) + "_" + str(index)
 
 
-def configure_extra_set(setid, nb_balls, graphics):
+def configure_extra_set(setid, nb_balls, robot_position, graphics):
 
     accelerated_time = True
     burst_mode = True
 
     robot_segment_id = get_extra_robot_segment_id(setid)
     robot = pam_mujoco.MujocoRobot(
-        robot_segment_id, control=pam_mujoco.MujocoRobot.JOINT_CONTROL
+        robot_segment_id,
+        position=robot_position,
+        control=pam_mujoco.MujocoRobot.JOINT_CONTROL
     )
 
     extra_balls_segment_id = get_extra_balls_segment_id(setid)
@@ -94,13 +96,15 @@ def configure_pseudo_real(
     return handle
 
 
-def configure_simulation(mujoco_id="simulation", graphics=True):
+def configure_simulation(robot_position, mujoco_id="simulation", graphics=True):
 
     accelerated_time = True
     burst_mode = True
 
     robot = pam_mujoco.MujocoRobot(
-        SEGMENT_ID_ROBOT_MIRROR, control=pam_mujoco.MujocoRobot.JOINT_CONTROL
+        SEGMENT_ID_ROBOT_MIRROR,
+        position=robot_position,
+        control=pam_mujoco.MujocoRobot.JOINT_CONTROL
     )
     ball = pam_mujoco.MujocoItem(
         SEGMENT_ID_BALL,

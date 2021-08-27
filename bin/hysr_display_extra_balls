@@ -4,47 +4,8 @@ import math
 import pam_mujoco
 from learning_table_tennis_from_scratch import configure_mujoco
 from learning_table_tennis_from_scratch.hysr_one_ball import HysrOneBallConfig
-from learning_table_tennis_from_scratch.rewards import JsonReward
+from learning_table_tennis_from_scratch.rewards import JsonReward, compute_rewards
 from learning_table_tennis_from_scratch.jsonconfig import get_json_config
-
-def velocity_norm(velocity):
-    return math.sqrt(sum([v ** 2 for v in velocity]))
-
-
-def distance(p1, p2):
-    return math.sqrt(sum([(a - b) ** 2 for a, b in zip(p1, p2)]))
-
-
-def min_distance(traj1, traj2):
-    return min([distance(p1, p2) for p1, p2 in zip(traj1, traj2)])
-
-
-def compute_reward(reward_function, target, index, observations):
-    ball_positions = [o.get_observed_states().get(index).get_position() for o in observations]
-    ball_velocities = [
-        o.get_observed_states().get(index).get_velocity() for o in observations
-    ]
-    robot_positions = [o.get_extended_state().robot_position for o in observations]
-    contacts = [o.get_extended_state().contacts[index] for o in observations]
-
-    if any(contacts):
-        contact = True
-    else:
-        contact = False
-
-    if not contact:
-        min_distance_ball_racket = min_distance(ball_positions, robot_positions)
-        min_distance_ball_target = None
-        max_ball_velocity = None
-    else:
-        min_distance_ball_racket = None
-        min_distance_ball_target = min([distance([p for p in ball_positions], target)])
-        max_ball_velocity = max([velocity_norm(v) for v in ball_velocities])
-
-    return reward_function(
-        min_distance_ball_racket, min_distance_ball_target, max_ball_velocity
-    )
-
 
 def run(setid, nb_balls, target, reward_function):
 
@@ -59,7 +20,7 @@ def run(setid, nb_balls, target, reward_function):
 
     # removing observations that do not correspond to an episode
     # (most likely collected during reset)
-    episodes = [e for e in episodes if e[1] > 0]
+    episodes = [e for e in episodes if e[1] >= 0]
 
     # listing all episodes
     episode_numbers = sorted(list(set([e[1] for e in episodes])))
@@ -68,14 +29,13 @@ def run(setid, nb_balls, target, reward_function):
     for episode in episode_numbers:
         print("\nEpisode:", episode)
         observations = [e[0] for e in episodes if e[1] == episode]
-        rewards = [
-            compute_reward(reward_function, target, index, observations)
-            for index in range(nb_balls)
-        ]
+        rewards = compute_rewards(reward_function,target,nb_balls,observations)
         for index, reward in enumerate(rewards):
             print("ball {}:\t{}".format(index, reward))
 
+    print()
 
+            
 def _configure():
     files = get_json_config(expected_keys=["reward_config", "hysr_config"])
     return files["reward_config"], files["hysr_config"]

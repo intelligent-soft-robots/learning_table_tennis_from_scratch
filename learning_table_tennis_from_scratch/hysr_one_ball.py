@@ -20,6 +20,7 @@ class HysrOneBallConfig:
         "o80_pam_time_step",
         "mujoco_time_step",
         "algo_time_step",
+        "robot_position",
         "target_position",
         "reference_posture",
         "world_boundaries",
@@ -105,6 +106,8 @@ class _BallBehavior:
     INDEX = -2
     RANDOM = -3
 
+    _trajectory_reader = context.BallTrajectories()
+    
     def __init__(self, line=False, index=False, random=False):
         not_false = [a for a in (line, index, random) if a != False]
         if not not_false:
@@ -119,7 +122,6 @@ class _BallBehavior:
             self.value = index
         elif random != False:
             self.type = self.RANDOM
-        self._trajectory_reader = context.BallTrajectories()
 
     def get_trajectory(self):
         # ball behavior is a straight line, self.value is (start,end,duration ms)
@@ -153,7 +155,8 @@ class _ExtraBall:
         self.frontend = frontend  # shared between all balls of same setid
         self.segment_id = segment_id
         self.ball_status = ball_status
-
+        self.ball_behavior = None
+        
     def reset_contact(self):
         self.handle.reset_contact(self.segment_id)
 
@@ -169,9 +172,9 @@ class _ExtraBall:
             handle.reset()
 
 
-def _get_extra_balls(setid, nb_balls, target_position, graphics):
+def _get_extra_balls(setid, nb_balls, robot_position, target_position, graphics):
 
-    values = configure_mujoco.configure_extra_set(setid, nb_balls, graphics)
+    values = configure_mujoco.configure_extra_set(setid, nb_balls, robot_position, graphics)
 
     handle = values[0]
     mujoco_id = values[1]
@@ -259,6 +262,7 @@ class HysrOneBall:
 
         # to control the simulated robot (joint control)
         self._simulated_robot_handle = configure_mujoco.configure_simulation(
+            robot_position=hysr_config.robot_position,
             graphics=hysr_config.graphics_simulation
         )
         self._mujoco_ids.append(self._simulated_robot_handle.get_mujoco_id())
@@ -391,6 +395,7 @@ class HysrOneBall:
                 balls, mirroring, mujoco_id = _get_extra_balls(
                     setid,
                     hysr_config.extra_balls_per_set,
+                    hysr_config.robot_position,
                     hysr_config.target_position,
                     hysr_config.graphics_extra_balls,
                 )
@@ -429,9 +434,15 @@ class HysrOneBall:
         # overwrite the ball behavior (set to a trajectory in the constructor)
         # see comments in _BallBehavior, in this file
         self._ball_behavior = _BallBehavior(line=line, index=index, random=random)
-        for ball in self._extra_balls:
-            ball.ball_behavior = _BallBehavior(random=True)
 
+    def set_extra_ball_behavior(self, ball_index, line=False, index=False, random=False):
+        # overwrite the ball behavior of the extra ball (set to random
+        # selected pre-recorded trajectory in constructor)
+        # see comments in _BallBehavior, in this file
+        if ball_index<0 or ball_index>=len(self._extra_balls):
+            raise IndexError(ball_index)
+        self._extra_balls[ball_index].ball_behavior = _BallBehavior(line=line, index=index, random=random)
+            
     def _create_observation(self):
         (
             pressures_ago,
@@ -484,13 +495,28 @@ class HysrOneBall:
         self._ball_communication.play_trajectory(trajectory_points, overwrite=False)
 
     def _load_extra_balls(self):
-        # set a random trajectory to each extra balls
+        # load the trajectory of each extra balls, as set by their
+        # ball_behavior attribute. See method set_extra_ball_behavior
+        # in this file
         item3d = o80.Item3dState()
         sampling_rate_ms = self._trajectory_reader.get_sampling_rate_ms()
         duration = o80.Duration_us.milliseconds(int(sampling_rate_ms))
-        trajectories = self._trajectory_reader.get_different_random_trajectories(
-            len(self._extra_balls)
-        )
+        # loading the ball behavior trajectory of each extra balls.
+        # If set_extra_ball_behavior has not been called for a given
+        # extra ball, this trajectory will be None 
+        trajectories = [extra_ball.ball_behavior.get_trajectory()
+                        if extra_ball.ball_behavior is not None else None
+                        for extra_ball in self._extra_balls]
+        # None trajectories (i.e. set_extra_ball_behavior uncalled) then
+        # setting a random trajectory
+        none_trajectory_indexes = [index for index,value in enumerate(trajectories)
+                             if value is None]
+        if none_trajectory_indexes:
+            extra_trajectories = self._trajectory_reader.get_different_random_trajectories(
+                len(none_trajectory_indexes)
+            )
+            for index,trajectory in zip(none_trajectory_indexes,extra_trajectories):
+                trajectories[index]=trajectory
         for index_ball, (ball, trajectory) in enumerate(
             zip(self._extra_balls, trajectories)
         ):

@@ -41,9 +41,10 @@ class _Config:
     segment_id_hit_point = pam_mujoco.segment_ids.hit_point
     segment_id_goal = pam_mujoco.segment_ids.goal
     nb_extra_balls = 0
-    
+    robot_position = None
 
 def _get_handle_to(mujoco_id,
+                   robot_position,
                    segment_id_robot,
                    segment_id_ball,
                    segment_id_goal,
@@ -65,6 +66,7 @@ def _get_handle_to(mujoco_id,
         balls = []
 
     robot = pam_mujoco.MujocoRobot(segment_id_robot,
+                                   position=robot_position,
                                    control=pam_mujoco.MujocoRobot.JOINT_CONTROL)
     ball = pam_mujoco.MujocoItem(segment_id_ball,
                                  control=pam_mujoco.MujocoItem.CONSTANT_CONTROL,
@@ -107,6 +109,7 @@ def _execute_visualization(config):
     segment_id_hit_point_to = "visualization_hit_point"
         
     handle_to = _get_handle_to(config.mujoco_id_to,
+                               config.robot_position,
                                segment_id_robot_to,
                                segment_id_ball_to,
                                segment_id_goal_to,
@@ -211,6 +214,7 @@ def execute():
     )
     hysr_config = HysrOneBallConfig.from_json(hysr_path)
     config = _Config()
+    config.robot_position=hysr_config.robot_position
     if hysr_config.extra_balls_sets>0:
         config.nb_extra_balls = hysr_config.extra_balls_per_set
     _execute_visualization(config)

@@ -1,0 +1,136 @@
+#!/usr/bin/env python3
+
+import sys, random, time, logging, numpy
+import o80, pam_mujoco
+from lightargs import BrightArgs, FileExists
+from learning_table_tennis_from_scratch.hysr_one_ball import (
+    HysrOneBall,
+    HysrOneBallConfig,
+)
+from learning_table_tennis_from_scratch import configure_mujoco
+from learning_table_tennis_from_scratch.rewards import JsonReward, compute_rewards
+from learning_table_tennis_from_scratch.jsonconfig import get_json_config
+
+
+def execute(reward_config_path, hysr_config_path):
+
+    # all constant variables of this demo
+    nb_extra_balls=20
+    nb_columns=5
+    nb_rows=4
+    y_start , y_end = 2.7 , -1.0
+    width = 0.35
+    duration_ms = 2000
+    high_pressure = 20000
+
+    episodes = (
+        (0.4 , +0.35), # flying left of the racket
+        (0.66 , +0.35), # some balls hitting the racket
+        (1.66 , +0.35) # flying far right of the racket
+    )
+   
+    # reading config files
+    hysr_config = HysrOneBallConfig.from_json(hysr_config_path)
+    reward_function = JsonReward.get(reward_config_path)
+    algo_time_step = hysr_config.algo_time_step
+    accelerated_time = hysr_config.accelerated_time
+    target_position = hysr_config.target_position
+    
+    # for this test, 20 balls are expected,
+    # exiting if not the case
+    if not hysr_config.extra_balls_sets:
+        raise ValueError("This demo expects 20 extra balls")
+    if hysr_config.extra_balls_per_set != nb_extra_balls:
+        raise ValueError("This demo expects 20 extra balls")
+    
+    # initializing hysr
+    hysr = HysrOneBall(hysr_config, reward_function)
+
+    # for all tests, the actions are high pressures
+    # on all muscles (robot not moving)
+    pressures = [[high_pressure, high_pressure] * 4]
+    pressures = [p for sublist in pressures for p in sublist]
+
+    # frontend to extra balls, to recover extra balls info after the episode
+    segment_id = configure_mujoco.get_extra_balls_segment_id(0)
+    frontend = pam_mujoco.MujocoHandle.get_extra_balls_frontend(segment_id, nb_extra_balls)
+
+    # running episodes
+    for episode in episodes:
+
+        # computing positions and trajectories of the balls
+        center_x , center_z = episode
+        min_x , max_x = center_x-width/2. , center_x+width/2.
+        step_x = (max_x-min_x) / float(nb_columns)
+        min_z , max_z = center_z-width/2. , center_z+width/2.
+        step_z = (max_z-min_z) / float(nb_rows)
+        main_ball_x , main_ball_z = center_x , center_z 
+        # putting all extra balls in a vertical grid
+        # that moves from (y value) y_start to y_end
+        def _grid(y):
+            x_grid,z_grid = numpy.mgrid[min_x:max_x:step_x , min_z:max_z:step_z]
+            xz_grid = numpy.vstack((x_grid.flatten(), z_grid.flatten())).T
+            extra_balls_positions = [(item[0],y,item[1]) for item in xz_grid]
+            return extra_balls_positions
+        extra_balls_from = _grid(y_start)
+        extra_balls_to = _grid(y_end)
+        # real ball will also move straight from y_start to y_end
+        ball_from = (main_ball_x,y_start,main_ball_z)
+        ball_to = (main_ball_x,y_end,main_ball_z)
+
+
+        
+        # setting the trajectories to hysr
+        hysr.set_ball_behavior(line=(ball_from,ball_to,duration_ms))
+        for index,(from_,to) in enumerate(zip(extra_balls_from,extra_balls_to)):
+            hysr.set_extra_ball_behavior(index,line=(from_,to,duration_ms))
+            
+        # running the episode
+        hysr.reset()
+        iteration_start = frontend.latest().get_iteration()
+        episode_over = False
+        if not accelerated_time:
+            frequency_manager = o80.FrequencyManager(1.0 / algo_time_step)
+        else:
+            frequency_manager = None
+        while not episode_over:
+            _, main_reward, episode_over = hysr.step(pressures)
+            if frequency_manager:
+                frequency_manager.wait()
+
+        # retrieving the extra balls information
+        observations = frontend.get_observations_since(iteration_start+1)
+
+        # computing the reward for each ball
+        rewards = compute_rewards(reward_function,target_position,nb_extra_balls,observations)
+
+        # displaying the rewards in a nice manner
+        print("\nmain ball reward: {0:.3f}".format(main_reward))
+        print("extra balls rewards:")
+        rewards = numpy.array(list(rewards))
+        rewards = rewards.reshape(nb_columns,nb_rows).T
+        format_row = "\t"+"\t".join(["{"+str(index)+":.2f}" for index in range(nb_columns)])
+        for row in range(nb_rows):
+            reward_str = format_row.format(*list(rewards[row,:]))
+            print(reward_str)
+        print()
+        
+    # closing hysr (if not closed, next job will hang !)
+    hysr.close()
+        
+def _configure():
+    files = get_json_config(expected_keys=["reward_config",
+                                           "hysr_config"])
+    
+    return files["reward_config"],files["hysr_config"]
+
+
+def _run():
+    logging.basicConfig(format='hysr_extra_balls | %(message)s',level=logging.INFO)
+    reward_config,hysr_config = _configure()
+    print("\nusing configuration files:\n- {}\n- {}\n".format(reward_config,
+                                                              hysr_config))
+    execute(reward_config,hysr_config)
+
+if __name__ == "__main__":
+    _run()

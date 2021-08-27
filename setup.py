@@ -36,6 +36,7 @@ setup(
         "bin/hysr_visualization",
         "bin/hysr_step_frequencies",
         "bin/hysr_episode_frequencies",
-        "bin/hysr_display_extra_balls"
+        "bin/hysr_display_extra_balls",
+        "bin/hysr_extra_balls"
     ],
 )
