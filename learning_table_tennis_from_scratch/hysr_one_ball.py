@@ -181,7 +181,10 @@ def _get_extra_balls(setid, nb_balls, robot_position, target_position, graphics)
     extra_balls_segment_id = values[2]
     robot_segment_id = values[3]
     ball_segment_ids = values[4]
-
+    extra_balls_frontend = handle.get_extra_balls_frontend(
+        configure_mujoco.get_extra_balls_segment_id(setid),
+        nb_balls )
+    
     # instance of o80_pam.o80_robot_mirroring.o80RobotMirroring,
     # to control the robot
     mirroring = handle.interfaces[robot_segment_id]
@@ -200,7 +203,7 @@ def _get_extra_balls(setid, nb_balls, robot_position, target_position, graphics)
     _ExtraBall.handles[setid] = handle
     _ExtraBall.frontends[setid] = frontend
 
-    return balls, mirroring, mujoco_id
+    return balls, mirroring, mujoco_id, extra_balls_frontend
 
 
 def _convert_pressures_in(pressures):
@@ -392,7 +395,7 @@ class HysrOneBall:
                 # mirroring : for sending mirroring command to the robot
                 #             of the set (joint controlled)
                 #             (instance of o80_pam.o80_robot_mirroring.o80RobotMirroring)
-                balls, mirroring, mujoco_id = _get_extra_balls(
+                balls, mirroring, mujoco_id, frontend = _get_extra_balls(
                     setid,
                     hysr_config.extra_balls_per_set,
                     hysr_config.robot_position,
@@ -403,8 +406,10 @@ class HysrOneBall:
                 self._extra_balls.extend(balls)
                 self._mirrorings.append(mirroring)
                 self._mujoco_ids.append(mujoco_id)
+                self._extra_balls_frontend = frontend
         else:
             self._extra_balls = []
+            self._extra_balls_frontend = None
 
         # for running all simulations (main + for extra balls)
         # in parallel (i.e. when bursting is called, all mujoco
@@ -717,6 +722,21 @@ class HysrOneBall:
         # getting information about simulated ball
         ball_position, ball_velocity = self._ball_communication.get()
 
+        # getting information about simulated balls
+        def commented():
+            if self._extra_balls_frontend is not None:
+                observation = self._extra_balls_frontend.latest()
+                # robot racket cartesian position
+                robot_cartesian_position = observation.get_extended_state().robot_position
+                # list: for each ball, if a contact occured during this episode so far
+                # (not necessarily during previous step)
+                contacts = observation.get_extended_state().contacts
+                # ball position and velocity
+                state = observation.get_observed_states()
+                ball_0_position = state.get(0).get_position()
+                ball_0_velocity = state.get(0).get_velocity()
+                print(robot_cartesian_position,contacts[0],ball_0_position,ball_0_velocity)
+            
         # convert action [ago1,antago1,ago2] to list suitable for
         # o80 ([(ago1,antago1),(),...])
         pressures = _convert_pressures_in(list(action))
