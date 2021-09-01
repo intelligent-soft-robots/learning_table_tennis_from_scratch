@@ -74,7 +74,7 @@ def configure_extra_set(setid, nb_balls, robot_position, graphics):
 
 
 def configure_pseudo_real(
-    mujoco_id="pseudo-real", graphics=True, accelerated_time=False
+        pam_config_file, mujoco_id="pseudo-real", graphics=True, accelerated_time=False
 ):
 
     if accelerated_time:
@@ -83,7 +83,9 @@ def configure_pseudo_real(
         burst_mode = False
 
     robot = pam_mujoco.MujocoRobot(
-        SEGMENT_ID_PSEUDO_REAL_ROBOT, control=pam_mujoco.MujocoRobot.PRESSURE_CONTROL
+        SEGMENT_ID_PSEUDO_REAL_ROBOT,
+        control=pam_mujoco.MujocoRobot.PRESSURE_CONTROL,
+        json_control_path=pam_config_file
     )
     handle = pam_mujoco.MujocoHandle(
         mujoco_id,

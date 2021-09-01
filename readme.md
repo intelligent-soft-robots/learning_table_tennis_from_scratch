@@ -96,9 +96,12 @@ The learning executable configuration json file requires this content:
 }
 ```
 
-The bin folder has exemple of configuration files, except for the ```pam_config```
-configuration file, which has an example in ```/opt/mpi-is/pam_models/```
-(very possibly you will want to use ```/opt/mpi-is/pam_models/hill.json```).
+The bin folder has exemple of configuration files, except for:
+
+- the ```pam_model``` configuration file, which has an example in ```/opt/mpi-is/pam_models/```
+(possibly you will want to use ```/opt/mpi-is/pam_models/hill.json```).
+
+- the ```pam_config``` configuration file (very possibly you will want to use ```/opt/mpi-is/pam_interface/pam_sim.json```)
 
 Once the configuration file has been set in the current directory, the executable can be started, e.g.:
 

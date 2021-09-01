@@ -20,6 +20,7 @@ class HysrOneBallConfig:
         "o80_pam_time_step",
         "mujoco_time_step",
         "algo_time_step",
+        "pam_config_file",
         "robot_position",
         "target_position",
         "reference_posture",
@@ -258,6 +259,7 @@ class HysrOneBall:
 
         # to control the real (or pseudo-real) robot (pressure control)
         self._real_robot_handle = configure_mujoco.configure_pseudo_real(
+            hysr_config.pam_config_file,
             graphics=hysr_config.graphics_pseudo_real,
             accelerated_time=hysr_config.accelerated_time,
         )
