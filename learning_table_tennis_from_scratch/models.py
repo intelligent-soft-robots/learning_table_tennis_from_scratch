@@ -4,7 +4,6 @@ from learning_table_tennis_from_scratch.ppo_config import OpenAIPPOConfig
 
 
 def run_stable_baselines(
-    pam_config_file,
     reward_config_file,
     hysr_one_ball_config_file,
     ppo_config_file,
@@ -19,7 +18,6 @@ def run_stable_baselines(
     from stable_baselines.common.env_checker import check_env
 
     env_config = {
-        "pam_config_file": pam_config_file,
         "reward_config_file": reward_config_file,
         "hysr_one_ball_config_file": hysr_one_ball_config_file,
         "log_episodes": log_episodes,
@@ -39,7 +37,6 @@ def run_stable_baselines(
 
 
 def run_openai_baselines(
-    pam_config_file,
     reward_config_file,
     hysr_one_ball_config_file,
     ppo_config_file,
@@ -63,7 +60,6 @@ def run_openai_baselines(
     from stable_baselines.common import make_vec_env
 
     env_config = {
-        "pam_config_file": pam_config_file,
         "reward_config_file": reward_config_file,
         "hysr_one_ball_config_file": hysr_one_ball_config_file,
         "log_episodes": log_episodes,
@@ -98,7 +94,9 @@ def get_alg_module_openai_baselines(alg, submodule=None):
     submodule = submodule or alg
     try:
         # first try to import the alg module from baselines
-        alg_module = import_module(".".join(["baselines", alg, submodule]))
+        # (note: we used a modified version of baselines ppo2 which
+        #        allows an update at each episode)
+        import learning_table_tennis_from_scratch.modified_baselines_ppo2 as alg_module
     except ImportError:
         # then from rl_algs
         alg_module = import_module(".".join(["rl_" + "algs", alg, submodule]))

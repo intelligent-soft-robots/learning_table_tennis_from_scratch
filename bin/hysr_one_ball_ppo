@@ -33,27 +33,25 @@ def _read_ppo_common_config(jsonpath):
     return conf
     
 
-def _execute(pam_config,
-            reward_config,
-            hysr_config,
-            ppo_config,
-            ppo_common_config):
+def _execute(reward_config_file,
+             hysr_config_file,
+             ppo_config_file,
+             ppo_common_config_file):
 
-    common_conf = _read_ppo_common_config(ppo_common_config)
-    
+    common_conf = _read_ppo_common_config(ppo_common_config_file)
+
     if common_conf["use_openai_baselines"]:
-        run_openai_baselines(pam_config, reward_config, hysr_config, ppo_config,
+        run_openai_baselines(reward_config_file, hysr_config_file, ppo_config_file,
                              common_conf["log_episodes"], common_conf["log_tensorboard"])
     else:
-        run_stable_baselines(pam_config, reward_config, hysr_config, ppo_config,
+        run_stable_baselines(reward_config_file, hysr_config_file, ppo_config_file,
                              common_conf["log_episodes"], common_conf["log_tensorboard"])
 
         
 
 
 def _configure():
-    files = get_json_config(expected_keys=["pam_config",
-                                           "reward_config",
+    files = get_json_config(expected_keys=["reward_config",
                                            "hysr_config",
                                            "ppo_config",
                                            "ppo_common_config"])
@@ -66,7 +64,6 @@ def _run():
     if config is None:
         return
     _execute(
-        config["pam_config"],
         config["reward_config"],
         config["hysr_config"],
         config["ppo_config"],
