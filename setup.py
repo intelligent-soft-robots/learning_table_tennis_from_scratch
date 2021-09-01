@@ -14,7 +14,7 @@ setup(
     author_email="vberenz@tuebingen.mpg.de",
     license="MIT",
     packages=["learning_table_tennis_from_scratch"],
-    install_requires=['tensorflow==1.15','gym'],
+    #install_requires=['tensorflow==1.15','gym'],
     zip_safe=True,
     data_files=[
         (
