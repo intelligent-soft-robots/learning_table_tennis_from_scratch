@@ -1,4 +1,5 @@
 {
+    "real_robot":false,
     "o80_pam_time_step":0.002,
     "mujoco_time_step":0.002,
     "algo_time_step":0.01,

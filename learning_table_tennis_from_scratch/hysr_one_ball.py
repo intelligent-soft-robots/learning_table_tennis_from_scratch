@@ -257,14 +257,29 @@ class HysrOneBall:
         # Listing all the corresponding mujoco_ids
         self._mujoco_ids = []
 
-        # to control the real (or pseudo-real) robot (pressure control)
-        self._real_robot_handle = configure_mujoco.configure_pseudo_real(
-            hysr_config.pam_config_file,
-            graphics=hysr_config.graphics_pseudo_real,
-            accelerated_time=hysr_config.accelerated_time,
-        )
-        self._mujoco_ids.append(self._real_robot_handle.get_mujoco_id())
+        # to control pseudo-real robot (pressure control)
+        if not hysr_config.real_robot:
+            self._real_robot_handle = configure_mujoco.configure_pseudo_real(
+                hysr_config.pam_config_file,
+                graphics=hysr_config.graphics_pseudo_real,
+                accelerated_time=hysr_config.accelerated_time,
+            )
+            self._mujoco_ids.append(self._real_robot_handle.get_mujoco_id())
+        else:
+            # real robot: making some sanity check that the
+            # rest of the configuration is ok
+            if hysr_config.instant_reset:
+                raise ValueError(str("HysrOneBall configured for "
+                                     "real robot and instant reset."
+                                     "Real robot does not support "
+                                     "instant reset."))
+            if hysr_config.accelerated_time:
+                raise ValueError(str("HysrOneBall configured for "
+                                     "real robot and accelerated time."
+                                     "Real robot does not support "
+                                     "accelerated time."))
 
+            
         # to control the simulated robot (joint control)
         self._simulated_robot_handle = configure_mujoco.configure_simulation(
             robot_position=hysr_config.robot_position,
@@ -342,9 +357,14 @@ class HysrOneBall:
 
         # to send pressure commands to the real or pseudo-real robot
         # (instance of o80_pam.o80_pressures.o80Pressures)
-        self._pressure_commands = self._real_robot_handle.interfaces[
-            SEGMENT_ID_PSEUDO_REAL_ROBOT
-        ]
+        # hysr_config.real robot is either false (i.e. pseudo real
+        # mujoco robot) or the segment_id of the real robot backend
+        if not hysr_config.real_robot:
+            self._pressure_commands = self._real_robot_handle.interfaces[
+                SEGMENT_ID_PSEUDO_REAL_ROBOT
+            ]
+        else:
+            self._pressure_commands = o80Pressures(hysr_config.real_robot)
 
         # the posture in which the robot will reset itself
         # upon reset (may be None if no posture reset)
