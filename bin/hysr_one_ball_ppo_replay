@@ -1,0 +1,62 @@
+#!/usr/bin/env python3
+
+import os
+from lightargs import BrightArgs,Positive,FileExists
+from learning_table_tennis_from_scratch.models import replay_openai_baselines
+from learning_table_tennis_from_scratch.jsonconfig import get_json_config
+
+
+
+def _execute(model_path,nb_episodes,
+             reward_config_file,
+             hysr_config_file,
+             ppo_config_file,
+             ppo_common_config_file
+):
+
+    replay_openai_baselines(model_path,nb_episodes,
+                            reward_config_file, hysr_config_file, ppo_config_file)
+
+def _configure():
+
+    files = get_json_config(expected_keys=["reward_config",
+                                           "hysr_config",
+                                           "ppo_config",
+                                           "ppo_common_config"])
+    
+    config = BrightArgs("PPO2 replay")
+
+    config.add_option("model_file_path",
+                      os.path.join(os.getcwd(),"model"),
+                      "absolute path to the model file",
+                      str,
+                      integrity_checks= [FileExists()])
+
+    config.add_option("nb_episodes",
+                      10,
+                      "number of episodes that will be played",
+                      int,
+                      integrity_checks=[Positive()])
+
+    change_all = False
+    finished = config.dialog(change_all)
+    print()
+    if not finished:
+        return None
+
+    return config,files
+
+
+if __name__ == "__main__":
+
+    config,files = _configure()
+
+    if config is not None:
+        model_file_path, nb_episodes = config.model_file_path,config.nb_episodes
+
+        _execute(model_file_path, nb_episodes,
+                 files["reward_config"],
+                 files["hysr_config"],
+                 files["ppo_config"],
+                 files["ppo_common_config"]
+        )
