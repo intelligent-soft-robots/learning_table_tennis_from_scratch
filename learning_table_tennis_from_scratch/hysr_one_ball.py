@@ -3,6 +3,7 @@ import o80, o80_pam, pam_mujoco, context, pam_interface, frequency_monitoring, s
 import numpy as np
 from pam_mujoco import mirroring
 from . import configure_mujoco
+from . import robot_integrity
 
 
 SEGMENT_ID_BALL = pam_mujoco.segment_ids.ball
@@ -37,6 +38,8 @@ class HysrOneBallConfig:
         "extra_balls_per_set",
         "frequency_monitoring_step",
         "frequency_monitoring_episode",
+        "robot_integrity_check",
+        "robot_integrity_threshold"
     )
 
     def __init__(self):
@@ -276,7 +279,7 @@ class HysrOneBall:
         self._target_position = hysr_config.target_position
         self._goal = self._simulated_robot_handle.interfaces[SEGMENT_ID_GOAL]
 
-        # read all recorded trajectory files
+        # to read all recorded trajectory files
         self._trajectory_reader = context.BallTrajectories()
 
         # if requested, logging info about the frequencies of the steps and/or the
@@ -364,13 +367,13 @@ class HysrOneBall:
         self._hit_point = self._simulated_robot_handle.interfaces[SEGMENT_ID_HIT_POINT]
 
         # tracking if this is the first step of the episode
-        # (a step sets it to false, reset sets it back to true)
+        # (a call to the step function sets it to false, call to reset function sets it back to true)
         self._first_episode_step = True
 
         # will be used to move the robot to reference posture
         # between episodes
         self._max_pressures1 = [(18000, 18000)] * 4
-        self._max_pressures2 = [(20000, 20000)] * 4
+        self._max_pressures2 = [(21500, 21500)] * 4
 
         # normally an episode ends when the ball z position goes
         # below a certain threshold (see method _episode_over)
@@ -418,6 +421,14 @@ class HysrOneBall:
         # instance perform step(s) in parallel)
         self._parallel_burst = pam_mujoco.mirroring.ParallelBurst(self._mirrorings)
 
+        # if set, logging the position of the robot at the end of reset, and possibly
+        # get a warning when this position drifts as the number of episodes increase
+        if hysr_config.robot_integrity_check is not None:
+            self._robot_integrity = robot_integrity.RobotIntegrity(hysr_config.robot_integrity_threshold,
+                                                                   file_path=hysr_config.robot_integrity_check)
+        else:
+            self._robot_integrity = None
+        
         # when starting, the real robot and the virtual robot(s)
         # may not be aligned, which may result in graphical issues,
         # so aligning them
@@ -671,6 +682,19 @@ class HysrOneBall:
         for ball in self._extra_balls:
             ball.ball_status.reset()
 
+        # checking the position of the robot, to see if it drifts
+        # as episode increase (or if it not what is expected at all).
+        # raise an exception if drifted too much).
+        if self._robot_integrity is not None:
+            _,_,_,joint_positions,_ = self._pressure_commands.read()
+            warning = self._robot_integrity.set(joint_positions)
+            if warning:
+                self._robot_integrity.close()
+                self.close()
+                raise robot_integrity.RobotIntegrityException(self._robot_integrity,
+                                                              joint_positions)
+            
+            
         # a new episode starts
         self._step_number = 0
         self._episode_number += 1
