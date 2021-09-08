@@ -1,3 +1,4 @@
+
 class RobotIntegrity:
 
     """
@@ -15,13 +16,13 @@ class RobotIntegrity:
 
     def __init__(self, warning_threshold: float, file_path: str = None):
         self._ref_position = None
-        self._warning_threshold
-        if file_path is None:
+        self._warning_threshold = warning_threshold
+        if file_path:
             self._file = open(file_path, "w+")
         else:
             self._file = None
 
-    def set(self, current_position: list[float]) -> bool:
+    def set(self, current_position: list) -> bool:
 
         """
         At the first call, set current_position as the reference position,
@@ -43,7 +44,7 @@ class RobotIntegrity:
             return False
 
         if self._file is not None:
-            self._file.write(repr(current_position))
+            self._file.write(repr(current_position)+"\n")
 
         distance = max(
             [abs(p1 - p2) for p1, p2 in zip(self._ref_position, current_position)]
@@ -64,7 +65,7 @@ class RobotIntegrity:
             self._file = None
 
     def __del__(self):
-        if self._file is not None:
+        if hasattr(self,"_file") and self._file is not None:
             self._file.close()
 
 
@@ -77,9 +78,9 @@ class RobotIntegrityException(Exception):
     :param list[float]: (failed) robot position (in radian)
     """
 
-    def __init__(self, robot_integrity: RobotIntegrity, error_position: list[float]):
+    def __init__(self, robot_integrity: RobotIntegrity, error_position: list):
 
-        self._instance = RobotIntegrity
+        self._instance = robot_integrity
         self._position = error_position
 
     def __str__(self):
@@ -89,5 +90,5 @@ class RobotIntegrityException(Exception):
         ).format(
             self._position,
             self._instance._ref_position,
-            self._instance.warning_threshold,
+            self._instance._warning_threshold,
         )

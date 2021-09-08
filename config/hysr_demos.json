@@ -23,5 +23,7 @@
     "graphics":true,
     "xterms":false,
     "frequency_monitoring_episode":true,
-    "frequency_monitoring_step":true
+    "frequency_monitoring_step":true,
+    "robot_integrity_check":"/tmp/hysr_robot_integrity",
+    "robot_integrity_threshold":0.6
 }

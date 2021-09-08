@@ -686,7 +686,7 @@ class HysrOneBall:
         # as episode increase (or if it not what is expected at all).
         # raise an exception if drifted too much).
         if self._robot_integrity is not None:
-            _,_,_,joint_positions,_ = self._pressure_commands.read()
+            _,_,joint_positions,_ = self._pressure_commands.read()
             warning = self._robot_integrity.set(joint_positions)
             if warning:
                 self._robot_integrity.close()
@@ -841,6 +841,8 @@ class HysrOneBall:
         return observation, reward, episode_over
 
     def close(self):
+        if self._robot_integrity is not None:
+            self._robot_integrity.close()
         self._parallel_burst.stop()
         shared_memory.clear_shared_memory(SEGMENT_ID_EPISODE_FREQUENCY)
         shared_memory.clear_shared_memory(SEGMENT_ID_STEP_FREQUENCY)
