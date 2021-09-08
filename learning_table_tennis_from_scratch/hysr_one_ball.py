@@ -17,6 +17,7 @@ SEGMENT_ID_STEP_FREQUENCY = "hysr_step_frequency"
 class HysrOneBallConfig:
 
     __slots__ = (
+        "real_robot",
         "o80_pam_time_step",
         "mujoco_time_step",
         "algo_time_step",
@@ -364,7 +365,7 @@ class HysrOneBall:
                 SEGMENT_ID_PSEUDO_REAL_ROBOT
             ]
         else:
-            self._pressure_commands = o80Pressures(hysr_config.real_robot)
+            self._pressure_commands = o80_pam.o80Pressures(hysr_config.real_robot)
 
         # the posture in which the robot will reset itself
         # upon reset (may be None if no posture reset)
