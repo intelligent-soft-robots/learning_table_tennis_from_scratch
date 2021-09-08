@@ -17,11 +17,13 @@
     "nb_steps_per_episode":300,
     "extra_balls_sets":1,
     "extra_balls_per_set":20,
+    "graphics":true,
     "graphics_pseudo_real":false,
     "graphics_simulation":false,
     "graphics_extra_balls":false,
-    "graphics":true,
     "xterms":false,
     "frequency_monitoring_episode":true,
-    "frequency_monitoring_step":true
+    "frequency_monitoring_step":true,
+    "robot_integrity_check":false,
+    "robot_integrity_threshold":0.6
 }
