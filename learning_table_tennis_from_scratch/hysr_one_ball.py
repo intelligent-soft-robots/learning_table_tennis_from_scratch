@@ -78,7 +78,7 @@ class HysrOneBallConfig:
         for s in cls.__slots__:
             try:
                 setattr(instance, s, conf[s])
-            except:
+            except Exception:
                 raise ValueError(
                     "failed to find the attribute {} " "in {}".format(s, jsonpath)
                 )

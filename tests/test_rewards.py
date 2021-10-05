@@ -29,7 +29,7 @@ class REWARDS_TESTCASE(unittest.TestCase):
         no_exception = True
         try:
             reward_function = JsonReward.get(jsonpath)
-        except:
+        except Exception:
             no_exception = False
         self.assertTrue(no_exception)
 
