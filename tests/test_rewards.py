@@ -28,7 +28,7 @@ class REWARDS_TESTCASE(unittest.TestCase):
         jsonpath = JsonReward.default_path()
         no_exception = True
         try:
-            reward_function = JsonReward.get(jsonpath)
+            JsonReward.get(jsonpath)
         except Exception:
             no_exception = False
         self.assertTrue(no_exception)

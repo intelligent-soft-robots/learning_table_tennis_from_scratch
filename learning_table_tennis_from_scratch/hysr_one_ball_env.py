@@ -49,8 +49,6 @@ class _ObservationSpace:
 
     def set_values_pressures(self, name, values, env):
         for dof in range(env._nb_dofs):
-            p_plus = 0
-            p_minus = 0
             values[2 * dof] = env._reverse_scale_pressure(dof, True, values[2 * dof])
             values[2 * dof + 1] = env._reverse_scale_pressure(
                 dof, False, values[2 * dof + 1]

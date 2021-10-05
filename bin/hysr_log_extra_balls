@@ -56,7 +56,6 @@ def _run():
     hysr_path = _configure()
     print("\nusing configuration file:\n- {}\n".format(hysr_path))
     hysr_config = HysrOneBallConfig.from_json(hysr_path)
-    target = hysr_config.target_position
     nb_balls = hysr_config.extra_balls_per_set
     setid = 0
     run(setid, nb_balls)

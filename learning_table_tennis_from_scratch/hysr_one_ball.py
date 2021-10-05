@@ -296,7 +296,6 @@ class HysrOneBall:
         # if requested, logging info about the frequencies of the steps and/or the
         # episodes
         if hysr_config.frequency_monitoring_step:
-            segment_id = hysr_config.frequency_monitoring_step
             size = 1000
             self._frequency_monitoring_step = frequency_monitoring.FrequencyMonitoring(
                 SEGMENT_ID_STEP_FREQUENCY, size
@@ -304,7 +303,6 @@ class HysrOneBall:
         else:
             self._frequency_monitoring_step = None
         if hysr_config.frequency_monitoring_episode:
-            segment_id = hysr_config.frequency_monitoring_episode
             size = 1000
             self._frequency_monitoring_episode = (
                 frequency_monitoring.FrequencyMonitoring(
