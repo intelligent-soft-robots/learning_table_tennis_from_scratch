@@ -147,8 +147,8 @@ class _BallBehavior:
 
 class _ExtraBall:
 
-    ## see pam_demos/balls
-    ## for usage of handles and frontends
+    # see pam_demos/balls
+    # for usage of handles and frontends
     # setid : handle
     handles = {}
     # setid: frontend to extra balls
@@ -324,9 +324,9 @@ class HysrOneBall:
             hysr_config.algo_time_step / hysr_config.mujoco_time_step
         )
 
-        # the config sets either a zero or positive int (playing the corresponding indexed
-        # pre-recorded trajectory) or a negative int (playing randomly selected indexed
-        # trajectories)
+        # the config sets either a zero or positive int (playing the
+        # corresponding indexed pre-recorded trajectory) or a negative int
+        # (playing randomly selected indexed trajectories)
         if hysr_config.trajectory >= 0:
             self._ball_behavior = _BallBehavior(index=hysr_config.trajectory)
         else:
@@ -369,7 +369,8 @@ class HysrOneBall:
         self._hit_point = self._simulated_robot_handle.interfaces[SEGMENT_ID_HIT_POINT]
 
         # tracking if this is the first step of the episode
-        # (a call to the step function sets it to false, call to reset function sets it back to true)
+        # (a call to the step function sets it to false, call to reset function sets it
+        # back to true)
         self._first_episode_step = True
 
         # will be used to move the robot to reference posture
@@ -401,7 +402,8 @@ class HysrOneBall:
                 # balls: list of instances of _ExtraBalls (defined in this file)
                 # mirroring : for sending mirroring command to the robot
                 #             of the set (joint controlled)
-                #             (instance of o80_pam.o80_robot_mirroring.o80RobotMirroring)
+                #             (instance of
+                #             o80_pam.o80_robot_mirroring.o80RobotMirroring)
                 balls, mirroring, mujoco_id, frontend = _get_extra_balls(
                     setid,
                     hysr_config.extra_balls_per_set,
@@ -799,8 +801,8 @@ class HysrOneBall:
         for mirroring_ in self._mirrorings:
             mirroring_.set(joint_positions, joint_velocities)
 
-        # having the simulated robot(s)/ball(s) performing the right number of iterations
-        # (note: simulated expected to run accelerated time)
+        # having the simulated robot(s)/ball(s) performing the right number of
+        # iterations (note: simulated expected to run accelerated time)
         self._parallel_burst.burst(self._nb_sim_bursts)
 
         def _update_ball_status(handle, segment_id, ball_status):

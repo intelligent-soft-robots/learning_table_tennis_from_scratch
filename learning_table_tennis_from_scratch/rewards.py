@@ -174,7 +174,8 @@ def compute_rewards(reward_function, target, nb_balls, observations, episode=Non
     This method returns a list of reward {extra ball index:reward}
     :param function reward_function: reward function, expected to be an instance
                                      of either Reward or SmashReward
-    :param tuple target: the reward function required a 3d position target as input parameter
+    :param tuple target: the reward function required a 3d position target as
+        input parameter
     :param int nb_balls: number of extra balls
     :param list observations: as returned by frontend.get_latest_observation
     :param int episode: if not None, filter observations to be of the given episode
