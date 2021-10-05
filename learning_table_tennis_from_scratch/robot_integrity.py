@@ -1,9 +1,8 @@
-
 class RobotIntegrity:
 
     """
     When running the real robot, muscles may be affected by various physical effects (e.g. heating, tear, etc ...).
-    Code in this class aims at monitoring this, by comparing the (joint) positions (in radian) of the robot against an expected one, 
+    Code in this class aims at monitoring this, by comparing the (joint) positions (in radian) of the robot against an expected one,
     and returning a warning if the positions are too different. This was developed with the idea that this could be
     used at the end of the call to the environment reset function, to be sure code would exit if the robot starts
     behaving in non-expected way. Optionally, the positions of the robot are recorded in a file, on the purpose
@@ -44,7 +43,7 @@ class RobotIntegrity:
             return False
 
         if self._file is not None:
-            self._file.write(repr(current_position)+"\n")
+            self._file.write(repr(current_position) + "\n")
 
         distance = max(
             [abs(p1 - p2) for p1, p2 in zip(self._ref_position, current_position)]
@@ -65,7 +64,7 @@ class RobotIntegrity:
             self._file = None
 
     def __del__(self):
-        if hasattr(self,"_file") and self._file is not None:
+        if hasattr(self, "_file") and self._file is not None:
             self._file.close()
 
 

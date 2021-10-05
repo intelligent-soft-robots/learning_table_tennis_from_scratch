@@ -10,6 +10,7 @@ from learning_table_tennis_from_scratch.hysr_one_ball import (
 from learning_table_tennis_from_scratch.rewards import JsonReward
 from learning_table_tennis_from_scratch.jsonconfig import get_json_config
 
+
 def execute(reward_config_path, hysr_config_path):
 
     hysr_config = HysrOneBallConfig.from_json(hysr_config_path)
@@ -30,17 +31,18 @@ def execute(reward_config_path, hysr_config_path):
     hysr.reset()
     hysr.reset()
 
+
 def _configure():
-    logging.basicConfig(format='hysr_one_ball_reset | %(message)s',level=logging.INFO)
-    files = get_json_config(expected_keys=["reward_config",
-                                           "hysr_config"])
-    
-    return files["reward_config"],files["hysr_config"]
+    logging.basicConfig(format="hysr_one_ball_reset | %(message)s", level=logging.INFO)
+    files = get_json_config(expected_keys=["reward_config", "hysr_config"])
+
+    return files["reward_config"], files["hysr_config"]
 
 
 def _run():
-    reward_config,hysr_config = _configure()
+    reward_config, hysr_config = _configure()
     execute(reward_config, hysr_config)
+
 
 if __name__ == "__main__":
     _run()
