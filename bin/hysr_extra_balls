@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 
-import sys, random, time, logging, numpy
-import o80, pam_mujoco
-from lightargs import BrightArgs, FileExists
+import logging
+import numpy
+import o80
+import pam_mujoco
 from learning_table_tennis_from_scratch.hysr_one_ball import (
     HysrOneBall,
     HysrOneBallConfig,
@@ -69,6 +70,7 @@ def execute(reward_config_path, hysr_config_path):
         main_ball_x, main_ball_z = center_x, center_z
         # putting all extra balls in a vertical grid
         # that moves from (y value) y_start to y_end
+
         def _grid(y):
             x_grid, z_grid = numpy.mgrid[min_x:max_x:step_x, min_z:max_z:step_z]
             xz_grid = numpy.vstack((x_grid.flatten(), z_grid.flatten())).T

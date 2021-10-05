@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 
-import time, sys, logging
-import shared_memory, signal_handler, o80, o80_pam, pam_mujoco, pam_mujoco_wrp
-from lightargs import BrightArgs, Set, Range, Positive, FileExists
+import signal_handler
+import o80
+import pam_mujoco
+import pam_mujoco_wrp
 from learning_table_tennis_from_scratch import configure_mujoco
 from learning_table_tennis_from_scratch.hysr_one_ball import HysrOneBallConfig
-from learning_table_tennis_from_scratch.rewards import JsonReward
 from learning_table_tennis_from_scratch.jsonconfig import get_json_config
 
 
@@ -26,7 +26,7 @@ The "visualization" instance of pam_mujoco starts with graphics,
 and thus allows visualization of both the "simulation" and
 "extra_balls_0" mujoco.
 
-This is useful because "simulation" and "extra_balls_0" run in 
+This is useful because "simulation" and "extra_balls_0" run in
 bursting mode, which results in low framerate graphics. "visualization"
 does not run in bursting mode, resulting in smoother graphics
 

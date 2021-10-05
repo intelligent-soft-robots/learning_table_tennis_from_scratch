@@ -11,11 +11,9 @@ def run_stable_baselines(
     log_tensorboard=False,
 ):
 
-    import gym
     from stable_baselines.common.policies import MlpPolicy
     from stable_baselines.common import make_vec_env
     from stable_baselines import PPO2
-    from stable_baselines.common.env_checker import check_env
 
     env_config = {
         "reward_config_file": reward_config_file,
@@ -44,20 +42,7 @@ def run_openai_baselines(
     log_tensorboard=False,
     model_file_path=None,
 ):
-
-    import baselines
-    from baselines.common.vec_env import VecFrameStack, VecNormalize, VecEnv
-    from baselines.common.vec_env.vec_video_recorder import VecVideoRecorder
-    from baselines.common.vec_env.dummy_vec_env import DummyVecEnv
-    from baselines.common.cmd_util import (
-        common_arg_parser,
-        parse_unknown_args,
-        make_env,
-    )
-    from baselines.common.tf_util import get_session
-    from baselines import logger
     import tensorflow as tf
-
     from stable_baselines.common import make_vec_env
 
     env_config = {

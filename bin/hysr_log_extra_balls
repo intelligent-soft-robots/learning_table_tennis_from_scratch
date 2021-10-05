@@ -1,12 +1,10 @@
 #!/usr/bin/env python3
 
-import math
 import signal_handler
 import o80
 import pam_mujoco
 from learning_table_tennis_from_scratch import configure_mujoco
 from learning_table_tennis_from_scratch.hysr_one_ball import HysrOneBallConfig
-from learning_table_tennis_from_scratch.rewards import JsonReward
 from learning_table_tennis_from_scratch.jsonconfig import get_json_config
 
 

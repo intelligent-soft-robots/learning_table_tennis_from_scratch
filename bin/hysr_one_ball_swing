@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 
-import sys, random, logging
-import o80, context
-from lightargs import BrightArgs, FileExists
+import logging
+import o80
+import context
 from learning_table_tennis_from_scratch.hysr_one_ball import (
     HysrOneBall,
     HysrOneBallConfig,

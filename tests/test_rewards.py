@@ -1,5 +1,6 @@
-import unittest, tempfile
-from learning_table_tennis_from_scratch.rewards import *
+import unittest
+import tempfile
+from learning_table_tennis_from_scratch.rewards import JsonReward, Reward, SmashReward
 
 
 class REWARDS_TESTCASE(unittest.TestCase):

@@ -1,14 +1,9 @@
 #!/usr/bin/env python3
 
-import sys, os, json
-import pam_interface
-from lightargs import BrightArgs, FileExists
-from learning_table_tennis_from_scratch.rewards import JsonReward
+import os
+import json
 from learning_table_tennis_from_scratch.models import run_stable_baselines
 from learning_table_tennis_from_scratch.models import run_openai_baselines
-from learning_table_tennis_from_scratch.hysr_one_ball import HysrOneBallConfig
-from learning_table_tennis_from_scratch.ppo_config import PPOConfig
-from learning_table_tennis_from_scratch.ppo_config import OpenAIPPOConfig
 from learning_table_tennis_from_scratch.jsonconfig import get_json_config
 
 

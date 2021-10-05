@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 
-import math
 import pam_mujoco
 from learning_table_tennis_from_scratch import configure_mujoco
 from learning_table_tennis_from_scratch.hysr_one_ball import HysrOneBallConfig
