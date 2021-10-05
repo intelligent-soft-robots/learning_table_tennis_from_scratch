@@ -122,18 +122,18 @@ class _BallBehavior:
     _trajectory_reader = context.BallTrajectories()
 
     def __init__(self, line=False, index=False, random=False):
-        not_false = [a for a in (line, index, random) if a != False]
+        not_false = [a for a in (line, index, random) if a]
         if not not_false:
             raise ValueError("type of ball behavior not specified")
         if len(not_false) > 1:
             raise ValueError("type of ball behavior over-specified")
-        if line != False:
+        if line:
             self.type = self.LINE
             self.value = line
-        elif index != False:
+        elif index:
             self.type = self.INDEX
             self.value = index
-        elif random != False:
+        elif random:
             self.type = self.RANDOM
 
     def get_trajectory(self):
