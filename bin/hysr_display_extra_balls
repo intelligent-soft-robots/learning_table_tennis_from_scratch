@@ -7,6 +7,7 @@ from learning_table_tennis_from_scratch.hysr_one_ball import HysrOneBallConfig
 from learning_table_tennis_from_scratch.rewards import JsonReward, compute_rewards
 from learning_table_tennis_from_scratch.jsonconfig import get_json_config
 
+
 def run(setid, nb_balls, target, reward_function):
 
     segment_id = configure_mujoco.get_extra_balls_segment_id(0)
@@ -29,13 +30,13 @@ def run(setid, nb_balls, target, reward_function):
     for episode in episode_numbers:
         print("\nEpisode:", episode)
         observations = [e[0] for e in episodes if e[1] == episode]
-        rewards = compute_rewards(reward_function,target,nb_balls,observations)
+        rewards = compute_rewards(reward_function, target, nb_balls, observations)
         for index, reward in enumerate(rewards):
             print("ball {}:\t{}".format(index, reward))
 
     print()
 
-            
+
 def _configure():
     files = get_json_config(expected_keys=["reward_config", "hysr_config"])
     return files["reward_config"], files["hysr_config"]
@@ -43,15 +44,14 @@ def _configure():
 
 def _run():
     reward_path, hysr_path = _configure()
-    print(
-        "\nusing configuration files:\n- {}\n- {}\n".format(reward_path, hysr_path)
-    )
+    print("\nusing configuration files:\n- {}\n- {}\n".format(reward_path, hysr_path))
     reward_function = JsonReward.get(reward_path)
     hysr_config = HysrOneBallConfig.from_json(hysr_path)
     target = hysr_config.target_position
     nb_balls = hysr_config.extra_balls_per_set
-    setid=0
+    setid = 0
     run(setid, nb_balls, target, reward_function)
+
 
 if __name__ == "__main__":
     _run()

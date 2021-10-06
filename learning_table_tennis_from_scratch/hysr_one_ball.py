@@ -39,7 +39,7 @@ class HysrOneBallConfig:
         "frequency_monitoring_step",
         "frequency_monitoring_episode",
         "robot_integrity_check",
-        "robot_integrity_threshold"
+        "robot_integrity_threshold",
     )
 
     def __init__(self):
@@ -111,7 +111,7 @@ class _BallBehavior:
     RANDOM = -3
 
     _trajectory_reader = context.BallTrajectories()
-    
+
     def __init__(self, line=False, index=False, random=False):
         not_false = [a for a in (line, index, random) if a != False]
         if not not_false:
@@ -160,7 +160,7 @@ class _ExtraBall:
         self.segment_id = segment_id
         self.ball_status = ball_status
         self.ball_behavior = None
-        
+
     def reset_contact(self):
         self.handle.reset_contact(self.segment_id)
 
@@ -178,7 +178,9 @@ class _ExtraBall:
 
 def _get_extra_balls(setid, nb_balls, robot_position, target_position, graphics):
 
-    values = configure_mujoco.configure_extra_set(setid, nb_balls, robot_position, graphics)
+    values = configure_mujoco.configure_extra_set(
+        setid, nb_balls, robot_position, graphics
+    )
 
     handle = values[0]
     mujoco_id = values[1]
@@ -186,9 +188,9 @@ def _get_extra_balls(setid, nb_balls, robot_position, target_position, graphics)
     robot_segment_id = values[3]
     ball_segment_ids = values[4]
     extra_balls_frontend = handle.get_extra_balls_frontend(
-        configure_mujoco.get_extra_balls_segment_id(setid),
-        nb_balls )
-    
+        configure_mujoco.get_extra_balls_segment_id(setid), nb_balls
+    )
+
     # instance of o80_pam.o80_robot_mirroring.o80RobotMirroring,
     # to control the robot
     mirroring = handle.interfaces[robot_segment_id]
@@ -253,7 +255,7 @@ class HysrOneBall:
         #       an episode will end based on a threshold
         #       in the z component of the ball position
         #       (see method _episode_over)
-        
+
         # this instance of HysrOneBall interacts with several
         # instances of mujoco (pseudo real robot, simulated robot,
         # possibly instances of mujoco for extra balls).
@@ -271,7 +273,7 @@ class HysrOneBall:
         # to control the simulated robot (joint control)
         self._simulated_robot_handle = configure_mujoco.configure_simulation(
             robot_position=hysr_config.robot_position,
-            graphics=hysr_config.graphics_simulation
+            graphics=hysr_config.graphics_simulation,
         )
         self._mujoco_ids.append(self._simulated_robot_handle.get_mujoco_id())
 
@@ -424,11 +426,13 @@ class HysrOneBall:
         # if set, logging the position of the robot at the end of reset, and possibly
         # get a warning when this position drifts as the number of episodes increase
         if hysr_config.robot_integrity_check is not None:
-            self._robot_integrity = robot_integrity.RobotIntegrity(hysr_config.robot_integrity_threshold,
-                                                                   file_path=hysr_config.robot_integrity_check)
+            self._robot_integrity = robot_integrity.RobotIntegrity(
+                hysr_config.robot_integrity_threshold,
+                file_path=hysr_config.robot_integrity_check,
+            )
         else:
             self._robot_integrity = None
-        
+
         # when starting, the real robot and the virtual robot(s)
         # may not be aligned, which may result in graphical issues,
         # so aligning them
@@ -453,14 +457,18 @@ class HysrOneBall:
         # see comments in _BallBehavior, in this file
         self._ball_behavior = _BallBehavior(line=line, index=index, random=random)
 
-    def set_extra_ball_behavior(self, ball_index, line=False, index=False, random=False):
+    def set_extra_ball_behavior(
+        self, ball_index, line=False, index=False, random=False
+    ):
         # overwrite the ball behavior of the extra ball (set to random
         # selected pre-recorded trajectory in constructor)
         # see comments in _BallBehavior, in this file
-        if ball_index<0 or ball_index>=len(self._extra_balls):
+        if ball_index < 0 or ball_index >= len(self._extra_balls):
             raise IndexError(ball_index)
-        self._extra_balls[ball_index].ball_behavior = _BallBehavior(line=line, index=index, random=random)
-            
+        self._extra_balls[ball_index].ball_behavior = _BallBehavior(
+            line=line, index=index, random=random
+        )
+
     def _create_observation(self):
         (
             pressures_ago,
@@ -521,29 +529,33 @@ class HysrOneBall:
         duration = o80.Duration_us.milliseconds(int(sampling_rate_ms))
         # loading the ball behavior trajectory of each extra balls.
         # If set_extra_ball_behavior has not been called for a given
-        # extra ball, this trajectory will be None 
-        trajectories = [extra_ball.ball_behavior.get_trajectory()
-                        if extra_ball.ball_behavior is not None else None
-                        for extra_ball in self._extra_balls]
+        # extra ball, this trajectory will be None
+        trajectories = [
+            extra_ball.ball_behavior.get_trajectory()
+            if extra_ball.ball_behavior is not None
+            else None
+            for extra_ball in self._extra_balls
+        ]
         # None trajectories (i.e. set_extra_ball_behavior uncalled) then
         # setting a random trajectory
-        none_trajectory_indexes = [index for index,value in enumerate(trajectories)
-                             if value is None]
+        none_trajectory_indexes = [
+            index for index, value in enumerate(trajectories) if value is None
+        ]
         if none_trajectory_indexes:
-            extra_trajectories = self._trajectory_reader.get_different_random_trajectories(
-                len(none_trajectory_indexes)
+            extra_trajectories = (
+                self._trajectory_reader.get_different_random_trajectories(
+                    len(none_trajectory_indexes)
+                )
             )
-            for index,trajectory in zip(none_trajectory_indexes,extra_trajectories):
-                trajectories[index]=trajectory
+            for index, trajectory in zip(none_trajectory_indexes, extra_trajectories):
+                trajectories[index] = trajectory
         for index_ball, (ball, trajectory) in enumerate(
             zip(self._extra_balls, trajectories)
         ):
             # going to first trajectory point
             item3d.set_position(trajectory[0].position)
             item3d.set_velocity(trajectory[0].velocity)
-            ball.frontend.add_command(
-                index_ball, item3d, o80.Mode.OVERWRITE
-            )
+            ball.frontend.add_command(index_ball, item3d, o80.Mode.OVERWRITE)
             # loading full trajectory
             for item in trajectory[1:]:
                 item3d.set_position(item.position)
@@ -686,20 +698,20 @@ class HysrOneBall:
         # as episode increase (or if it not what is expected at all).
         # raise an exception if drifted too much).
         if self._robot_integrity is not None:
-            _,_,joint_positions,_ = self._pressure_commands.read()
+            _, _, joint_positions, _ = self._pressure_commands.read()
             warning = self._robot_integrity.set(joint_positions)
             if warning:
                 self._robot_integrity.close()
                 self.close()
-                raise robot_integrity.RobotIntegrityException(self._robot_integrity,
-                                                              joint_positions)
-            
-            
+                raise robot_integrity.RobotIntegrityException(
+                    self._robot_integrity, joint_positions
+                )
+
         # a new episode starts
         self._step_number = 0
         self._episode_number += 1
         self._share_episode_number(self._episode_number)
-        
+
         # returning an observation
         return self._create_observation()
 
@@ -707,8 +719,8 @@ class HysrOneBall:
 
         # if self._nb_steps_per_episode is positive,
         # exiting based on the number of steps
-        if self._nb_steps_per_episode>0:
-            if self._step_number>= self._nb_steps_per_episode:
+        if self._nb_steps_per_episode > 0:
+            if self._step_number >= self._nb_steps_per_episode:
                 return True
             else:
                 return False
@@ -753,7 +765,9 @@ class HysrOneBall:
             if self._extra_balls_frontend is not None:
                 observation = self._extra_balls_frontend.latest()
                 # robot racket cartesian position
-                robot_cartesian_position = observation.get_extended_state().robot_position
+                robot_cartesian_position = (
+                    observation.get_extended_state().robot_position
+                )
                 # list: for each ball, if a contact occured during this episode so far
                 # (not necessarily during previous step)
                 contacts = observation.get_extended_state().contacts
@@ -761,8 +775,13 @@ class HysrOneBall:
                 state = observation.get_observed_states()
                 ball_0_position = state.get(0).get_position()
                 ball_0_velocity = state.get(0).get_velocity()
-                print(robot_cartesian_position,contacts[0],ball_0_position,ball_0_velocity)
-            
+                print(
+                    robot_cartesian_position,
+                    contacts[0],
+                    ball_0_position,
+                    ball_0_velocity,
+                )
+
         # convert action [ago1,antago1,ago2] to list suitable for
         # o80 ([(ago1,antago1),(),...])
         pressures = _convert_pressures_in(list(action))

@@ -28,7 +28,7 @@ def execute(reward_config_path, hysr_config_path):
     ###################################
     # fixed ball position, no contact #
     ###################################
-    
+
     def _fixed_position(ball_position):
         hysr.set_ball_behavior(line=(ball_position, ball_position, 5000))
         hysr.reset()
@@ -104,7 +104,7 @@ def execute(reward_config_path, hysr_config_path):
                 # after contact, mujoco takes over the ball trajectory (i.e. gravity),
                 # resetting the contact allows to keep control of the ball
                 hysr.deactivate_contact()
-                #hysr.reset_contact()
+                # hysr.reset_contact()
                 reloaded = True
         print(
             "\t\treward: *",
@@ -130,7 +130,6 @@ def execute(reward_config_path, hysr_config_path):
 
     print("ball flying to racket, and bouncing")
     _moving([0.70, 2.7, 0.28], [0.70, -1.0, 0.28], 3000)
-
 
     print("repeat")
     _moving([0.70, 2.7, 0.28], [0.70, -1.0, 0.28], 3000)
@@ -177,20 +176,24 @@ def execute(reward_config_path, hysr_config_path):
     )
 
     hysr.close()
-    
+
+
 def _configure():
-    files = get_json_config(expected_keys=["reward_config",
-                                           "hysr_config"])
-    
-    return files["reward_config"],files["hysr_config"]
+    files = get_json_config(expected_keys=["reward_config", "hysr_config"])
+
+    return files["reward_config"], files["hysr_config"]
 
 
 def _run():
-    logging.basicConfig(format='hysr_one_ball_reward_tests | %(message)s',level=logging.INFO)
-    reward_config,hysr_config = _configure()
-    print("\nusing configuration files:\n- {}\n- {}\n".format(reward_config,
-                                                              hysr_config))
-    execute(reward_config,hysr_config)
+    logging.basicConfig(
+        format="hysr_one_ball_reward_tests | %(message)s", level=logging.INFO
+    )
+    reward_config, hysr_config = _configure()
+    print(
+        "\nusing configuration files:\n- {}\n- {}\n".format(reward_config, hysr_config)
+    )
+    execute(reward_config, hysr_config)
+
 
 if __name__ == "__main__":
     _run()
