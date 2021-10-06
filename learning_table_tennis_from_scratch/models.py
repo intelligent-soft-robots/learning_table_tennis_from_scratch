@@ -68,10 +68,6 @@ def run_openai_baselines(
     }
     env = make_vec_env(HysrOneBallEnv, env_kwargs=env_config)
 
-    print("models", env)
-    for k, v in dir(env).items():
-        print(k, "\t", v)
-
     ppo_config = OpenAIPPOConfig.from_json(ppo_config_file)
     total_timesteps = ppo_config["num_timesteps"]
     del ppo_config["num_timesteps"]
