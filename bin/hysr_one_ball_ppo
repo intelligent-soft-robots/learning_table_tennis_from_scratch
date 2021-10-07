@@ -24,7 +24,7 @@ def _read_ppo_common_config(jsonpath):
     expected_keys = ("use_openai_baselines", "log_episodes", "log_tensorboard")
 
     for key in expected_keys:
-        if not key in conf.keys():
+        if key not in conf.keys():
             raise KeyError("failed to find key {} in {}".format(key, jsonpath))
 
     return conf
