@@ -66,7 +66,6 @@ class HysrTest(unittest.TestCase):
         ball_status = context.BallStatus([0, 0, 0])
         ci = _ContactInfo()
 
-        traj = []
         for pos in range(-2, 2):
             ball_status.update([pos, pos, pos], [1, 1, 1], ci)
 

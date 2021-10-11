@@ -1,5 +1,6 @@
-import unittest, tempfile
-from learning_table_tennis_from_scratch.rewards import *
+import unittest
+import tempfile
+from learning_table_tennis_from_scratch.rewards import JsonReward, Reward, SmashReward
 
 
 class REWARDS_TESTCASE(unittest.TestCase):
@@ -27,8 +28,8 @@ class REWARDS_TESTCASE(unittest.TestCase):
         jsonpath = JsonReward.default_path()
         no_exception = True
         try:
-            reward_function = JsonReward.get(jsonpath)
-        except:
+            JsonReward.get(jsonpath)
+        except Exception:
             no_exception = False
         self.assertTrue(no_exception)
 

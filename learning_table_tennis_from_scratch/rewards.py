@@ -11,14 +11,12 @@ def _no_hit_reward(min_distance_ball_racket):
 
 
 def _return_task_reward(min_distance_ball_target, c, rtt_cap):
-    distance_reward_baseline = 3.0
     reward = 1.0 - ((min_distance_ball_target / c) ** 0.75)
     reward = max(reward, rtt_cap)
     return reward
 
 
 def _smash_task_reward(min_distance_ball_target, max_ball_velocity, c, rtt_cap):
-    distance_reward_baseline = 3.0
     reward = 1.0 - ((min_distance_ball_target / c) ** 0.75)
     reward = reward * max_ball_velocity
     reward = max(reward, rtt_cap)
@@ -174,7 +172,8 @@ def compute_rewards(reward_function, target, nb_balls, observations, episode=Non
     This method returns a list of reward {extra ball index:reward}
     :param function reward_function: reward function, expected to be an instance
                                      of either Reward or SmashReward
-    :param tuple target: the reward function required a 3d position target as input parameter
+    :param tuple target: the reward function required a 3d position target as
+        input parameter
     :param int nb_balls: number of extra balls
     :param list observations: as returned by frontend.get_latest_observation
     :param int episode: if not None, filter observations to be of the given episode
@@ -185,6 +184,8 @@ def compute_rewards(reward_function, target, nb_balls, observations, episode=Non
     if episode:
         episodes = [(o, o.get_extended_state().episode) for o in observations]
         observations_ = [e[0] for e in episodes if e[1] == episode]
+        # FIXME: observations is not used.  Can this be removed?  In this case
+        # the `episode` argument of the function can be removed as well.
 
     # some reformatting of data, for balls positions and velocities
     states = [o.get_observed_states() for o in observations]

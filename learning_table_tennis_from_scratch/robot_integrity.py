@@ -1,16 +1,21 @@
 class RobotIntegrity:
 
     """
-    When running the real robot, muscles may be affected by various physical effects (e.g. heating, tear, etc ...).
-    Code in this class aims at monitoring this, by comparing the (joint) positions (in radian) of the robot against an expected one,
-    and returning a warning if the positions are too different. This was developed with the idea that this could be
-    used at the end of the call to the environment reset function, to be sure code would exit if the robot starts
-    behaving in non-expected way. Optionally, the positions of the robot are recorded in a file, on the purpose
-    of observing how the position of the robot may drift with usage.
+    When running the real robot, muscles may be affected by various physical
+    effects (e.g. heating, tear, etc ...).  Code in this class aims at
+    monitoring this, by comparing the (joint) positions (in radian) of the
+    robot against an expected one, and returning a warning if the positions are
+    too different. This was developed with the idea that this could be used at
+    the end of the call to the environment reset function, to be sure code
+    would exit if the robot starts behaving in non-expected way. Optionally,
+    the positions of the robot are recorded in a file, on the purpose of
+    observing how the position of the robot may drift with usage.
 
-    :param float warning_threshold: in radian, if one of the dof of the robot differs to the reference
-    position more than this threshold, warnings will be returned
-    :param str file_path: optional (None by default), positions of the robot will be written to the file
+    :param float warning_threshold: in radian, if one of the dof of the robot
+        differs to the reference position more than this threshold, warnings
+        will be returned
+    :param str file_path: optional (None by default), positions of the robot
+        will be written to the file
     """
 
     def __init__(self, warning_threshold: float, file_path: str = None):
