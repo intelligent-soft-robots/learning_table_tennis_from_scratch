@@ -92,6 +92,9 @@ fi
 
 # building the command
 
+echo ""
+echo "xterms: ${xterms}"
+echo "" 
 
 if [ "$xterms" = true ]; then
     # all mujoco instances started in a

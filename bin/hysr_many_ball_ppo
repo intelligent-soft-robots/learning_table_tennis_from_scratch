@@ -3,6 +3,8 @@
 import sys,os,json
 import pam_interface
 from lightargs import BrightArgs, FileExists
+from learning_table_tennis_from_scratch.hysr_one_ball_env import HysrOneBallEnv
+from learning_table_tennis_from_scratch.hysr_many_ball_env import HysrManyBallEnv
 from learning_table_tennis_from_scratch.rewards import JsonReward
 from learning_table_tennis_from_scratch.models import run_stable_baselines
 from learning_table_tennis_from_scratch.models import run_openai_baselines
@@ -10,7 +12,7 @@ from learning_table_tennis_from_scratch.hysr_one_ball import HysrOneBallConfig
 from learning_table_tennis_from_scratch.ppo_config import PPOConfig
 from learning_table_tennis_from_scratch.ppo_config import OpenAIPPOConfig
 from learning_table_tennis_from_scratch.jsonconfig import get_json_config
-from learning_table_tennis_from_scratch.hysr_one_ball_env import HysrOneBallEnv
+
 
 
 
@@ -44,10 +46,10 @@ def _execute(pam_config,
     common_conf = _read_ppo_common_config(ppo_common_config)
     
     if common_conf["use_openai_baselines"]:
-        run_openai_baselines(HysrOneBallEnv, pam_config, reward_config, hysr_config, ppo_config,
+        run_openai_baselines(HysrManyBallEnv, pam_config, reward_config, hysr_config, ppo_config,
                              common_conf["log_episodes"], common_conf["log_tensorboard"])
     else:
-        run_stable_baselines(HysrOneBallEnv, pam_config, reward_config, hysr_config, ppo_config,
+        run_stable_baselines(HysrManyBallEnv, pam_config, reward_config, hysr_config, ppo_config,
                              common_conf["log_episodes"], common_conf["log_tensorboard"])
 
         
