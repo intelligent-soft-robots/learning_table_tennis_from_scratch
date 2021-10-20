@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-import sys,os,json
+import sys, os, json
 import pam_interface
 from lightargs import BrightArgs, FileExists
 from learning_table_tennis_from_scratch.hysr_one_ball_env import HysrOneBallEnv
@@ -14,54 +14,66 @@ from learning_table_tennis_from_scratch.ppo_config import OpenAIPPOConfig
 from learning_table_tennis_from_scratch.jsonconfig import get_json_config
 
 
-
-
 def _read_ppo_common_config(jsonpath):
 
     if not os.path.isfile(jsonpath):
-            raise FileNotFoundError("failed to find reward configuration file: {}".format(jsonpath))
-    try :
+        raise FileNotFoundError(
+            "failed to find reward configuration file: {}".format(jsonpath)
+        )
+    try:
         with open(jsonpath) as f:
-            conf=json.load(f)
+            conf = json.load(f)
     except Exception as e:
-        raise ValueError("failed to parse reward json configuration file {}: {}".format(jsonpath,e))
-    
-    expected_keys = ("use_openai_baselines",
-                     "log_episodes",
-                     "log_tensorboard")
+        raise ValueError(
+            "failed to parse reward json configuration file {}: {}".format(jsonpath, e)
+        )
+
+    expected_keys = ("use_openai_baselines", "log_episodes", "log_tensorboard")
 
     for key in expected_keys:
         if not key in conf.keys():
-            raise KeyError("failed to find key {} in {}".format(key,jsonpath))
+            raise KeyError("failed to find key {} in {}".format(key, jsonpath))
 
     return conf
-    
 
-def _execute(pam_config,
+
+def _execute(pam_config, reward_config, hysr_config, ppo_config, ppo_common_config):
+
+    common_conf = _read_ppo_common_config(ppo_common_config)
+
+    if common_conf["use_openai_baselines"]:
+        run_openai_baselines(
+            HysrManyBallEnv,
+            pam_config,
             reward_config,
             hysr_config,
             ppo_config,
-            ppo_common_config):
-
-    common_conf = _read_ppo_common_config(ppo_common_config)
-    
-    if common_conf["use_openai_baselines"]:
-        run_openai_baselines(HysrManyBallEnv, pam_config, reward_config, hysr_config, ppo_config,
-                             common_conf["log_episodes"], common_conf["log_tensorboard"])
+            common_conf["log_episodes"],
+            common_conf["log_tensorboard"],
+        )
     else:
-        run_stable_baselines(HysrManyBallEnv, pam_config, reward_config, hysr_config, ppo_config,
-                             common_conf["log_episodes"], common_conf["log_tensorboard"])
-
-        
+        run_stable_baselines(
+            HysrManyBallEnv,
+            pam_config,
+            reward_config,
+            hysr_config,
+            ppo_config,
+            common_conf["log_episodes"],
+            common_conf["log_tensorboard"],
+        )
 
 
 def _configure():
-    files = get_json_config(expected_keys=["pam_config",
-                                           "reward_config",
-                                           "hysr_config",
-                                           "ppo_config",
-                                           "ppo_common_config"])
-    
+    files = get_json_config(
+        expected_keys=[
+            "pam_config",
+            "reward_config",
+            "hysr_config",
+            "ppo_config",
+            "ppo_common_config",
+        ]
+    )
+
     return files
 
 
@@ -74,8 +86,9 @@ def _run():
         config["reward_config"],
         config["hysr_config"],
         config["ppo_config"],
-        config["ppo_common_config"]
+        config["ppo_common_config"],
     )
+
 
 if __name__ == "__main__":
     _run()

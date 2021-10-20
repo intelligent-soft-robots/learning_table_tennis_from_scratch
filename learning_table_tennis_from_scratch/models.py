@@ -4,6 +4,7 @@ from learning_table_tennis_from_scratch.ppo_config import OpenAIPPOConfig
 
 
 def run_stable_baselines(
+    env,
     pam_config_file,
     reward_config_file,
     hysr_one_ball_config_file,
@@ -39,6 +40,7 @@ def run_stable_baselines(
 
 
 def run_openai_baselines(
+    env,
     pam_config_file,
     reward_config_file,
     hysr_one_ball_config_file,
@@ -69,7 +71,7 @@ def run_openai_baselines(
         "log_episodes": log_episodes,
         "log_tensorboard": log_tensorboard,
     }
-    env = make_vec_env(HysrOneBallEnv, env_kwargs=env_config)
+    env = make_vec_env(env, env_kwargs=env_config)
 
     ppo_config = OpenAIPPOConfig.from_json(ppo_config_file)
     total_timesteps = ppo_config["num_timesteps"]

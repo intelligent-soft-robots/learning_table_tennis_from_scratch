@@ -1,6 +1,6 @@
 {
     "gamma":0.9999,
-    "num_timesteps":200000,
+    "num_timesteps":100000,
     "ent_coef":0.00,
     "lr":1e-4,
     "vf_coef":0.66023,   
@@ -13,7 +13,7 @@
     "num_layers":1,
     "num_hidden":512,
     "activation":"tf.tanh",
-    "nsteps": 512,
+    "nsteps": 2048,
     "save_path": "/home/sguist/experiments_local/logs/test3/",
     "log_interval":1,
     "save_interval":1
