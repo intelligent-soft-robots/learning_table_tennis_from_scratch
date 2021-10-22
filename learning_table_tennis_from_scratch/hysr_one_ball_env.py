@@ -77,6 +77,8 @@ class HysrOneBallEnv(gym.Env):
 
         super().__init__()
 
+        print("HysrOneBallEnv log eps:", log_episodes)
+
         self._log_episodes = log_episodes
         self._log_tensorboard = log_tensorboard
 
@@ -133,11 +135,12 @@ class HysrOneBallEnv(gym.Env):
             self.data_buffer = []
 
         # initialize initial action (for action diffs)
-        # this could be parameterized
         self.last_action = np.zeros(self._nb_dofs * 2)
         for dof in range(self._nb_dofs):
-            self.last_action[2 * dof] = 0.5
-            self.last_action[2 * dof + 1] = 0.5
+            self.last_action[2 * dof] = self._reverse_scale_pressure(dof, True, self._hysr._reference_posture[dof][0])
+            self.last_action[2 * dof + 1] = self._reverse_scale_pressure(dof, False, self._hysr._reference_posture[dof][1])
+
+            
 
     def _bound_pressure(self, dof, ago, value):
         if ago:
@@ -206,7 +209,7 @@ class HysrOneBallEnv(gym.Env):
         action_orig = action.copy()
 
         # casting similar to old code
-        action_diffs_factor = 0.25  # this could maybe be a hyperparameter
+        action_diffs_factor = self._pressure_change_range/18000
         action = action * action_diffs_factor
         action_sigmoid = [1 / (1 + np.exp(-a)) - 0.5 for a in action]
         action = [
