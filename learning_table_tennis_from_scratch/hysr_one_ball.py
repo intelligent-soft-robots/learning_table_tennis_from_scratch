@@ -6,6 +6,7 @@ import time
 
 import o80
 import o80_pam
+import pam_interface
 import pam_mujoco
 import context
 import frequency_monitoring
@@ -625,7 +626,7 @@ class HysrOneBall:
         self._simulated_robot_handle.reset()
         for handle in _ExtraBall.handles.values():
             handle.reset()
-
+        self._move_to_pressure(self._hysr_config.reference_posture)
 
     def _move_to_pressure(self,pressures):
         # moves to pseudo-real robot to desired pressure in synchronization
