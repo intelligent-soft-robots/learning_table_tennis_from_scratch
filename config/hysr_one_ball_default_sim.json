@@ -2,22 +2,28 @@
     "o80_pam_time_step":0.002,
     "mujoco_time_step":0.002,
     "algo_time_step":0.01,
+    "robot_position":[0.435, 0.1175, -0.0],
     "target_position":[0.45,2.7,-0.45],
-    "reference_posture":[[19900,16000],[16800,19100],[18700,17300],[18000,18000]],
+    "reference_posture":[[15000,15000],[15000,15800],[15000,15000],[15000,15000]],
     "world_boundaries":{
 	"min":[0.0,-1.0,0.17],
 	"max":[1.6,3.5,1.5]
     },
-    "pressure_change_range":18000,
+    "pam_config_file":"/home/sguist/Software/ISR/workspace/src/pam_interface/config/pam_sim.json",
+    "pressure_change_range":1800,
     "trajectory":-1,
     "accelerated_time":true,
     "instant_reset":true,
-    "extra_balls_sets":1,
+    "extra_balls_sets":-1,
+    "nb_steps_per_episode":-1,
     "extra_balls_per_set":20,
     "graphics_pseudo_real":false,
     "graphics_simulation":false,
-    "graphics_extra_balls":true,
-    "frequency_monitoring_episode":true,
-    "frequency_monitoring_step":true
-
+    "graphics_extra_balls":false,
+    "graphics":true,
+    "xterms":true,
+    "frequency_monitoring_episode":false,
+    "frequency_monitoring_step":false,
+    "robot_integrity_check":false,
+    "robot_integrity_threshold":0.6
 }
