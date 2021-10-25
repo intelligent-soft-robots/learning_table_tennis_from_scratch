@@ -82,6 +82,8 @@ class OpenAIPPOConfig:
         "num_hidden",
         "activation",
         "nsteps",
+        "save_path",
+        "load_path"
     )  # , "seed")
 
     def __init__(self):

@@ -56,6 +56,8 @@ def run_openai_baselines(
     ppo_config = OpenAIPPOConfig.from_json(ppo_config_file)
     total_timesteps = ppo_config["num_timesteps"]
     del ppo_config["num_timesteps"]
+    save_path = ppo_config["save_path"]
+    del ppo_config["save_path"]
 
     if ppo_config["activation"] == "tf.tanh":
         ppo_config["activation"] = tf.tanh
@@ -82,6 +84,10 @@ def run_openai_baselines(
             total_timesteps=0,
             **ppo_config
         )
+
+    if save_path:
+        model.save(save_path)
+        print("model saved to", save_path)
 
     return model, env
 
