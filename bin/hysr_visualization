@@ -36,15 +36,23 @@ does not run in bursting mode, resulting in smoother graphics
 class _Config:
     mujoco_id_to = "visualization"
     mujoco_id_from = "simulation"
+    segment_id_table = pam_mujoco.segment_ids.table
     segment_id_robot = pam_mujoco.segment_ids.mirroring
     segment_id_ball = pam_mujoco.segment_ids.ball
     segment_id_hit_point = pam_mujoco.segment_ids.hit_point
     segment_id_goal = pam_mujoco.segment_ids.goal
     nb_extra_balls = 0
     robot_position = None
+    robot_orientation = None
+    table_position = None
+    table_orientation = None
 
 def _get_handle_to(mujoco_id,
                    robot_position,
+                   robot_orientation,
+                   table_position,
+                   table_orientation,
+                   segment_id_table,
                    segment_id_robot,
                    segment_id_ball,
                    segment_id_goal,
@@ -65,8 +73,12 @@ def _get_handle_to(mujoco_id,
     else:
         balls = []
 
+    table = pam_mujoco.MujocoTable(segment_id_table,
+                                   position=table_position,
+                                   orientation=table_orientation)
     robot = pam_mujoco.MujocoRobot(segment_id_robot,
                                    position=robot_position,
+                                   orientation=robot_orientation,
                                    control=pam_mujoco.MujocoRobot.JOINT_CONTROL)
     ball = pam_mujoco.MujocoItem(segment_id_ball,
                                  control=pam_mujoco.MujocoItem.CONSTANT_CONTROL,
@@ -77,7 +89,7 @@ def _get_handle_to(mujoco_id,
                                       control=pam_mujoco.MujocoItem.CONSTANT_CONTROL)
         
     handle = pam_mujoco.MujocoHandle(mujoco_id,
-                                     table=True,
+                                     table=table,
                                      robot1=robot,
                                      balls=(ball,),
                                      goals=(goal,),
@@ -103,6 +115,7 @@ def _execute_visualization(config):
         segment_id_extra_balls_to = None
         extra_balls_segment_ids_to = None
 
+    segment_id_table_to = "visualization_table"
     segment_id_robot_to = "visualization_robot"
     segment_id_ball_to = "visualization_ball"
     segment_id_goal_to = "visualization_goal"
@@ -110,6 +123,10 @@ def _execute_visualization(config):
         
     handle_to = _get_handle_to(config.mujoco_id_to,
                                config.robot_position,
+                               config.robot_orientation,
+                               config.table_position,
+                               config.table_orientation,
+                               segment_id_table_to,
                                segment_id_robot_to,
                                segment_id_ball_to,
                                segment_id_goal_to,
@@ -215,6 +232,9 @@ def execute():
     hysr_config = HysrOneBallConfig.from_json(hysr_path)
     config = _Config()
     config.robot_position=hysr_config.robot_position
+    config.robot_orientation=hysr_config.robot_orientation
+    config.table_position=hysr_config.table_position
+    config.table_orientation=hysr_config.table_orientation
     if hysr_config.extra_balls_sets>0:
         config.nb_extra_balls = hysr_config.extra_balls_per_set
     _execute_visualization(config)
