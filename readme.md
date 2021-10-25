@@ -188,7 +188,7 @@ a row without restarting the robots. If the configuration is changed, then the r
 In any terminal, type:
 
 ```
-pam_mujoco_stop_all
+hysr_stop
 ```
 
 ## Extra executables

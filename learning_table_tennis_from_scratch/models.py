@@ -11,11 +11,9 @@ def run_stable_baselines(
     log_tensorboard=False,
 ):
 
-    import gym
     from stable_baselines.common.policies import MlpPolicy
     from stable_baselines.common import make_vec_env
     from stable_baselines import PPO2
-    from stable_baselines.common.env_checker import check_env
 
     env_config = {
         "reward_config_file": reward_config_file,
@@ -37,27 +35,14 @@ def run_stable_baselines(
 
 
 def run_openai_baselines(
-        reward_config_file,
-        hysr_one_ball_config_file,
-        ppo_config_file,
-        log_episodes=False,
-        log_tensorboard=False,
-        model_file_path=None
+    reward_config_file,
+    hysr_one_ball_config_file,
+    ppo_config_file,
+    log_episodes=False,
+    log_tensorboard=False,
+    model_file_path=None,
 ):
-
-    import baselines
-    from baselines.common.vec_env import VecFrameStack, VecNormalize, VecEnv
-    from baselines.common.vec_env.vec_video_recorder import VecVideoRecorder
-    from baselines.common.vec_env.dummy_vec_env import DummyVecEnv
-    from baselines.common.cmd_util import (
-        common_arg_parser,
-        parse_unknown_args,
-        make_env,
-    )
-    from baselines.common.tf_util import get_session
-    from baselines import logger
     import tensorflow as tf
-
     from stable_baselines.common import make_vec_env
 
     env_config = {
@@ -68,10 +53,6 @@ def run_openai_baselines(
     }
     env = make_vec_env(HysrOneBallEnv, env_kwargs=env_config)
 
-    print("models",env)
-    for k,v in dir(env).items():
-        print(k,"\t",v)
-    
     ppo_config = OpenAIPPOConfig.from_json(ppo_config_file)
     total_timesteps = ppo_config["num_timesteps"]
     del ppo_config["num_timesteps"]
@@ -81,7 +62,7 @@ def run_openai_baselines(
 
     alg = "ppo2"
     learn = get_alg_module_openai_baselines(alg).learn
-    
+
     # seed = 123
     if model_file_path is None:
         print("total timesteps:", total_timesteps)
@@ -94,48 +75,47 @@ def run_openai_baselines(
         model.save("ppo2_openai_baselines_hysr_one_ball")
 
     else:
-        ppo_config["load_path"]=model_file_path
+        ppo_config["load_path"] = model_file_path
         model = learn(
             env=env,
             # seed=seed,
             total_timesteps=0,
             **ppo_config
         )
-    
+
     return model, env
 
 
 def replay_openai_baselines(
-        model_file_path,
-        nb_episodes,
-        reward_config_file,
-        hysr_one_ball_config_file,
-        ppo_config_file,
-        log_episodes=False,
-        log_tensorboard=False,
+    model_file_path,
+    nb_episodes,
+    reward_config_file,
+    hysr_one_ball_config_file,
+    ppo_config_file,
+    log_episodes=False,
+    log_tensorboard=False,
 ):
 
-    model,env = run_openai_baselines(
+    model, env = run_openai_baselines(
         reward_config_file,
         hysr_one_ball_config_file,
         ppo_config_file,
         log_episodes=False,
         log_tensorboard=False,
-        model_file_path=model_file_path
+        model_file_path=model_file_path,
     )
 
     observation = env.reset()
-    
+
     for episode in range(nb_episodes):
         done = False
         while not done:
             actions = model.step(observation)[0][0]
-            observation,_,done,__ = env.step([actions])
+            observation, _, done, __ = env.step([actions])
 
     env.close()
-    
-                                             
-                                             
+
+
 def get_alg_module_openai_baselines(alg, submodule=None):
     from importlib import import_module
 

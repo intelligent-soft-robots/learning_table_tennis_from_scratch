@@ -1,5 +1,9 @@
-import o80, pam_interface
-import math, gym, random, time, json
+import o80
+import pam_interface
+import math
+import gym
+import time
+import json
 import numpy as np
 from .hysr_one_ball import HysrOneBall, HysrOneBallConfig
 from .rewards import JsonReward
@@ -45,8 +49,6 @@ class _ObservationSpace:
 
     def set_values_pressures(self, name, values, env):
         for dof in range(env._nb_dofs):
-            p_plus = 0
-            p_minus = 0
             values[2 * dof] = env._reverse_scale_pressure(dof, True, values[2 * dof])
             values[2 * dof + 1] = env._reverse_scale_pressure(
                 dof, False, values[2 * dof + 1]
@@ -79,10 +81,12 @@ class HysrOneBallEnv(gym.Env):
         self._log_tensorboard = log_tensorboard
 
         hysr_one_ball_config = HysrOneBallConfig.from_json(hysr_one_ball_config_file)
-        
+
         reward_function = JsonReward.get(reward_config_file)
 
-        self._config = pam_interface.JsonConfiguration(hysr_one_ball_config.pam_config_file)
+        self._config = pam_interface.JsonConfiguration(
+            hysr_one_ball_config.pam_config_file
+        )
         self._nb_dofs = len(self._config.max_pressures_ago)
         self._algo_time_step = hysr_one_ball_config.algo_time_step
         self._pressure_change_range = hysr_one_ball_config.pressure_change_range

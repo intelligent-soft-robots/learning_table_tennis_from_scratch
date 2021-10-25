@@ -14,7 +14,7 @@ setup(
     author_email="vberenz@tuebingen.mpg.de",
     license="MIT",
     packages=["learning_table_tennis_from_scratch"],
-    #install_requires=['tensorflow==1.15','gym'],
+    # install_requires=['tensorflow==1.15','gym'],
     zip_safe=True,
     data_files=[
         (
@@ -38,6 +38,6 @@ setup(
         "bin/hysr_episode_frequencies",
         "bin/hysr_display_extra_balls",
         "bin/hysr_extra_balls",
-        "bin/hysr_stop"
+        "bin/hysr_stop",
     ],
 )

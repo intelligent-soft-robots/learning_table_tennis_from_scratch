@@ -1,0 +1,2 @@
+[tool.black]
+extend-exclude = "runner_buffered\\.py|modified_baselines_ppo2\\.py"

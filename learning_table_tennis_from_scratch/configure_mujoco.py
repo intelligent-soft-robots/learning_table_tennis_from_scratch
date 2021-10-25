@@ -81,7 +81,7 @@ def configure_extra_set(setid, hysr_config):
 
 
 def configure_pseudo_real(
-        pam_config_file, mujoco_id="pseudo-real", graphics=True, accelerated_time=False
+    pam_config_file, mujoco_id="pseudo-real", graphics=True, accelerated_time=False
 ):
 
     if accelerated_time:
@@ -92,7 +92,7 @@ def configure_pseudo_real(
     robot = pam_mujoco.MujocoRobot(
         SEGMENT_ID_PSEUDO_REAL_ROBOT,
         control=pam_mujoco.MujocoRobot.PRESSURE_CONTROL,
-        json_control_path=pam_config_file
+        json_control_path=pam_config_file,
     )
     handle = pam_mujoco.MujocoHandle(
         mujoco_id,
