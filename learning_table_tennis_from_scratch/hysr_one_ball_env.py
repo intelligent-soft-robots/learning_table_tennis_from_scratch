@@ -77,8 +77,6 @@ class HysrOneBallEnv(gym.Env):
 
         super().__init__()
 
-        print("HysrOneBallEnv log eps:", log_episodes)
-
         self._log_episodes = log_episodes
         self._log_tensorboard = log_tensorboard
 
