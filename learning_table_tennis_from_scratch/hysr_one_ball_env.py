@@ -199,6 +199,9 @@ class HysrOneBallEnv(gym.Env):
 
     def step(self, action):
 
+        if not self._accelerated_time and self._frequency_manager is None:
+            self._frequency_manager = o80.FrequencyManager(1.0 / self._algo_time_step)
+
         action_orig = action.copy()
 
         # casting similar to old code
@@ -270,7 +273,7 @@ class HysrOneBallEnv(gym.Env):
         observation = self._hysr.reset()
         observation = self._convert_observation(observation)
         if not self._accelerated_time:
-            self._frequency_manager = o80.FrequencyManager(1.0 / self._algo_time_step)
+            self._frequency_manager = None
         return observation
 
     def dump_data(self, data_buffer):
