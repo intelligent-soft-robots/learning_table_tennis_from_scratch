@@ -39,6 +39,7 @@ class HysrOneBallConfig:
         "table_orientation",
         "target_position",
         "reference_posture",
+        "starting_pressures",
         "world_boundaries",
         "pressure_change_range",
         "trajectory",
@@ -468,6 +469,10 @@ class HysrOneBall:
         # source of mirroring in pam_mujoco.mirroring.py
         pam_mujoco.mirroring.align_robots(self._pressure_commands, self._mirrorings)
 
+
+    def get_starting_pressures(self):
+        return self._hysr_config.starting_pressures
+
     def _share_episode_number(self, episode_number):
         # write the episode number in a memory shared
         # with the instances of mujoco
@@ -637,7 +642,7 @@ class HysrOneBall:
             self._pressure_commands.set(pressures, burst=False)
         time_start = self._real_robot_frontend.latest().get_time_stamp()*1e-9
         current_time=time_start
-        timeout = 2 
+        timeout = 0.5 
         while current_time-time_start < timeout:
             current_time = self._real_robot_frontend.latest().get_time_stamp()*1e-9
             _,_,joint_positions,joint_velocities = self._pressure_commands.read()
@@ -738,6 +743,9 @@ class HysrOneBall:
         else:
             # moving to reset position
             self._do_natural_reset()
+
+        # going to starting pressure
+        self._move_to_pressure(self._hysr_config.starting_pressures)
 
         # moving the goal to the target position
         self._goal.set(self._target_position, [0, 0, 0])

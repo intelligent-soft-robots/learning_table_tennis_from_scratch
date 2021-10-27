@@ -83,7 +83,9 @@ class OpenAIPPOConfig:
         "activation",
         "nsteps",
         "save_path",
-        "load_path"
+        "load_path",
+        "log_interval",
+        "save_interval"
     )  # , "seed")
 
     def __init__(self):

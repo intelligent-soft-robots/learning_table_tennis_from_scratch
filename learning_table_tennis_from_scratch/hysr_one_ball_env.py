@@ -134,9 +134,14 @@ class HysrOneBallEnv(gym.Env):
 
         # initialize initial action (for action diffs)
         self.last_action = np.zeros(self._nb_dofs * 2)
+        starting_pressures = self._hysr.get_starting_pressures()
         for dof in range(self._nb_dofs):
-            self.last_action[2 * dof] = self._reverse_scale_pressure(dof, True, self._hysr._reference_posture[dof][0])
-            self.last_action[2 * dof + 1] = self._reverse_scale_pressure(dof, False, self._hysr._reference_posture[dof][1])
+            self.last_action[2 * dof] = self._reverse_scale_pressure(dof, 
+                                                                     True, 
+                                                                     starting_pressures[dof][0])
+            self.last_action[2 * dof + 1] = self._reverse_scale_pressure(dof, 
+                                                                         False, 
+                                                                         starting_pressures[dof][1])
 
             
 
