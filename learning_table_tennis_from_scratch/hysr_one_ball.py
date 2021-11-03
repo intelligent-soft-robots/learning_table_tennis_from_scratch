@@ -11,6 +11,8 @@ import pam_mujoco
 import context
 import frequency_monitoring
 import shared_memory
+import tennicam_client
+import ball_launcher
 from pam_mujoco import mirroring
 from . import configure_mujoco
 from . import robot_integrity
@@ -23,12 +25,13 @@ SEGMENT_ID_ROBOT_MIRROR = pam_mujoco.segment_ids.mirroring
 SEGMENT_ID_PSEUDO_REAL_ROBOT = o80_pam.segment_ids.robot
 SEGMENT_ID_EPISODE_FREQUENCY = "hysr_episode_frequency"
 SEGMENT_ID_STEP_FREQUENCY = "hysr_step_frequency"
-
+TENNICAM_CLIENT_DEFAULT_SEGMENT_ID = "tennicam_client"
 
 class HysrOneBallConfig:
 
     __slots__ = (
         "real_robot",
+        "ball_launcher_config", # instance of BallLauncherConfig or None
         "o80_pam_time_step",
         "mujoco_time_step",
         "algo_time_step",
@@ -370,10 +373,25 @@ class HysrOneBall:
         self._reward_function = reward_function
 
         # to get information regarding the ball
-        # (instance of o80_pam.o80_ball.o80Ball)
-        self._ball_communication = self._simulated_robot_handle.interfaces[
-            SEGMENT_ID_BALL
-        ]
+        # if BallLauncherConfig is not None: using the real ball,
+        # otherwise controller pam_mujoco's ball
+        if hysr_config.ball_launcher_config is not None:
+            bl_conf = hysr_config.ball_launcher_config
+            self._ball_launcher = BallLauncherClient(bl_conf.ip,
+                                                      bl_conf.port)
+            self._ball_launcher.set_set(phi=bl_conf.pi,
+                                        theta=bl_conf.theta,
+                                        top_ang_vel=bl_conf.top_angular_velocity,
+                                        bottom_ang_vel=bl_conf.bottom_angular_velocity)
+            frontend = tennicam_client.FrontEnd(TENNICAM_CLIENT_DEFAULT_SEGMENT_ID)
+            self._ball_communication = o80_pam.o80Ball(TENNICAM_CLIENT_DEFAULT_SEGMENT_ID,
+                                                       frontend=frontend)
+        else:
+            self._ball_launcher = None
+            # instance of o80_pam.o80_ball.o80Ball
+            self._ball_communication = self._simulated_robot_handle.interfaces[
+                SEGMENT_ID_BALL
+            ]
 
         # to send pressure commands to the real or pseudo-real robot
         # (instance of o80_pam.o80_pressures.o80Pressures)
@@ -597,11 +615,16 @@ class HysrOneBall:
             frontend.pulse()
 
     def load_ball(self):
-        # loading ball: setting all trajectories points
-        # to the ball controllers
-        self._load_main_ball()
-        if self._extra_balls:
-            self._load_extra_balls()
+        # real ball
+        if self._ball_launcher is not None:
+            self._ball_launcher.launch_ball()
+        # virtual ball(s)
+        else:
+            # loading ball: setting all trajectories points
+            # to the ball controllers
+            self._load_main_ball()
+            if self._extra_balls:
+                self._load_extra_balls()
 
     def reset_contact(self):
         # after contact with the racket, o80 control of the ball
@@ -764,11 +787,13 @@ class HysrOneBall:
         self._parallel_burst.burst(4)
 
         # resetting ball/robot contact information
-        self._simulated_robot_handle.reset_contact(SEGMENT_ID_BALL)
-        self._simulated_robot_handle.activate_contact(SEGMENT_ID_BALL)
-        for ball in self._extra_balls:
-            ball.handle.reset_contact(ball.segment_id)
-            ball.handle.activate_contact(ball.segment_id)
+        if self._ball_launcher is None:
+            # for virtual ball(s) only
+            self._simulated_robot_handle.reset_contact(SEGMENT_ID_BALL)
+            self._simulated_robot_handle.activate_contact(SEGMENT_ID_BALL)
+            for ball in self._extra_balls:
+                ball.handle.reset_contact(ball.segment_id)
+                ball.handle.activate_contact(ball.segment_id)
 
         time.sleep(0.1)
 
@@ -894,17 +919,18 @@ class HysrOneBall:
             # updating ball status
             ball_status.update(ball_position, ball_velocity, racket_contact_information)
 
-        # updating the status of all balls
-        _update_ball_status(
-            self._simulated_robot_handle, SEGMENT_ID_BALL, self._ball_status
-        )
-        for ball in self._extra_balls:
-            _update_ball_status(ball.handle, ball.segment_id, ball.ball_status)
+        # updating the status of all balls (only if simulated balls)
+        if self._ball_launcher is None:
+            _update_ball_status(
+                self._simulated_robot_handle, SEGMENT_ID_BALL, self._ball_status
+            )
+            for ball in self._extra_balls:
+                _update_ball_status(ball.handle, ball.segment_id, ball.ball_status)
 
-        # moving the hit point to the minimal observed distance
-        # between ball and target (post racket hit)
-        if self._ball_status.min_position_ball_target is not None:
-            self._hit_point.set(self._ball_status.min_position_ball_target, [0, 0, 0])
+            # moving the hit point to the minimal observed distance
+            # between ball and target (post racket hit)
+            if self._ball_status.min_position_ball_target is not None:
+                self._hit_point.set(self._ball_status.min_position_ball_target, [0, 0, 0])
 
         # observation instance
         observation = _Observation(
