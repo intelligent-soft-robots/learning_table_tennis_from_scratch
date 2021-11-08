@@ -4,12 +4,16 @@
     "mujoco_time_step":0.002,
     "algo_time_step":0.01,
     "pam_config_file":"/opt/mpi-is/pam_interface/pam_sim.json",
-    "robot_position":[0.5, 0.0, -0.44],
+    "robot_position":[0.435, 0.1175, -0.0],
+    "robot_orientation":"-1 0 0 0 -1 0",
+    "table_position":[0.8, 1.7, -0.475],
+    "table_orientation":"-1 0 0 0 -1 0",
+    "starting_pressures":[[18000,18000],[18000,18000],[18000,18000],[18000,18000]],
     "target_position":[0.45,2.7,-0.45],
     "reference_posture":[[19900,16000],[16800,19100],[18700,17300],[18000,18000]],
     "world_boundaries":{
-	"min":[0.0,-1.0,0.17],
-	"max":[1.6,3.5,1.5]
+        "min":[0.0,-1.0,0.17],
+        "max":[1.6,3.5,1.5]
     },
     "pressure_change_range":18000,
     "trajectory":-1,
