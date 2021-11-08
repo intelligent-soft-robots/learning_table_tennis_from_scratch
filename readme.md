@@ -191,6 +191,12 @@ In any terminal, type:
 hysr_stop
 ```
 
+## Example configuration
+
+The `example/` directory contains an example configuration that can be used to
+run the above commands.  See the README there for more information.
+
+
 ## Extra executables
 
 The following executables can be started after the robot:
