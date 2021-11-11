@@ -14,7 +14,7 @@
     "num_hidden":512,
     "activation":"tf.tanh",
     "nsteps": 4096,
-    "load_path": "/tmp/model",
+    "load_path": null,
     "save_path": "/tmp/model",
     "log_interval":1,
     "save_interval":1
