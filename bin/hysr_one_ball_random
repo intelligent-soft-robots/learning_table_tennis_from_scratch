@@ -9,6 +9,7 @@ from learning_table_tennis_from_scratch.hysr_one_ball import (
 )
 from learning_table_tennis_from_scratch.rewards import JsonReward
 from learning_table_tennis_from_scratch.jsonconfig import get_json_config
+import pam_mujoco
 
 
 def execute(reward_config_path, hysr_config_path):
@@ -16,6 +17,12 @@ def execute(reward_config_path, hysr_config_path):
     hysr_config = HysrOneBallConfig.from_json(hysr_config_path)
     reward_function = JsonReward.get(reward_config_path)
     algo_time_step = hysr_config.algo_time_step
+
+    # make sure the backend is ready before proceeding
+    mujoco_ids = ("pseudo-real", "simulation")
+    for mujoco_id in mujoco_ids:
+        print("XXX wait for", mujoco_id)
+        pam_mujoco.wait_for_mujoco(mujoco_id)
 
     hysr = HysrOneBall(hysr_config, reward_function)
 
