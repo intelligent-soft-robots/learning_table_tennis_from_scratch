@@ -637,7 +637,13 @@ class HysrOneBall:
         # moves to pseudo-real robot to desired pressure in synchronization
         # with the simulated robot(s)
         if self._accelerated_time:
-            self._pressure_commands.set(pressures, burst=self._nb_robot_bursts)
+            for _ in range(self._nb_robot_bursts):
+                self._pressure_commands.set(pressures, burst=1)
+                _,_,joint_positions,joint_velocities = self._pressure_commands.read()
+                for mirroring_ in self._mirrorings:
+                    mirroring_.set(joint_positions, joint_velocities)
+                self._parallel_burst.burst(1)
+            return
         else:
             self._pressure_commands.set(pressures, burst=False)
         time_start = self._real_robot_frontend.latest().get_time_stamp()*1e-9
