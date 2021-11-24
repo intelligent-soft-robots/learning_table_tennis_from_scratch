@@ -1,13 +1,18 @@
 {
+    "real_robot": false,
     "o80_pam_time_step":0.002,
     "mujoco_time_step":0.002,
     "algo_time_step":0.01,
     "robot_position":[0.435, 0.1175, -0.0],
+    "robot_orientation":"-1 0 0 0 -1 0",
+    "table_position":[0.8, 1.7, -0.475],
+    "table_orientation":"-1 0 0 0 -1 0",
+    "starting_pressures":[[18000,18000],[18000,18000],[18000,18000],[18000,18000]],
     "target_position":[0.45,2.7,-0.45],
     "reference_posture":[[15000,15000],[15000,15800],[15000,15000],[15000,15000]],
     "world_boundaries":{
-	"min":[0.0,-1.0,0.17],
-	"max":[1.6,3.5,1.5]
+        "min":[0.0,-1.0,0.17],
+        "max":[1.6,3.5,1.5]
     },
     "pam_config_file":"/home/sguist/Software/ISR/workspace/src/pam_interface/config/pam_sim.json",
     "pressure_change_range":1800,
