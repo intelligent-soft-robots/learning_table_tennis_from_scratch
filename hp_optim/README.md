@@ -38,6 +38,14 @@ so it uses the local files instead of using git to get the current master.
 See the following sections for configuration of the wrapper scripts that are
 used here.
 
+### Overwrite Configuration from Command Line
+
+You can also overwrite individual settings from the JSON file by providing
+values in the command line.  This can be useful, for example, to more easily set
+a different output directory for different runs:
+
+    python3 -m cluster.hp_optimization hp_optim/hp_optim_ppo.json 'optimization_procedure_name="lttfs_2021-12-15_1"'
+
 
 ## Configuration for run_singularity.py
 
