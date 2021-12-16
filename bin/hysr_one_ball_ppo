@@ -4,6 +4,8 @@ import argparse
 import json
 import os
 import pathlib
+import random
+import time
 
 from learning_table_tennis_from_scratch.models import run_stable_baselines
 from learning_table_tennis_from_scratch.models import run_openai_baselines
@@ -24,7 +26,12 @@ def _read_ppo_common_config(jsonpath):
             "failed to parse reward json configuration file {}: {}".format(jsonpath, e)
         )
 
-    expected_keys = ("use_openai_baselines", "log_episodes", "log_tensorboard")
+    expected_keys = (
+        "use_openai_baselines",
+        "log_episodes",
+        "log_tensorboard",
+        "random_seed",
+    )
 
     for key in expected_keys:
         if key not in conf.keys():
@@ -39,6 +46,16 @@ def _execute(
 
     common_conf = _read_ppo_common_config(ppo_common_config_file)
 
+    seed = common_conf["random_seed"]
+    if not seed:
+        # If no explicit seed is given, generate one based on the current time.
+        # Take the first 9 positions after the decimal point.  By discarding
+        # the integer part (`x % 1`), it is ensured that the resulting number
+        # does not get too big (limit for the seed is 2**32 - 1).
+        seed = int((time.time() % 1) * 1e9)
+    print("Use random seed %d" % seed)
+
+    random.seed(seed)
     if common_conf["use_openai_baselines"]:
         run_openai_baselines(
             reward_config_file,
@@ -46,6 +63,7 @@ def _execute(
             ppo_config_file,
             common_conf["log_episodes"],
             common_conf["log_tensorboard"],
+            seed=seed,
         )
     else:
         run_stable_baselines(
