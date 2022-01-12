@@ -84,6 +84,13 @@ def setup_config(working_dir: pathlib.Path, params: dict):
         working_dir:  Directory in which the config setup is created.
         params:  Dictionary of parameters (see above).
     """
+    main_config_file = working_dir / "config.json"
+    # if config is already there, skip creation (this is the case when
+    # restarting after a failure)
+    if main_config_file.exists():
+        print("config.json already exists, skip setup.")
+        return
+
     with open(params["config_templates"], "r") as f:
         config_file_templates = json.load(f)
 
@@ -107,7 +114,7 @@ def setup_config(working_dir: pathlib.Path, params: dict):
         "ppo_config": "./config/ppo_config.json",
         "ppo_common_config": "./config/ppo_common_config.json",
     }
-    with open(working_dir / "config.json", "w") as f:
+    with open(main_config_file, "w") as f:
         json.dump(base_config, f)
 
     base_config_path = pathlib.PurePath(params["config_templates"]).parent
@@ -179,6 +186,49 @@ def main():
         subprocess.run(["hysr_one_ball_ppo"], env=env, check=True)
         duration = (time.time() - start) / 60
         print("\n\nlearning took %0.2f min" % duration)
+
+    except subprocess.CalledProcessError as e:
+        # In case of any failure, restart with the same parameters (using
+        # cluster.exit_for_resume()).
+
+        # Max. number of attempts.  If it fails this many times, do not try
+        # again.
+        # TODO: Make this configurable?
+        MAX_ATTEMPTS = 3
+
+        print("\nXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX")
+        print("RUN FAILED! (%s terminated with exit code %d)" % (e.cmd, e.returncode))
+
+        # NOTE: Do not use ".json" extension for the file to not mess with the
+        # automatic detection of "config.json" by the hysr scripts.
+        restart_log_file = working_dir / "restarts.log"
+        failed_runs = 0
+        if restart_log_file.exists():
+            with open(restart_log_file, "r") as f:
+                restart_log = json.load(f)
+                failed_runs = restart_log["failed_runs"]
+
+        failed_runs += 1
+        with open(restart_log_file, "w") as f:
+            json.dump({"failed_runs": failed_runs}, f)
+
+        if failed_runs >= MAX_ATTEMPTS:
+            print("Maximum number of restarts is reached.  Exit with failure.")
+            return 1
+        else:
+            print("Exit for restart.")
+
+            # move training log files to separate directory to avoid confusion
+            training_log_dir = pathlib.Path(env["OPENAI_LOGDIR"])
+            if training_log_dir.exists():
+                new_trainig_log_dir = env["OPENAI_LOGDIR"] + "_failed_{}".format(
+                    failed_runs
+                )
+                training_log_dir.rename(new_trainig_log_dir)
+
+            # we don't really plan to resume but restart from scratch but it
+            # shouldn't make a difference for cluster_utils
+            cluster.exit_for_resume()
 
     finally:
         print("We are done, shut down.")
