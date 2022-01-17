@@ -3,6 +3,7 @@
     "results_dir": "/home/felixwidmaier/tmp",
     "run_in_working_dir": false,
     "git_params": {
+        "url": "https://github.com/intelligent-soft-robots/learning_table_tennis_from_scratch.git",
         "branch": "master",
         "commit": null
     },
