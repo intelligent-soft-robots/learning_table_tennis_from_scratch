@@ -32,7 +32,7 @@ import cluster
 def main():
     # get the singularity parameters (pass copy of sys.argv so that the
     # original arguments do not get modified)
-    params = cluster.update_params_from_cmdline(sys.argv.copy())
+    params = cluster.read_params_from_cmdline(sys.argv.copy())
 
     # some basic sanity checks of the parameters
     if "singularity" not in params:
@@ -58,11 +58,11 @@ def main():
         )
 
     # create model directory (so it can be bound into the container)
-    pathlib.Path(params.model_dir).mkdir(exist_ok=True)
+    pathlib.Path(params.working_dir).mkdir(exist_ok=True)
 
     # run Singularity
     cwd = os.getcwd()
-    bind_dirs = ["/tmp", params.model_dir, cwd]
+    bind_dirs = ["/tmp", params.working_dir, cwd]
     os.execlp(
         "singularity",
         "singularity",

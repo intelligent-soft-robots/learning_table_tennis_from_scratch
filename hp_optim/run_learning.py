@@ -17,6 +17,7 @@ import time
 import typing
 
 import cluster
+import smart_settings.param_classes
 
 
 def prepare_config_file(
@@ -97,16 +98,6 @@ def setup_config(working_dir: pathlib.Path, params: dict):
     config_dir = working_dir / "config"
     config_dir.mkdir(exist_ok=True, parents=True)
 
-    # Set ppo_config.save_path to working_dir (unless a different value is
-    # already explicitly set in params).
-    # Need to convert params to normal dict, so it becomes mutable
-    params = dict(params)
-    if "ppo_config" not in params:
-        params["ppo_config"] = {}
-    if "save_path" not in params["ppo_config"]:
-        params["ppo_config"] = dict(params["ppo_config"])
-        params["ppo_config"]["save_path"] = os.fspath(working_dir / "model")
-
     base_config = {
         "reward_config": "./config/reward_config.json",
         "hysr_config": "./config/hysr_config.json",
@@ -147,31 +138,36 @@ def read_reward_from_log(log_dir: pathlib.PurePath):
 
 
 def main():
-    # overwrite some values from the config templates to disable any graphical
-    # interfaces
-    default_params = {
-        "config": {
-            "hysr_config": {
-                "graphics": False,
-                "xterms": False,
-            },
-        }
-    }
-
-    # get parameters
-    params = cluster.update_params_from_cmdline(default_params=default_params)
+    # get parameters (make mutable so defaults can easily be set later)
+    params = cluster.read_params_from_cmdline(make_immutable=False)
 
     print("Params:")
     print(params)
     print("---")
 
-    working_dir = pathlib.Path(params.model_dir)
+    working_dir = pathlib.Path(params.working_dir)
 
     # prepare environment
     env = dict(
         os.environ,
         OPENAI_LOG_FORMAT="log,csv,tensorboard",
         OPENAI_LOGDIR=os.fspath(working_dir / "training_logs"),
+    )
+
+    # Overwrite some values from the config templates to disable any graphical
+    # interfaces and to save the model in working_dir (unless a different value
+    # is already explicitly set in params).
+    default_params = {
+        "hysr_config": {
+            "graphics": False,
+            "xterms": False,
+        },
+        "ppo_config": {
+            "save_path": os.fspath(working_dir / "model"),
+        },
+    }
+    params.config = smart_settings.param_classes.update_recursive(
+        params.config, default_params, overwrite=False
     )
 
     setup_config(working_dir, params.config)
