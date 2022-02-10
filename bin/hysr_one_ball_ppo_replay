@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+import sys
 import os
 from lightargs import BrightArgs, Positive, FileExists
 from learning_table_tennis_from_scratch.models import replay_openai_baselines
@@ -50,7 +51,7 @@ def _configure():
     )
 
     change_all = False
-    finished = config.dialog(change_all)
+    finished = config.dialog(change_all, sys.argv[1:])
     print()
     if not finished:
         return None
