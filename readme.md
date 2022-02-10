@@ -273,3 +273,6 @@ In a terminal:
 tensorboard --logdir /tmp/ppo2
 ```
 
+# Logging a new ball trajectory
+
+Start ```o80_robot_ball_logger``` with the same frequency as the learning control algorithm (e.g. 100 Hz). Launch a ball and stop the logger after ball finished its trajectory. Use ```trim_o80_log_ball_trajectory``` to trim trajectory.
