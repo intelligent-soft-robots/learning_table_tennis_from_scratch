@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 
-import sys, pathlib, o80_pam
+import sys
+import pathlib
+import o80_pam
 import matplotlib.pyplot as plt
 from lightargs import BrightArgs
 
