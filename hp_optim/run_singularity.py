@@ -24,6 +24,7 @@ Example:
 """
 import os
 import pathlib
+import subprocess
 import sys
 
 import cluster
@@ -68,13 +69,13 @@ def main():
         )
 
     # create model directory (so it can be bound into the container)
-    pathlib.Path(params.working_dir).mkdir(exist_ok=True)
+    working_dir = pathlib.Path(params.working_dir)
+    working_dir.mkdir(exist_ok=True)
 
     # run Singularity
     cwd = os.getcwd()
     bind_dirs = ["/tmp", params.working_dir, cwd]
-    os.execlp(
-        "singularity",
+    cmd = [
         "singularity",
         "run",
         "--nv",
@@ -84,7 +85,14 @@ def main():
         singularity_image,
         params.singularity.script,
         *sys.argv[1:],
-    )
+    ]
+
+    # explicitly redirect output to file, so it is stored also when running
+    # locally
+    stdout_file = working_dir / "stdout.txt"
+    stderr_file = working_dir / "stderr.txt"
+    with open(stdout_file, "wb") as f_out, open(stderr_file, "wb") as f_err:
+        subprocess.run(cmd, check=True, stdout=f_out, stderr=f_err)
 
 
 if __name__ == "__main__":
