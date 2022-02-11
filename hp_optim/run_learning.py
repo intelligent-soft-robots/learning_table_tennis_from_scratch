@@ -52,7 +52,7 @@ def prepare_config_file(
         json.dump(config, f)
 
 
-def setup_config(working_dir: pathlib.Path, params: dict):
+def setup_config(working_dir: pathlib.Path, params: dict) -> pathlib.Path:
     """Set up config files based on templates and parameters.
 
     The *params* dictionary is expected to have an entry "config_templates" which
@@ -84,34 +84,38 @@ def setup_config(working_dir: pathlib.Path, params: dict):
     Args:
         working_dir:  Directory in which the config setup is created.
         params:  Dictionary of parameters (see above).
+
+    Returns:
+        Path to the main config file.
     """
     main_config_file = working_dir / "config.json"
     # if config is already there, skip creation (this is the case when
     # restarting after a failure)
     if main_config_file.exists():
         print("config.json already exists, skip setup.")
-        return
+    else:
+        with open(params["config_templates"], "r") as f:
+            config_file_templates = json.load(f)
 
-    with open(params["config_templates"], "r") as f:
-        config_file_templates = json.load(f)
+        config_dir = working_dir / "config"
+        config_dir.mkdir(exist_ok=True, parents=True)
 
-    config_dir = working_dir / "config"
-    config_dir.mkdir(exist_ok=True, parents=True)
+        base_config = {
+            "reward_config": "./config/reward_config.json",
+            "hysr_config": "./config/hysr_config.json",
+            "pam_config": "./config/pam_config.json",
+            "ppo_config": "./config/ppo_config.json",
+            "ppo_common_config": "./config/ppo_common_config.json",
+        }
+        with open(main_config_file, "w") as f:
+            json.dump(base_config, f)
 
-    base_config = {
-        "reward_config": "./config/reward_config.json",
-        "hysr_config": "./config/hysr_config.json",
-        "pam_config": "./config/pam_config.json",
-        "ppo_config": "./config/ppo_config.json",
-        "ppo_common_config": "./config/ppo_common_config.json",
-    }
-    with open(main_config_file, "w") as f:
-        json.dump(base_config, f)
+        base_config_path = pathlib.PurePath(params["config_templates"]).parent
+        for name in base_config.keys():
+            template_path = base_config_path / config_file_templates[name]
+            prepare_config_file(name, template_path, params.get(name, {}), config_dir)
 
-    base_config_path = pathlib.PurePath(params["config_templates"]).parent
-    for name in base_config.keys():
-        template_path = base_config_path / config_file_templates[name]
-        prepare_config_file(name, template_path, params.get(name, {}), config_dir)
+    return main_config_file
 
 
 def read_reward_from_log(log_dir: pathlib.PurePath):
@@ -170,7 +174,7 @@ def main():
         params.config, default_params, overwrite=False
     )
 
-    setup_config(working_dir, params.config)
+    config_file = setup_config(working_dir, params.config)
     os.chdir(working_dir)
 
     try:
