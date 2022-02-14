@@ -1,17 +1,62 @@
 import os
 import json
+import typing
 
 
 class TooManyFilesError(Exception):
     def __init__(self, files):
-        super.__init__()
+        super().__init__()
         self._files = files
 
     def __str__(self):
         return str("found too many files: {}".format(",".join(self._files)))
 
 
-def get_json_config(expected_keys: list = []):
+def find_json_file(search_directory: str) -> str:
+    """Search the given directory for a JSON file.
+
+    The directory is expected to contain a single JSON file, recognised by its
+    file extension (".json").
+    If the directory contains no or multiple JSON files, an exception is
+    raised.
+
+    Args:
+        search_directory: Directory in which the JSON file is searched (search
+            is non-recursive, i.e. subdirectories are not considered).
+
+    Returns:
+        Path to the JSON file.
+
+    Raises:
+        FileNotFoundError:  If search_directory does not contain a JSON file.
+        TooManyFilesError:  If search_directory contains more than one JSON
+            files.
+    """
+    # all files in search_directory
+    files = [
+        f
+        for f in os.listdir(search_directory)
+        if os.path.isfile(os.path.join(search_directory, f))
+    ]
+
+    # json files
+    json_files = [f for f in files if f.endswith(".json")]
+
+    # ! no json file
+    if not json_files:
+        raise FileNotFoundError("failed to find a json file in the current directory")
+
+    # too many json files !
+    if len(json_files) != 1:
+        raise TooManyFilesError(json_files)
+
+    # the config file used
+    return json_files[0]
+
+
+def get_json_config(
+    expected_keys: typing.List[str] = [], config_file=None
+) -> typing.Dict[str, str]:
     """
     Searches for a json file in the current folder
     and returns the corresponding dict.
@@ -29,28 +74,9 @@ def get_json_config(expected_keys: list = []):
     # current folder
     current_folder = os.getcwd()
 
-    # files in it
-    files = [
-        f
-        for f in os.listdir(current_folder)
-        if os.path.isfile(os.path.join(current_folder, f))
-    ]
-
-    # json files
-    json_files = [f for f in files if f.endswith(".json")]
-
-    # ! no json file
-    if not json_files:
-        raise FileNotFoundError(
-            str("failed to find a json file in the current directory")
-        )
-
-    # too many json files !
-    if len(json_files) != 1:
-        raise TooManyFilesError(json_files)
-
-    # the config file used
-    config_file = json_files[0]
+    # If no config file is explicitly given, search in the current folder
+    if not config_file:
+        config_file = find_json_file(current_folder)
 
     # reading the file
     with open(config_file) as f:

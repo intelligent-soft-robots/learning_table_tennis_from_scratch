@@ -1,42 +1,60 @@
 #! /bin/bash
 
-# this executable starts all instances of pam_mujoco.
-# it configures itself based on the json file that should be
-# present in the current directory. This json file should
-# have an entry "hysr_config", pointing to a json file. This json
-# file should have the entries:
+# This executable starts all instances of pam_mujoco.
+#
+# It can can be called either with the path to a JSON config file as argument or
+# without arguments, in which case it searches for a JSON file in the current
+# working directory.
+# This JSON file should have an entry "hysr_config", pointing to an other JSON
+# file. This other JSON file should have the entries:
 # extra_balls_set : indication if an instance of pam_mujoco for
 #                   extra balls should be started
 # graphics : indication if an instance pam_mujoco with graphics
 #            should be started
 # xterms: indication if the instances of pam_mujoco should be
 #         started in the current terminal, or in separated terminals
-
-# typically, hysr_start_robots will be started in a folder,
+#
+# Typically, hysr_start_robots will be started in a folder,
 # then a "hysr executable" (e.g. hysr_one_ball_ppo) will be started
 # from the same folder, so both use the same config files.
 
 
-# list json files in current directory
-json_files=( $(ls *.json) )
+if [ $# == 0 ]; then
+    # list json files in current directory
+    json_files=( $(ls *.json) )
 
-# exiting if no json file
-if [ ! $? -eq 0 ]; then
-    >&2 echo "failed to find a json file in the current directory"
+    # exiting if no json file
+    if [ ! $? -eq 0 ]; then
+        >&2 echo "failed to find a json file in the current directory"
+        exit 1
+    fi
+
+    nb_json_files=${#json_files[@]}
+
+    # exiting if more than 1 json file
+    if [ ! $nb_json_files -eq 1 ]; then
+        >&2 echo "failed more than one json file in the current directory"
+        >&2 echo "${json_files[@]}"
+        exit 1
+    fi
+
+    # only 1 json file, going forward
+    json_file=$(ls *.json)
+
+elif [ $# == 1 ]; then
+    json_file="$1"
+    if [ ! -e "${json_file}" ]
+    then
+        >&2 echo "given config file '${json_file}' does not exist."
+        exit 1
+    fi
+else
+    >&2 echo "ERROR: Invalid number of arguments."
+    >&2 echo "Usage:\t $0 [<config_file>]"
     exit 1
 fi
+echo "Use config file ${json_file}"
 
-nb_json_files=${#json_files[@]}
-
-# exiting if more than 1 json file
-if [ ! $nb_json_files -eq 1 ]; then
-    >&2 echo "failed more than one json file in the current directory"
-    >&2 echo "${json_files}"
-    exit 1
-fi
-    
-# only 1 json file, going forward
-json_file=$(ls *.json)
 
 # reading the "hysr_config" entry from it
 hysr_config=$(jq -r .hysr_config ${json_file})
