@@ -245,6 +245,8 @@ def main():
     metrics = {"eprewmean": eprewmean}
     cluster.save_metrics_params(metrics, params)
 
+    print("REACHING THE END HAPPILY")
+
     return 0
 
 

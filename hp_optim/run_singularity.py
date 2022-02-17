@@ -84,6 +84,8 @@ def main():
     with open(stdout_file, "wb") as f_out, open(stderr_file, "wb") as f_err:
         subprocess.run(cmd, check=True, stdout=f_out, stderr=f_err)
 
+    print("SINGULARITY REACHING THE END HAPPILY")
+
 
 if __name__ == "__main__":
     main()
