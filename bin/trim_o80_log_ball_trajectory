@@ -12,6 +12,7 @@ def _configure():
     config.add_option("file_path", None, "input log file path", str)
     config.add_option("output_path", "/tmp/", "path for trimmed log file and plot", str)
     config.add_option("create_plot", False, "create plot of trimmed trajectory", bool)
+    config.add_option("max_ignored_balls", 0, "maximum number of undetected balls that are ignored", int)
     change_all = False
     finished = config.dialog(change_all, sys.argv[1:])
     if not finished:
@@ -29,6 +30,8 @@ def _run(config):
     ball_trajectory_ended = False
     ball_trajectory_start_index = -1
     ball_trajectory_stop_index = -1
+    ball_not_found_counter = 0
+    undetected_balls_idxs=[]
     with trimmed_file_path.open(mode="w") as f:
         for i in range(len(data)):
             ball_values = data[i][0]
@@ -47,18 +50,28 @@ def _run(config):
                 ball_trajectory_started = True
 
             # ball not detected anymore or below min z -> end trajectory
-            if ball_trajectory_started and (
-                ball_values[0] < 0 or ball_values[2][2] < -0.5
+            if (
+                ball_trajectory_started
+                and (ball_values[0]<0 and config.max_ignored_balls<1)
+                 or ball_values[2][2] < -0.5
+                 or (ball_not_found_counter>0 and ball_not_found_counter>=config.max_ignored_balls)
             ):
                 print("ball traj end:", data[i - 1][0][0])
+                print("y:", ball_values[2][1] < 1)
                 ball_trajectory_ended = True
                 ball_trajectory_stop_index = i - 1
                 if config.create_plot:
                     _plt(
-                        data[ball_trajectory_start_index:ball_trajectory_stop_index],
+                        data,
                         output_path / file_path.name,
+                        ball_trajectory_start_index,
+                        ball_trajectory_stop_index,
+                        undetected_balls_idxs
                     )
                 break
+            elif ball_trajectory_started and ball_values[0]<0:
+                ball_not_found_counter +=1
+                undetected_balls_idxs.append(i)
 
             # save trajectory
             if ball_trajectory_started and not ball_trajectory_ended:
@@ -66,13 +79,24 @@ def _run(config):
                 f.write(str_)
                 f.write("\n")
         print("traj. len:", ball_trajectory_stop_index - ball_trajectory_start_index)
+        if ball_not_found_counter>0:
+            print("!!", ball_not_found_counter, "balls not detected...")
 
 
-def _plt(data, plot_file_path):
-    balls_xyz = [[data[i][0][2][dim] for i in range(len(data))] for dim in range(3)]
-    _, ax = plt.subplots(2, 1)
-    ax[0].scatter(balls_xyz[1], balls_xyz[0])
-    ax[1].scatter(balls_xyz[1], balls_xyz[2])
+def _plt(data, plot_file_path, ball_trajectory_start_index, ball_trajectory_stop_index, undetected_balls_idxs):
+    print(undetected_balls_idxs)
+    print(len(data))
+    balls_xyz = [[data[i][0][2][dim] for i in range(ball_trajectory_start_index, ball_trajectory_stop_index)] for dim in range(3)]
+    vels_xyz = [[data[i][0][3][dim] for i in range(ball_trajectory_start_index, ball_trajectory_stop_index)] for dim in range(3)]
+    balls_xyz_red = [[data[i][0][2][dim] for i in undetected_balls_idxs] for dim in range(3)]
+    _, ax = plt.subplots(3, 2)
+    ax[0][0].scatter(balls_xyz[1], balls_xyz[0])
+    ax[2][0].scatter(balls_xyz[1], balls_xyz[2])
+    ax[0][0].scatter(balls_xyz_red[1], balls_xyz_red[0], color='red')
+    ax[2][0].scatter(balls_xyz_red[1], balls_xyz_red[2], color='red')
+    ax[0][1].scatter(balls_xyz[1], vels_xyz[0])
+    ax[1][1].scatter(balls_xyz[1], vels_xyz[0])
+    ax[2][1].scatter(balls_xyz[1], vels_xyz[2])
     plt.savefig(plot_file_path)
 
 
