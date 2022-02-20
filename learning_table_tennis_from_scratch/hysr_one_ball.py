@@ -1,8 +1,19 @@
-import os, sys, time, math, random, json, site, threading
-import o80, o80_pam, pam_mujoco, context, pam_interface, frequency_monitoring, shared_memory
-import numpy as np
+import json
+import os
+import site
+import sys
+import time
+
+import o80
+import o80_pam
+import pam_interface
+import pam_mujoco
+import context
+import frequency_monitoring
+import shared_memory
 from pam_mujoco import mirroring
 from . import configure_mujoco
+from . import robot_integrity
 
 
 SEGMENT_ID_BALL = pam_mujoco.segment_ids.ball
@@ -25,12 +36,18 @@ def min_distance(traj1, traj2):
 class HysrOneBallConfig:
 
     __slots__ = (
+        "real_robot",
         "o80_pam_time_step",
         "mujoco_time_step",
         "algo_time_step",
+        "pam_config_file",
         "robot_position",
+        "robot_orientation",
+        "table_position",
+        "table_orientation",
         "target_position",
         "reference_posture",
+        "starting_pressures",
         "world_boundaries",
         "pressure_change_range",
         "trajectory",
@@ -44,6 +61,8 @@ class HysrOneBallConfig:
         "extra_balls_per_set",
         "frequency_monitoring_step",
         "frequency_monitoring_episode",
+        "robot_integrity_check",
+        "robot_integrity_threshold",
     )
 
     def __init__(self):
@@ -73,7 +92,7 @@ class HysrOneBallConfig:
         for s in cls.__slots__:
             try:
                 setattr(instance, s, conf[s])
-            except:
+            except Exception:
                 raise ValueError(
                     "failed to find the attribute {} " "in {}".format(s, jsonpath)
                 )
@@ -115,20 +134,20 @@ class _BallBehavior:
     RANDOM = -3
 
     _trajectory_reader = context.BallTrajectories()
-    
+
     def __init__(self, line=False, index=False, random=False):
-        not_false = [a for a in (line, index, random) if a != False]
+        not_false = [a for a in (line, index, random) if a]
         if not not_false:
             raise ValueError("type of ball behavior not specified")
         if len(not_false) > 1:
             raise ValueError("type of ball behavior over-specified")
-        if line != False:
+        if line:
             self.type = self.LINE
             self.value = line
-        elif index != False:
+        elif index:
             self.type = self.INDEX
             self.value = index
-        elif random != False:
+        elif random:
             self.type = self.RANDOM
 
     def get_trajectory(self):
@@ -151,8 +170,8 @@ class _BallBehavior:
 
 class _ExtraBall:
 
-    ## see pam_demos/balls
-    ## for usage of handles and frontends
+    # see pam_demos/balls
+    # for usage of handles and frontends
     # setid : handle
     handles = {}
     # setid: frontend to extra balls
@@ -164,7 +183,7 @@ class _ExtraBall:
         self.segment_id = segment_id
         self.ball_status = ball_status
         self.ball_behavior = None
-        
+
     def reset_contact(self):
         self.handle.reset_contact(self.segment_id)
 
@@ -180,9 +199,9 @@ class _ExtraBall:
             handle.reset()
 
 
-def _get_extra_balls(setid, nb_balls, robot_position, target_position, graphics):
+def _get_extra_balls(setid, hysr_config):
 
-    values = configure_mujoco.configure_extra_set(setid, nb_balls, robot_position, graphics)
+    values = configure_mujoco.configure_extra_set(setid, hysr_config)
 
     handle = values[0]
     mujoco_id = values[1]
@@ -190,9 +209,9 @@ def _get_extra_balls(setid, nb_balls, robot_position, target_position, graphics)
     robot_segment_id = values[3]
     ball_segment_ids = values[4]
     extra_balls_frontend = handle.get_extra_balls_frontend(
-        configure_mujoco.get_extra_balls_segment_id(setid),
-        nb_balls )
-    
+        configure_mujoco.get_extra_balls_segment_id(setid), nb_balls
+    )
+
     # instance of o80_pam.o80_robot_mirroring.o80RobotMirroring,
     # to control the robot
     mirroring = handle.interfaces[robot_segment_id]
@@ -259,24 +278,42 @@ class HysrOneBall:
         #       an episode will end based on a threshold
         #       in the z component of the ball position
         #       (see method _episode_over)
-        
+
         # this instance of HysrOneBall interacts with several
         # instances of mujoco (pseudo real robot, simulated robot,
         # possibly instances of mujoco for extra balls).
         # Listing all the corresponding mujoco_ids
         self._mujoco_ids = []
 
-        # to control the real (or pseudo-real) robot (pressure control)
-        self._real_robot_handle = configure_mujoco.configure_pseudo_real(
-            graphics=hysr_config.graphics_pseudo_real,
-            accelerated_time=hysr_config.accelerated_time,
-        )
-        self._mujoco_ids.append(self._real_robot_handle.get_mujoco_id())
+        # pam muscles configuration
+        self._pam_config = pam_interface.JsonConfiguration(hysr_config.pam_config_file)
+
+        # to control pseudo-real robot (pressure control)
+        if not hysr_config.real_robot:
+            self._real_robot_handle, self._real_robot_frontend = configure_mujoco.configure_pseudo_real(
+                hysr_config.pam_config_file,
+                graphics=hysr_config.graphics_pseudo_real,
+                accelerated_time=hysr_config.accelerated_time,
+            )
+            self._mujoco_ids.append(self._real_robot_handle.get_mujoco_id())
+        else:
+            # real robot: making some sanity check that the
+            # rest of the configuration is ok
+            if hysr_config.instant_reset:
+                raise ValueError(str("HysrOneBall configured for "
+                                     "real robot and instant reset."
+                                     "Real robot does not support "
+                                     "instant reset."))
+            if hysr_config.accelerated_time:
+                raise ValueError(str("HysrOneBall configured for "
+                                     "real robot and accelerated time."
+                                     "Real robot does not support "
+                                     "accelerated time."))
+
 
         # to control the simulated robot (joint control)
         self._simulated_robot_handle = configure_mujoco.configure_simulation(
-            robot_position=hysr_config.robot_position,
-            graphics=hysr_config.graphics_simulation
+            hysr_config
         )
         self._mujoco_ids.append(self._simulated_robot_handle.get_mujoco_id())
 
@@ -284,13 +321,12 @@ class HysrOneBall:
         self._target_position = hysr_config.target_position
         self._goal = self._simulated_robot_handle.interfaces[SEGMENT_ID_GOAL]
 
-        # read all recorded trajectory files
+        # to read all recorded trajectory files
         self._trajectory_reader = context.BallTrajectories()
 
         # if requested, logging info about the frequencies of the steps and/or the
         # episodes
         if hysr_config.frequency_monitoring_step:
-            segment_id = hysr_config.frequency_monitoring_step
             size = 1000
             self._frequency_monitoring_step = frequency_monitoring.FrequencyMonitoring(
                 SEGMENT_ID_STEP_FREQUENCY, size
@@ -298,7 +334,6 @@ class HysrOneBall:
         else:
             self._frequency_monitoring_step = None
         if hysr_config.frequency_monitoring_episode:
-            segment_id = hysr_config.frequency_monitoring_episode
             size = 1000
             self._frequency_monitoring_episode = (
                 frequency_monitoring.FrequencyMonitoring(
@@ -327,9 +362,9 @@ class HysrOneBall:
             hysr_config.algo_time_step / hysr_config.mujoco_time_step
         )
 
-        # the config sets either a zero or positive int (playing the corresponding indexed
-        # pre-recorded trajectory) or a negative int (playing randomly selected indexed
-        # trajectories)
+        # the config sets either a zero or positive int (playing the
+        # corresponding indexed pre-recorded trajectory) or a negative int
+        # (playing randomly selected indexed trajectories)
         if hysr_config.trajectory >= 0:
             self._ball_behavior = _BallBehavior(index=hysr_config.trajectory)
         else:
@@ -350,13 +385,17 @@ class HysrOneBall:
 
         # to send pressure commands to the real or pseudo-real robot
         # (instance of o80_pam.o80_pressures.o80Pressures)
-        self._pressure_commands = self._real_robot_handle.interfaces[
-            SEGMENT_ID_PSEUDO_REAL_ROBOT
-        ]
+        # hysr_config.real robot is either false (i.e. pseudo real
+        # mujoco robot) or the segment_id of the real robot backend
+        if not hysr_config.real_robot:
+            self._pressure_commands = self._real_robot_handle.interfaces[
+                SEGMENT_ID_PSEUDO_REAL_ROBOT
+            ]
+        else:
+            self._real_robot_frontend = o80_pam.FrontEnd(hysr_config.real_robot)
+            self._pressure_commands = o80_pam.o80Pressures(hysr_config.real_robot,
+                                                           frontend=self._real_robot_frontend)
 
-        # the posture in which the robot will reset itself
-        # upon reset (may be None if no posture reset)
-        self._reference_posture = hysr_config.reference_posture
 
         # will encapsulate all information
         # about the ball (e.g. min distance with racket, etc)
@@ -372,13 +411,10 @@ class HysrOneBall:
         self._hit_point = self._simulated_robot_handle.interfaces[SEGMENT_ID_HIT_POINT]
 
         # tracking if this is the first step of the episode
-        # (a step sets it to false, reset sets it back to true)
+        # (a call to the step function sets it to false, call to reset function sets it
+        # back to true)
         self._first_episode_step = True
 
-        # will be used to move the robot to reference posture
-        # between episodes
-        self._max_pressures1 = [(18000, 18000)] * 4
-        self._max_pressures2 = [(20000, 20000)] * 4
 
         # normally an episode ends when the ball z position goes
         # below a certain threshold (see method _episode_over)
@@ -404,13 +440,10 @@ class HysrOneBall:
                 # balls: list of instances of _ExtraBalls (defined in this file)
                 # mirroring : for sending mirroring command to the robot
                 #             of the set (joint controlled)
-                #             (instance of o80_pam.o80_robot_mirroring.o80RobotMirroring)
+                #             (instance of
+                #             o80_pam.o80_robot_mirroring.o80RobotMirroring)
                 balls, mirroring, mujoco_id, frontend = _get_extra_balls(
-                    setid,
-                    hysr_config.extra_balls_per_set,
-                    hysr_config.robot_position,
-                    hysr_config.target_position,
-                    hysr_config.graphics_extra_balls,
+                    setid, hysr_config
                 )
 
                 self._extra_balls.extend(balls)
@@ -426,6 +459,16 @@ class HysrOneBall:
         # instance perform step(s) in parallel)
         self._parallel_burst = pam_mujoco.mirroring.ParallelBurst(self._mirrorings)
 
+        # if set, logging the position of the robot at the end of reset, and possibly
+        # get a warning when this position drifts as the number of episodes increase
+        if hysr_config.robot_integrity_check is not None:
+            self._robot_integrity = robot_integrity.RobotIntegrity(
+                hysr_config.robot_integrity_threshold,
+                file_path=hysr_config.robot_integrity_check,
+            )
+        else:
+            self._robot_integrity = None
+
         # when starting, the real robot and the virtual robot(s)
         # may not be aligned, which may result in graphical issues,
         # so aligning them
@@ -433,6 +476,10 @@ class HysrOneBall:
         # and set values to all simulated robot via self._mirrorings)
         # source of mirroring in pam_mujoco.mirroring.py
         pam_mujoco.mirroring.align_robots(self._pressure_commands, self._mirrorings)
+
+
+    def get_starting_pressures(self):
+        return self._hysr_config.starting_pressures
 
     def _share_episode_number(self, episode_number):
         # write the episode number in a memory shared
@@ -450,14 +497,18 @@ class HysrOneBall:
         # see comments in _BallBehavior, in this file
         self._ball_behavior = _BallBehavior(line=line, index=index, random=random)
 
-    def set_extra_ball_behavior(self, ball_index, line=False, index=False, random=False):
+    def set_extra_ball_behavior(
+        self, ball_index, line=False, index=False, random=False
+    ):
         # overwrite the ball behavior of the extra ball (set to random
         # selected pre-recorded trajectory in constructor)
         # see comments in _BallBehavior, in this file
-        if ball_index<0 or ball_index>=len(self._extra_balls):
+        if ball_index < 0 or ball_index >= len(self._extra_balls):
             raise IndexError(ball_index)
-        self._extra_balls[ball_index].ball_behavior = _BallBehavior(line=line, index=index, random=random)
-            
+        self._extra_balls[ball_index].ball_behavior = _BallBehavior(
+            line=line, index=index, random=random
+        )
+
     def _create_observation(self):
         (
             pressures_ago,
@@ -518,29 +569,33 @@ class HysrOneBall:
         duration = o80.Duration_us.milliseconds(int(sampling_rate_ms))
         # loading the ball behavior trajectory of each extra balls.
         # If set_extra_ball_behavior has not been called for a given
-        # extra ball, this trajectory will be None 
-        trajectories = [extra_ball.ball_behavior.get_trajectory()
-                        if extra_ball.ball_behavior is not None else None
-                        for extra_ball in self._extra_balls]
+        # extra ball, this trajectory will be None
+        trajectories = [
+            extra_ball.ball_behavior.get_trajectory()
+            if extra_ball.ball_behavior is not None
+            else None
+            for extra_ball in self._extra_balls
+        ]
         # None trajectories (i.e. set_extra_ball_behavior uncalled) then
         # setting a random trajectory
-        none_trajectory_indexes = [index for index,value in enumerate(trajectories)
-                             if value is None]
+        none_trajectory_indexes = [
+            index for index, value in enumerate(trajectories) if value is None
+        ]
         if none_trajectory_indexes:
-            extra_trajectories = self._trajectory_reader.get_different_random_trajectories(
-                len(none_trajectory_indexes)
+            extra_trajectories = (
+                self._trajectory_reader.get_different_random_trajectories(
+                    len(none_trajectory_indexes)
+                )
             )
-            for index,trajectory in zip(none_trajectory_indexes,extra_trajectories):
-                trajectories[index]=trajectory
+            for index, trajectory in zip(none_trajectory_indexes, extra_trajectories):
+                trajectories[index] = trajectory
         for index_ball, (ball, trajectory) in enumerate(
             zip(self._extra_balls, trajectories)
         ):
             # going to first trajectory point
             item3d.set_position(trajectory[0].position)
             item3d.set_velocity(trajectory[0].velocity)
-            ball.frontend.add_command(
-                index_ball, item3d, o80.Mode.OVERWRITE
-            )
+            ball.frontend.add_command(index_ball, item3d, o80.Mode.OVERWRITE)
             # loading full trajectory
             for item in trajectory[1:]:
                 item3d.set_position(item.position)
@@ -572,28 +627,7 @@ class HysrOneBall:
             ball.deactivate_contact()
 
     def _do_natural_reset(self):
-
-        # "natural": can be applied on the real robot
-        # (i.e. send pressures commands to get the robot
-        # in a vertical position)
-
-        # aligning the mirrored robot with
-        # (pseudo) real robot
-        mirroring.align_robots(self._pressure_commands, self._mirrorings)
-
-        # resetting real robot to "vertical" position
-        # tripling down to ensure reproducibility
-        for (max_pressures, duration) in zip(
-            (self._max_pressures1, self._max_pressures2), (0.5, 2)
-        ):
-            mirroring.go_to_pressure_posture(
-                self._pressure_commands,
-                self._mirrorings,
-                max_pressures,
-                duration,
-                self._accelerated_time,
-                parallel_burst=self._parallel_burst,
-            )
+        self._move_to_position(self._hysr_config.reference_posture)
 
     def _do_instant_reset(self):
 
@@ -605,6 +639,90 @@ class HysrOneBall:
         self._simulated_robot_handle.reset()
         for handle in _ExtraBall.handles.values():
             handle.reset()
+        self._move_to_pressure(self._hysr_config.reference_posture)
+
+    def _move_to_pressure(self,pressures):
+        # moves to pseudo-real robot to desired pressure in synchronization
+        # with the simulated robot(s)
+        if self._accelerated_time:
+            for _ in range(self._nb_robot_bursts):
+                self._pressure_commands.set(pressures, burst=1)
+                _,_,joint_positions,joint_velocities = self._pressure_commands.read()
+                for mirroring_ in self._mirrorings:
+                    mirroring_.set(joint_positions, joint_velocities)
+                self._parallel_burst.burst(1)
+            return
+        else:
+            self._pressure_commands.set(pressures, burst=False)
+        time_start = self._real_robot_frontend.latest().get_time_stamp()*1e-9
+        current_time=time_start
+        timeout = 0.5
+        while current_time-time_start < timeout:
+            current_time = self._real_robot_frontend.latest().get_time_stamp()*1e-9
+            _,_,joint_positions,joint_velocities = self._pressure_commands.read()
+            for mirroring_ in self._mirrorings:
+                mirroring_.set(joint_positions, joint_velocities)
+            self._parallel_burst.burst(self._nb_sim_bursts)
+
+    def _move_to_position(self, position):
+        # moves the pseudo-real robot to a desired position (in radians)
+        # via a position controller (i.e. compute the pressure trajectory
+        # required to reach, hopefully, for the position) in
+        # synchronization with the simulated robot(s).
+
+        # configuration for the controller
+        KP = [ 0.8 , -3.0  , 1.2,  -1.0 ]
+        KI = [ 0.015 , -0.25 , 0.02 ,-0.05 ]
+        KD = [ 0.04 , -0.09 , 0.09 , -0.09 ]
+        NDP = [ -0.3 , -0.5 , -0.34 , -0.48 ]
+        TIME_STEP = 0.01 # seconds
+        QD_DESIRED = [0.7,0.7,0.7,0.7] # radian per seconds
+        _,_,Q_CURRENT,_ = self._pressure_commands.read()
+
+        # configuration for HYSR
+        NB_SIM_BURSTS = int ( (TIME_STEP/self._hysr_config.mujoco_time_step) +0.5 )
+
+        # configuration for accelerated time
+        if self._accelerated_time:
+            NB_ROBOT_BURSTS = int(
+                (TIME_STEP/hysr_config.o80_pam_time_step) +0.5
+            )
+
+        # configuration for real time
+        if not self._accelerated_time:
+            frequency_manager = o80.FrequencyManager(1./TIME_STEP)
+
+        # applying the controller twice yields better results
+        for _ in range(2):
+
+            _,_,q_current,_ = self._pressure_commands.read()
+
+            # the position controller
+            controller = o80_pam.PositionController(q_current,position,QD_DESIRED,
+                                                    self._pam_config,
+                                                    KP,KD,KI,NDP,TIME_STEP)
+
+            # rolling the controller
+            while controller.has_next():
+                # current position and velocity of the real robot
+                _,_,q,qd = self._pressure_commands.read()
+                # mirroing the simulated robot(s)
+                for mirroring_ in self._mirrorings:
+                    mirroring_.set(q, qd)
+                self._parallel_burst.burst(NB_SIM_BURSTS)
+                # applying the controller to get the pressure to set
+                pressures = controller.next(q,qd)
+                # setting the pressures to real robot
+                if self._accelerated_time:
+                    # if accelerated times, running the pseudo real robot iterations
+                    # (note : o80_pam expected to have started in bursting mode)
+                    self._pressure_commands.set(pressures, burst=NB_ROBOT_BURSTS)
+                else:
+                    # Should start acting now in the background if not accelerated time
+                    self._pressure_commands.set(pressures, burst=False)
+                    frequency_manager.wait()
+
+
 
     def reset(self):
 
@@ -631,26 +749,20 @@ class HysrOneBall:
         # resetting the hit point
         self._hit_point.set([0, 0, -0.62], [0, 0, 0])
 
-        # going back to vertical position
         if self._instant_reset:
+            # going back to vertical position
+            # on simulated robot
             self._do_instant_reset()
+            mirroring.align_robots(self._pressure_commands, self._mirrorings)
         else:
+            # moving to reset position
             self._do_natural_reset()
+
+        # going to starting pressure
+        self._move_to_pressure(self._hysr_config.starting_pressures)
 
         # moving the goal to the target position
         self._goal.set(self._target_position, [0, 0, 0])
-
-        # moving real robot back to reference posture
-        if self._reference_posture:
-            for duration in (0.5, 1.0):
-                mirroring.go_to_pressure_posture(
-                    self._pressure_commands,
-                    self._mirrorings,
-                    self._reference_posture,
-                    duration,  # in 1 seconds
-                    self._accelerated_time,
-                    parallel_burst=self._parallel_burst,
-                )
 
         # setting the ball behavior
         self.load_ball()
@@ -686,12 +798,24 @@ class HysrOneBall:
         self.extra_max_ball_velocity = [0]*self._hysr_config.extra_balls_per_set
         self.extra_dones_before = [False]*self._hysr_config.extra_balls_per_set
         
+        # checking the position of the robot, to see if it drifts
+        # as episode increase (or if it not what is expected at all).
+        # raise an exception if drifted too much).
+        if self._robot_integrity is not None:
+            _, _, joint_positions, _ = self._pressure_commands.read()
+            warning = self._robot_integrity.set(joint_positions)
+            if warning:
+                self._robot_integrity.close()
+                self.close()
+                raise robot_integrity.RobotIntegrityException(
+                    self._robot_integrity, joint_positions
+                )
 
         # a new episode starts
         self._step_number = 0
         self._episode_number += 1
         self._share_episode_number(self._episode_number)
-        
+
         # returning an observation
         return self._create_observation()
 
@@ -699,8 +823,8 @@ class HysrOneBall:
 
         # if self._nb_steps_per_episode is positive,
         # exiting based on the number of steps
-        if self._nb_steps_per_episode>0:
-            if self._step_number>= self._nb_steps_per_episode:
+        if self._nb_steps_per_episode > 0:
+            if self._step_number >= self._nb_steps_per_episode:
                 return True
             else:
                 return False
@@ -799,8 +923,8 @@ class HysrOneBall:
         for mirroring_ in self._mirrorings:
             mirroring_.set(joint_positions, joint_velocities)
 
-        # having the simulated robot(s)/ball(s) performing the right number of iterations
-        # (note: simulated expected to run accelerated time)
+        # having the simulated robot(s)/ball(s) performing the right number of
+        # iterations (note: simulated expected to run accelerated time)
         self._parallel_burst.burst(self._nb_sim_bursts)
 
         def _update_ball_status(handle, segment_id, ball_status):
@@ -877,9 +1001,11 @@ class HysrOneBall:
 
                       
         # returning
-        return observation, reward, episode_over, extra_transitions
+        return observation, reward, episode_over
 
     def close(self):
+        if self._robot_integrity is not None:
+            self._robot_integrity.close()
         self._parallel_burst.stop()
         shared_memory.clear_shared_memory(SEGMENT_ID_EPISODE_FREQUENCY)
         shared_memory.clear_shared_memory(SEGMENT_ID_STEP_FREQUENCY)

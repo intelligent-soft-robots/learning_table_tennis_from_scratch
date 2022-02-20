@@ -14,6 +14,80 @@ pip3 install .
 
 # Running
 
+## Prepare configuration files
+
+The system uses at minima 3 json configuration files (5 if running an learning algorithm).
+
+### hysr configuration file
+
+Example:
+
+```json
+{
+    "real_robot":false,
+    "o80_pam_time_step":0.002,
+    "mujoco_time_step":0.002,
+    "algo_time_step":0.01,
+    "pam_config_file":"/opt/mpi-is/pam_interface/pam_sim.json",
+    "robot_position":[0.5, 0.0, -0.44],
+    "target_position":[0.45,2.7,-0.45],
+    "reference_posture":[[19900,16000],[16800,19100],[18700,17300],[18000,18000]],
+    "world_boundaries":{
+	"min":[0.0,-1.0,0.17],
+	"max":[1.6,3.5,1.5]
+    },
+    "pressure_change_range":18000,
+    "trajectory":-1,
+    "accelerated_time":false,
+    "instant_reset":true,
+    "nb_steps_per_episode":-1,
+    "extra_balls_sets":-1,
+    "extra_balls_per_set":-1,
+    "graphics":true,
+    "graphics_pseudo_real":false,
+    "graphics_simulation":false,
+    "graphics_extra_balls":false,
+    "xterms":false,
+    "frequency_monitoring_episode":true,
+    "frequency_monitoring_step":true
+}
+```
+
+- real_robot: false, or if using the real robot, the segment_id of its o80 backend (set when starting the robot, default:"real_robot")
+- o80_pam_time_step: frequency at which the pressure robot is controlled.
+When using a mujoco simulated pressure robot (i.e. "real_robot" set to false), the same value as the mujoco_time_step should be used.
+When using the real robot, the time step corresponding to the frequency selected at startup of the robot should be used.
+- mujoco_time_step: control frequency of the mujoco instances, 0.002 second is a reasonable value.
+- algo_time_step: frequency at which the learning algorithm will run
+- pam_config_file: configuration of the pam robot, including min and max pressures. Possibly use "/opt/mpi-is/pam_interface/pam_sim.json"
+for a mujoco simulated pressure robot, and "/opt/mpi-is/pam_interface/pam.json" when using the real robot.
+- robot_position: position of the simulated robot in the xy plane
+- target_position: 3d position of the target, i.e. where the robot is trained to aim the ball when learning table tennis
+- reference_posture: when the environment reset, the robot will first "go" to this posture, i.e. this set of pressure,
+in the format [[agonist muscle pressure, agonist muscle pressure] ...]
+- world_boundaries: boundaries of the 3d world (in meters)
+- pressure_change_range: the action of the ppo2 algorithm will consist of delta of pressures, the pressure change range is the maximal
+delta value
+- trajectory: the ball will play at each episode a pre-recorded trajectory. A negative value indicate that at each episode, a pre-recorded
+trajectory will be selected randomly. A positive value will be the index of the trajectory to play (same trajectory played at each episode)
+- accelerated_time: all mujoco simulations will run at maximal speed. Should not be set to true when using the real robot.
+- instant_reset: between each episode, the robot will go to the reference_posture. If instant reset is true, it will "teleport" to the reference
+posture, if false it will execute commands that will bring it to the posture. Should be false when using the real robot.
+- nb_steps_per_episode: if a negative value, episodes will stop when the ball position z component passes a threshold (i.e. the ball has low height).
+If a positive value: episodes will stop after the corresponding number of steps .
+- extra_balls_sets: if negative, the environment will "host" only one ball. If a positive value, supplementary balls will be added to environment.
+For the moment, only the positive value "1" is supported.
+- extra_balls_per_set: number of extra balls per extra balls set. Only values supported: 1, 3, 10 and 20.
+- graphics: if true, an extra mujoco simulation will open with graphics, displaying the motion of the robot, ball and extra balls
+- graphics_pseudo_real, graphics_simulation, graphics_extra_balls: if true, the corresponding mujoco instance will start with graphics. Because
+ of some technical reason (use of o80's [bursting mode](http://people.tuebingen.mpg.de/mpi-is-software/o80/docs/o80/doc/06.bursting.html)), they
+ may be laggy. To be used only for debug. 
+- xterms: if true, the controllers of all mujoco instances will start in new dedicated terminals. If false, they all start in the current terminal
+(output may be more difficult to read)
+- frequency_monitoring_episode: if true, it will allow the usage of the ```hysr_episode_frequencies``` executable, see documentation somewhere below
+- frequency_monitoring_step: if true, it will allow the usage of the ```hysr_step_frequencies``` executable, see documentation somewhere below
+
+
 ## starting the robots
 
 In a first terminal, start either of these executables:
@@ -23,30 +97,24 @@ In a first terminal, start either of these executables:
 hysr_start_robots
 ```
 
-or
-
-```bash
-# start the robots in current terminal
-hysr_start_robots_no_xterms
-```
-
 press enter to get the prompt back.
 
-The executable above initializes two instances of mujoco.
+The executable above initializes several instances of mujoco.
 
 - the pseudo real robot: a pressure controlled robot
 - the simulated robot: a joint control robot, plus a table tennis, a ball; and a visual marker
+- if using extra balls set: an instance of mujoco per ball set
 
-During runtime of the learning algorithm, pressures commands will be sent to the pseudo real robot;
+During runtime of the learning algorithm, and via a [gym](https://gym.openai.com/) environment, pressures commands will be sent to the pseudo real robot;
 and the simulated robot will mirror the motion of the pseudo-real robot (HYSR - HYbrid Sim to Real,
 see this [publication](https://arxiv.org/pdf/2006.05935.pdf)).
 
-After starting, the mujoco simulations hang and wait for configuration.
+After starting, the mujoco simulations hang and wait for configuration (which occurs when one executable is called, see right below).
 
 ## start the control executables
 
 The executables will configure the mujoco instances, and then send control commmands to the pseudo-real robot
-and / or to the simulated robot.
+and / or to the simulated robot (via a gym environment, if the executable run a learning algorithm).
 
 ### list of executables
 
@@ -96,9 +164,12 @@ The learning executable configuration json file requires this content:
 }
 ```
 
-The bin folder has exemple of configuration files, except for the ```pam_config```
-configuration file, which has an example in ```/opt/mpi-is/pam_models/```
-(very possibly you will want to use ```/opt/mpi-is/pam_models/hill.json```).
+The bin folder has exemple of configuration files, except for:
+
+- the ```pam_model``` configuration file, which has an example in ```/opt/mpi-is/pam_models/```
+(possibly you will want to use ```/opt/mpi-is/pam_models/hill.json```).
+
+- the ```pam_config``` configuration file (very possibly you will want to use ```/opt/mpi-is/pam_interface/pam_sim.json```)
 
 Once the configuration file has been set in the current directory, the executable can be started, e.g.:
 
@@ -117,8 +188,14 @@ a row without restarting the robots. If the configuration is changed, then the r
 In any terminal, type:
 
 ```
-pam_mujoco_stop_all
+hysr_stop
 ```
+
+## Example configuration
+
+The `example/` directory contains an example configuration that can be used to
+run the above commands.  See the README there for more information.
+
 
 ## Extra executables
 

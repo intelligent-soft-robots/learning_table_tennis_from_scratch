@@ -52,7 +52,7 @@ class PPOConfig:
         for s in cls.__slots__:
             try:
                 setattr(instance, s, conf[s])
-            except:
+            except Exception:
                 raise ValueError(
                     "failed to find the attribute {} " "in {}".format(s, jsonpath)
                 )
@@ -82,6 +82,10 @@ class OpenAIPPOConfig:
         "num_hidden",
         "activation",
         "nsteps",
+        "save_path",
+        "load_path",
+        "log_interval",
+        "save_interval"
     )  # , "seed")
 
     def __init__(self):
@@ -117,7 +121,7 @@ class OpenAIPPOConfig:
         for s in cls.__slots__:
             try:
                 setattr(instance, s, conf[s])
-            except:
+            except Exception:
                 raise ValueError(
                     "failed to find the attribute {} " "in {}".format(s, jsonpath)
                 )

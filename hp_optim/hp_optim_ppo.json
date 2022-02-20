@@ -1,0 +1,61 @@
+{
+    "optimization_procedure_name": "hyper_param_optim_lttfs_ppo_100_10",
+    "results_dir": "/home/felixwidmaier/tmp",
+    "run_in_working_dir": false,
+    "git_params": {
+        "url": "https://github.com/intelligent-soft-robots/learning_table_tennis_from_scratch.git",
+        "branch": "master",
+        "commit": null
+    },
+    "script_relative_path": "./hp_optim/run_singularity.py",
+    "remove_jobs_dir": false,
+    "environment_setup": {
+    },
+    "cluster_requirements": {
+        "request_cpus": 2,
+        "request_gpus": 0,
+        "cuda_requirement": null,
+        "memory_in_mb": 10000,
+        "bid": 10
+    },
+    "fixed_params": {
+        "config.config_templates": "./hp_optim/config_templates_ppo.json",
+        "singularity.image": "~/learning_table_tennis_from_scratch.sif",
+        "singularity.script": "./hp_optim/run_learning.py"
+    },
+    "optimizer_str": "cem_metaoptimizer",
+    "optimizer_settings": {
+        "with_restarts": false,
+        "num_jobs_in_elite": 10
+    },
+    "optimization_setting": {
+        "metric_to_optimize": "eprewmean",
+        "minimize": false,
+        "number_of_samples": 100,
+        "n_jobs_per_iteration": 10
+    },
+    "num_best_jobs_whose_data_is_kept": 10,
+    "optimized_params": [
+        {
+            "param": "config.ppo_config.num_layers",
+            "distribution": "Discrete",
+            "options": [1, 2]
+        },
+        {
+            "param": "config.ppo_config.num_hidden",
+            "distribution": "IntLogNormal",
+            "bounds": [32, 32768]
+        },
+        {
+            "param": "config.ppo_config.lr",
+            "distribution": "TruncatedLogNormal",
+            "bounds": [1e-5, 1e-1]
+        },
+        {
+            "param": "config.hysr_config.pressure_change_range",
+            "distribution": "IntLogNormal",
+            "bounds": [180, 18000]
+        }
+
+    ]
+}

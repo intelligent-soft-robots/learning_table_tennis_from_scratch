@@ -1,14 +1,15 @@
 #!/usr/bin/env python3
 
-import sys, random, logging
-import o80, context
-from lightargs import BrightArgs, FileExists
+import logging
+import o80
+import context
 from learning_table_tennis_from_scratch.hysr_one_ball import (
     HysrOneBall,
-    HysrOneBallConfig
+    HysrOneBallConfig,
 )
 from learning_table_tennis_from_scratch.rewards import JsonReward
 from learning_table_tennis_from_scratch.jsonconfig import get_json_config
+
 
 def execute(reward_config_path, hysr_config_path):
 
@@ -29,16 +30,16 @@ def execute(reward_config_path, hysr_config_path):
 
     frequency_manager = o80.FrequencyManager(1.0 / algo_time_step)
 
-    swing_posture = [[18000,17000],[16800,19100],[18700,17300],[18000,18000]]
+    swing_posture = [[18000, 17000], [16800, 19100], [18700, 17300], [18000, 18000]]
     swing_pressures = [p for sublist in swing_posture for p in sublist]
     wait_pressures = [p for sublist in hysr_config.reference_posture for p in sublist]
-    
+
     for episode in range(3):
         print("EPISODE", episode)
         running = True
         nb_steps = 0
         while running:
-            if nb_steps<60:
+            if nb_steps < 60:
                 observation, reward, reset = hysr.step(wait_pressures)
             else:
                 observation, reward, reset = hysr.step(swing_pressures)
@@ -55,18 +56,21 @@ def execute(reward_config_path, hysr_config_path):
 
     hysr.close()
 
+
 def _configure():
-    files = get_json_config(expected_keys=["reward_config",
-                                           "hysr_config"])
-    
-    return files["reward_config"],files["hysr_config"]
-    
+    files = get_json_config(expected_keys=["reward_config", "hysr_config"])
+
+    return files["reward_config"], files["hysr_config"]
+
+
 def _run():
-    logging.basicConfig(format='hysr_one_ball_swing | %(message)s',level=logging.INFO)
-    reward_config,hysr_config = _configure()
-    print("\nusing configuration files:\n- {}\n- {}\n".format(reward_config,
-                                                              hysr_config))
-    execute(reward_config,hysr_config)
+    logging.basicConfig(format="hysr_one_ball_swing | %(message)s", level=logging.INFO)
+    reward_config, hysr_config = _configure()
+    print(
+        "\nusing configuration files:\n- {}\n- {}\n".format(reward_config, hysr_config)
+    )
+    execute(reward_config, hysr_config)
+
 
 if __name__ == "__main__":
     _run()

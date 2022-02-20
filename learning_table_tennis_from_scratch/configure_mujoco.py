@@ -1,7 +1,7 @@
 import o80_pam
 import pam_mujoco
 
-
+SEGMENT_ID_TABLE = pam_mujoco.segment_ids.table
 SEGMENT_ID_BALL = pam_mujoco.segment_ids.ball
 SEGMENT_ID_GOAL = pam_mujoco.segment_ids.goal
 SEGMENT_ID_HIT_POINT = pam_mujoco.segment_ids.hit_point
@@ -33,15 +33,22 @@ def get_ball_segment_id(set_id, index):
     return "ball_" + str(set_id) + "_" + str(index)
 
 
-def configure_extra_set(setid, nb_balls, robot_position, graphics):
+def configure_extra_set(setid, hysr_config):
 
+    nb_balls = hysr_config.extra_balls_per_set
+    graphics = hysr_config.graphics_extra_balls
     accelerated_time = True
     burst_mode = True
+
+    table = pam_mujoco.MujocoTable(SEGMENT_ID_TABLE,
+                                   position=hysr_config.table_position,
+                                   orientation=hysr_config.table_orientation)
 
     robot_segment_id = get_extra_robot_segment_id(setid)
     robot = pam_mujoco.MujocoRobot(
         robot_segment_id,
-        position=robot_position,
+        position=hysr_config.robot_position,
+        orientation=hysr_config.robot_orientation,
         control=pam_mujoco.MujocoRobot.JOINT_CONTROL
     )
 
@@ -65,7 +72,7 @@ def configure_extra_set(setid, nb_balls, robot_position, graphics):
         graphics=graphics,
         accelerated_time=accelerated_time,
         burst_mode=burst_mode,
-        table=True,
+        table=table,
         robot1=robot,
         combined=balls,
     )
@@ -74,7 +81,7 @@ def configure_extra_set(setid, nb_balls, robot_position, graphics):
 
 
 def configure_pseudo_real(
-    mujoco_id="pseudo-real", graphics=True, accelerated_time=False
+    pam_config_file, mujoco_id="pseudo-real", graphics=True, accelerated_time=False
 ):
 
     if accelerated_time:
@@ -83,7 +90,9 @@ def configure_pseudo_real(
         burst_mode = False
 
     robot = pam_mujoco.MujocoRobot(
-        SEGMENT_ID_PSEUDO_REAL_ROBOT, control=pam_mujoco.MujocoRobot.PRESSURE_CONTROL
+        SEGMENT_ID_PSEUDO_REAL_ROBOT,
+        control=pam_mujoco.MujocoRobot.PRESSURE_CONTROL,
+        json_control_path=pam_config_file,
     )
     handle = pam_mujoco.MujocoHandle(
         mujoco_id,
@@ -93,17 +102,25 @@ def configure_pseudo_real(
         robot1=robot,
     )
 
-    return handle
+    frontend = handle.frontends[SEGMENT_ID_PSEUDO_REAL_ROBOT]
+
+    return handle,frontend
 
 
-def configure_simulation(robot_position, mujoco_id="simulation", graphics=True):
+def configure_simulation(hysr_config, mujoco_id="simulation"):
 
     accelerated_time = True
     burst_mode = True
+    graphics = hysr_config.graphics_simulation
 
+    table = pam_mujoco.MujocoTable(SEGMENT_ID_TABLE,
+                                   position=hysr_config.table_position,
+                                   orientation=hysr_config.table_orientation
+    )
     robot = pam_mujoco.MujocoRobot(
         SEGMENT_ID_ROBOT_MIRROR,
-        position=robot_position,
+        position=hysr_config.robot_position,
+        orientation=hysr_config.robot_orientation,
         control=pam_mujoco.MujocoRobot.JOINT_CONTROL
     )
     ball = pam_mujoco.MujocoItem(
@@ -122,7 +139,7 @@ def configure_simulation(robot_position, mujoco_id="simulation", graphics=True):
         graphics=graphics,
         accelerated_time=accelerated_time,
         burst_mode=burst_mode,
-        table=True,
+        table=table,
         robot1=robot,
         balls=(ball,),
         hit_points=(hit_point,),

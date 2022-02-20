@@ -1,5 +1,9 @@
-import o80, pam_interface
-import math, gym, random, time, json
+import o80
+import pam_interface
+import math
+import gym
+import time
+import json
 import numpy as np
 from .hysr_one_ball import HysrOneBall, HysrOneBallConfig
 from .rewards import JsonReward
@@ -45,8 +49,6 @@ class _ObservationSpace:
 
     def set_values_pressures(self, name, values, env):
         for dof in range(env._nb_dofs):
-            p_plus = 0
-            p_minus = 0
             values[2 * dof] = env._reverse_scale_pressure(dof, True, values[2 * dof])
             values[2 * dof + 1] = env._reverse_scale_pressure(
                 dof, False, values[2 * dof + 1]
@@ -67,7 +69,6 @@ class _ObservationSpace:
 class HysrOneBallEnv(gym.Env):
     def __init__(
         self,
-        pam_config_file=None,
         reward_config_file=None,
         hysr_one_ball_config_file=None,
         log_episodes=False,
@@ -80,9 +81,12 @@ class HysrOneBallEnv(gym.Env):
         self._log_tensorboard = log_tensorboard
 
         hysr_one_ball_config = HysrOneBallConfig.from_json(hysr_one_ball_config_file)
+
         reward_function = JsonReward.get(reward_config_file)
 
-        self._config = pam_interface.JsonConfiguration(pam_config_file)
+        self._config = pam_interface.JsonConfiguration(
+            hysr_one_ball_config.pam_config_file
+        )
         self._nb_dofs = len(self._config.max_pressures_ago)
         self._algo_time_step = hysr_one_ball_config.algo_time_step
         self._pressure_change_range = hysr_one_ball_config.pressure_change_range
@@ -129,11 +133,17 @@ class HysrOneBallEnv(gym.Env):
             self.data_buffer = []
 
         # initialize initial action (for action diffs)
-        # this could be parameterized
         self.last_action = np.zeros(self._nb_dofs * 2)
+        starting_pressures = self._hysr.get_starting_pressures()
         for dof in range(self._nb_dofs):
-            self.last_action[2 * dof] = 0.5
-            self.last_action[2 * dof + 1] = 0.5
+            self.last_action[2 * dof] = self._reverse_scale_pressure(dof, 
+                                                                     True, 
+                                                                     starting_pressures[dof][0])
+            self.last_action[2 * dof + 1] = self._reverse_scale_pressure(dof, 
+                                                                         False, 
+                                                                         starting_pressures[dof][1])
+
+            
 
     def _bound_pressure(self, dof, ago, value):
         if ago:
@@ -199,10 +209,13 @@ class HysrOneBallEnv(gym.Env):
 
     def step(self, action):
 
+        if not self._accelerated_time and self._frequency_manager is None:
+            self._frequency_manager = o80.FrequencyManager(1.0 / self._algo_time_step)
+
         action_orig = action.copy()
 
         # casting similar to old code
-        action_diffs_factor = 0.25  # this could maybe be a hyperparameter
+        action_diffs_factor = self._pressure_change_range/18000
         action = action * action_diffs_factor
         action_sigmoid = [1 / (1 + np.exp(-a)) - 0.5 for a in action]
         action = [
@@ -270,7 +283,7 @@ class HysrOneBallEnv(gym.Env):
         observation = self._hysr.reset()
         observation = self._convert_observation(observation)
         if not self._accelerated_time:
-            self._frequency_manager = o80.FrequencyManager(1.0 / self._algo_time_step)
+            self._frequency_manager = None
         return observation
 
     def dump_data(self, data_buffer):
