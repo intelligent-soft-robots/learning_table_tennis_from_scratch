@@ -18,6 +18,9 @@
 # then a "hysr executable" (e.g. hysr_one_ball_ppo) will be started
 # from the same folder, so both use the same config files.
 
+# exit if there is any error (e.g. if the config file is invalid)
+set -e
+
 
 if [ $# == 0 ]; then
     # list json files in current directory
@@ -114,11 +117,11 @@ fi
 if [ "$xterms" = true ]; then
     # all mujoco instances started in a
     # separate terminal
-    pam_mujoco="pam_mujoco"
+    launch_pam_mujoco="launch_pam_mujoco_xterm"
 else
     # all instances started in the current terminal
     # (mixed output)
-    pam_mujoco="pam_mujoco_no_xterms"
+    launch_pam_mujoco="launch_pam_mujoco"
 fi
 
 # pseudo-real and simulation used in any case
@@ -140,27 +143,68 @@ else
     visualization=""
 fi
 
-command1="${pam_mujoco} ${mujoco_ids[@]}"
-
 if [ "$graphics" = true ]; then
-    command2="hysr_visualization"
+    command_visualization="hysr_visualization"
 else
-    command2=""
+    command_visualization=""
 fi
 
 # running command
 
 echo ""
-echo "running command: ${command1} & ${command2} "
-echo "(call pam_mujoco_stop_all to stop all instances of mujoco)"
+echo "Starting Mujoco instances."
+echo "Press Ctrl+C or call hysr_stop to stop all instances."
 echo ""
 
-${command1} &
-if [ ! "$command2" = "" ]; then
-    ${command2} &
+# run all sub-processes and collect their PIDs for monitoring
+pids=()
+
+for mujoco_id in "${mujoco_ids[@]}"; do
+    ${launch_pam_mujoco} "${mujoco_id}" &
+    pids+=($!)
+    echo "Run ${launch_pam_mujoco} ${mujoco_id} with PID ${pids[-1]}"
+done
+
+if [ ! "$command_visualization" = "" ]; then
+    ${command_visualization} &
+    pids+=($!)
+    echo "Run ${command_visualization} with PID ${pids[-1]}"
 fi
 
+# monitor processes until one of them terminates or Ctrl+C is pressed
+shutdown_requested=0
 
+function sigint_handler()
+{
+    echo "Initiate shutdown"
+    shutdown_requested=1
+}
+trap sigint_handler SIGINT
 
+# Disable exit on error from here on to prevent exiting without reaching the
+# kill loop at the end.
+set +e
 
+echo "Start monitoring processes ${pids[@]}"
+while [ ${shutdown_requested} == 0 ]; do
+    for pid in "${pids[@]}"; do
+        if ! ps -p ${pid} > /dev/null; then
+            >&2 echo "Process ${pid} has died! Terminate other processes..."
+            break 2
+        fi
+    done
 
+    sleep 1
+done
+
+# Reaching here means that one of the monitored processes died or shutdown has
+# been requested (e.g. via Ctrl+C).  Kill the rest and exit.
+echo "processes to kill: ${pids[@]}"
+for pid in "${pids[@]}"; do
+    if ps -p ${pid} > /dev/null; then
+        >&2 echo "Kill process ${pid}"
+        kill ${pid} || true
+    else
+        >&2 echo "Process ${pid} already terminated"
+    fi
+done
