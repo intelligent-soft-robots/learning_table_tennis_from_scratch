@@ -46,6 +46,7 @@ def configure_extra_set(setid, hysr_config):
 
     robot_segment_id = get_extra_robot_segment_id(setid)
     robot = pam_mujoco.MujocoRobot(
+        False,
         robot_segment_id,
         position=hysr_config.robot_position,
         orientation=hysr_config.robot_orientation,
@@ -90,6 +91,7 @@ def configure_pseudo_real(
         burst_mode = False
 
     robot = pam_mujoco.MujocoRobot(
+        False,
         SEGMENT_ID_PSEUDO_REAL_ROBOT,
         control=pam_mujoco.MujocoRobot.PRESSURE_CONTROL,
         json_control_path=pam_config_file,
@@ -118,6 +120,7 @@ def configure_simulation(hysr_config, mujoco_id="simulation"):
                                    orientation=hysr_config.table_orientation
     )
     robot = pam_mujoco.MujocoRobot(
+        False,
         SEGMENT_ID_ROBOT_MIRROR,
         position=hysr_config.robot_position,
         orientation=hysr_config.robot_orientation,
