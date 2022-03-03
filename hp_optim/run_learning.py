@@ -179,11 +179,13 @@ def main():
 
     try:
         print("Start robots")
-        proc_backend = subprocess.Popen(["hysr_start_robots", os.fspath(config_file])
+        proc_backend = subprocess.Popen(["hysr_start_robots", os.fspath(config_file)])
 
         print("Start learning")
         start = time.time()
-        proc_learning = subprocess.Popen(["hysr_one_ball_ppo", os.fspath(config_file], env=env)
+        proc_learning = subprocess.Popen(
+            ["hysr_one_ball_ppo", os.fspath(config_file)], env=env
+        )
 
         # monitor processes
         while True:
