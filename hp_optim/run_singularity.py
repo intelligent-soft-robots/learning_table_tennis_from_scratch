@@ -33,7 +33,14 @@ import cluster
 def main():
     # get the singularity parameters (pass copy of sys.argv so that the
     # original arguments do not get modified)
-    params = cluster.read_params_from_cmdline(sys.argv.copy())
+    argv_copy = sys.argv.copy()
+    # clear the first argument (which includes server info) to prevent this
+    # script from registering exit reporting (this is already done by the
+    # run_learning.py which is run by this script).
+    # FIXME: This is just a hacky workaround, a better solution should be
+    # provided by cluster_utils (or maybe integrate Singularity support there?)
+    argv_copy[0] = ""
+    params = cluster.read_params_from_cmdline(argv_copy, verbose=False, save_params=False)
 
     # some basic sanity checks of the parameters
     if "singularity" not in params:
