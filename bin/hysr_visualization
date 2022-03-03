@@ -76,7 +76,8 @@ def _get_handle_to(mujoco_id,
     table = pam_mujoco.MujocoTable(segment_id_table,
                                    position=table_position,
                                    orientation=table_orientation)
-    robot = pam_mujoco.MujocoRobot(segment_id_robot,
+    robot = pam_mujoco.MujocoRobot(False,
+                                   segment_id_robot,
                                    position=robot_position,
                                    orientation=robot_orientation,
                                    control=pam_mujoco.MujocoRobot.JOINT_CONTROL)
