@@ -179,11 +179,36 @@ def main():
 
     try:
         print("Start robots")
-        subprocess.run(["hysr_start_robots"], check=True)
+        proc_backend = subprocess.Popen(["hysr_start_robots", os.fspath(config_file)])
 
         print("Start learning")
         start = time.time()
-        subprocess.run(["hysr_one_ball_ppo"], env=env, check=True)
+        proc_learning = subprocess.Popen(
+            ["hysr_one_ball_ppo", os.fspath(config_file)], env=env
+        )
+
+        # monitor processes
+        while True:
+            time.sleep(5)
+
+            if proc_backend.poll() is not None:
+                # backend terminated, this is bad!
+                # kill learning and fail
+                proc_learning.kill()
+                raise subprocess.CalledProcessError(
+                    proc_backend.returncode, proc_backend.args
+                )
+
+            if proc_learning.poll() is not None:
+                if proc_learning.returncode == 0:
+                    break
+                else:
+                    raise subprocess.CalledProcessError(
+                        proc_learning.returncode, proc_learning.args
+                    )
+                    # there is no need to explicitly terminate the backend
+                    # here, this is done by hysr_stop below
+
         duration = (time.time() - start) / 60
         print("\n\nlearning took %0.2f min" % duration)
 
