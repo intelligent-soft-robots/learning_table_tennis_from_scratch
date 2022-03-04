@@ -24,6 +24,7 @@ Example:
 """
 import os
 import pathlib
+import subprocess
 import sys
 
 import cluster
@@ -32,7 +33,17 @@ import cluster
 def main():
     # get the singularity parameters (pass copy of sys.argv so that the
     # original arguments do not get modified)
-    params = cluster.update_params_from_cmdline(sys.argv.copy())
+    argv_copy = sys.argv.copy()
+    # clear the first argument (which includes server info) to prevent this
+    # script from registering exit reporting (this is already done by the
+    # run_learning.py which is run by this script).
+    # FIXME: This is just a pretty dirty temporary workaround, a better
+    # solution probably needs some change in cluster_utils (maybe integrate
+    # Singularity support directly there?)
+    del argv_copy[1]
+    params = cluster.read_params_from_cmdline(
+        argv_copy, verbose=False, save_params=False
+    )
 
     # some basic sanity checks of the parameters
     if "singularity" not in params:
@@ -58,13 +69,13 @@ def main():
         )
 
     # create model directory (so it can be bound into the container)
-    pathlib.Path(params.model_dir).mkdir(exist_ok=True)
+    working_dir = pathlib.Path(params.working_dir)
+    working_dir.mkdir(exist_ok=True)
 
     # run Singularity
     cwd = os.getcwd()
-    bind_dirs = ["/tmp", params.model_dir, cwd]
-    os.execlp(
-        "singularity",
+    bind_dirs = ["/tmp", params.working_dir, cwd]
+    cmd = [
         "singularity",
         "run",
         "--nv",
@@ -74,7 +85,14 @@ def main():
         singularity_image,
         params.singularity.script,
         *sys.argv[1:],
-    )
+    ]
+
+    # explicitly redirect output to file, so it is stored also when running
+    # locally
+    stdout_file = working_dir / "stdout.txt"
+    stderr_file = working_dir / "stderr.txt"
+    with open(stdout_file, "wb") as f_out, open(stderr_file, "wb") as f_err:
+        subprocess.run(cmd, check=True, stdout=f_out, stderr=f_err)
 
 
 if __name__ == "__main__":

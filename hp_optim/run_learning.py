@@ -17,6 +17,7 @@ import time
 import typing
 
 import cluster
+import smart_settings.param_classes
 
 
 def prepare_config_file(
@@ -51,7 +52,7 @@ def prepare_config_file(
         json.dump(config, f)
 
 
-def setup_config(working_dir: pathlib.Path, params: dict):
+def setup_config(working_dir: pathlib.Path, params: dict) -> pathlib.Path:
     """Set up config files based on templates and parameters.
 
     The *params* dictionary is expected to have an entry "config_templates" which
@@ -83,44 +84,38 @@ def setup_config(working_dir: pathlib.Path, params: dict):
     Args:
         working_dir:  Directory in which the config setup is created.
         params:  Dictionary of parameters (see above).
+
+    Returns:
+        Path to the main config file.
     """
     main_config_file = working_dir / "config.json"
     # if config is already there, skip creation (this is the case when
     # restarting after a failure)
     if main_config_file.exists():
         print("config.json already exists, skip setup.")
-        return
+    else:
+        with open(params["config_templates"], "r") as f:
+            config_file_templates = json.load(f)
 
-    with open(params["config_templates"], "r") as f:
-        config_file_templates = json.load(f)
+        config_dir = working_dir / "config"
+        config_dir.mkdir(exist_ok=True, parents=True)
 
-    config_dir = working_dir / "config"
-    config_dir.mkdir(exist_ok=True, parents=True)
+        base_config = {
+            "reward_config": "./config/reward_config.json",
+            "hysr_config": "./config/hysr_config.json",
+            "pam_config": "./config/pam_config.json",
+            "ppo_config": "./config/ppo_config.json",
+            "ppo_common_config": "./config/ppo_common_config.json",
+        }
+        with open(main_config_file, "w") as f:
+            json.dump(base_config, f)
 
-    # Set ppo_config.save_path to working_dir (unless a different value is
-    # already explicitly set in params).
-    # Need to convert params to normal dict, so it becomes mutable
-    params = dict(params)
-    if "ppo_config" not in params:
-        params["ppo_config"] = {}
-    if "save_path" not in params["ppo_config"]:
-        params["ppo_config"] = dict(params["ppo_config"])
-        params["ppo_config"]["save_path"] = os.fspath(working_dir / "model")
+        base_config_path = pathlib.PurePath(params["config_templates"]).parent
+        for name in base_config.keys():
+            template_path = base_config_path / config_file_templates[name]
+            prepare_config_file(name, template_path, params.get(name, {}), config_dir)
 
-    base_config = {
-        "reward_config": "./config/reward_config.json",
-        "hysr_config": "./config/hysr_config.json",
-        "pam_config": "./config/pam_config.json",
-        "ppo_config": "./config/ppo_config.json",
-        "ppo_common_config": "./config/ppo_common_config.json",
-    }
-    with open(main_config_file, "w") as f:
-        json.dump(base_config, f)
-
-    base_config_path = pathlib.PurePath(params["config_templates"]).parent
-    for name in base_config.keys():
-        template_path = base_config_path / config_file_templates[name]
-        prepare_config_file(name, template_path, params.get(name, {}), config_dir)
+    return main_config_file
 
 
 def read_reward_from_log(log_dir: pathlib.PurePath):
@@ -147,25 +142,14 @@ def read_reward_from_log(log_dir: pathlib.PurePath):
 
 
 def main():
-    # overwrite some values from the config templates to disable any graphical
-    # interfaces
-    default_params = {
-        "config": {
-            "hysr_config": {
-                "graphics": False,
-                "xterms": False,
-            },
-        }
-    }
-
-    # get parameters
-    params = cluster.update_params_from_cmdline(default_params=default_params)
+    # get parameters (make mutable so defaults can easily be set later)
+    params = cluster.read_params_from_cmdline(make_immutable=False)
 
     print("Params:")
     print(params)
     print("---")
 
-    working_dir = pathlib.Path(params.model_dir)
+    working_dir = pathlib.Path(params.working_dir)
 
     # prepare environment
     env = dict(
@@ -174,7 +158,23 @@ def main():
         OPENAI_LOGDIR=os.fspath(working_dir / "training_logs"),
     )
 
-    setup_config(working_dir, params.config)
+    # Overwrite some values from the config templates to disable any graphical
+    # interfaces and to save the model in working_dir (unless a different value
+    # is already explicitly set in params).
+    default_params = {
+        "hysr_config": {
+            "graphics": False,
+            "xterms": False,
+        },
+        "ppo_config": {
+            "save_path": os.fspath(working_dir / "model"),
+        },
+    }
+    params.config = smart_settings.param_classes.update_recursive(
+        params.config, default_params, overwrite=False
+    )
+
+    config_file = setup_config(working_dir, params.config)
     os.chdir(working_dir)
 
     try:
