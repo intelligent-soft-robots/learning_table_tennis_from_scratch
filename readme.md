@@ -28,7 +28,7 @@ Example:
     "o80_pam_time_step":0.002,
     "mujoco_time_step":0.002,
     "algo_time_step":0.01,
-    "pam_config_file":"/opt/mpi-is/pam_interface/pam_sim.json",
+    "pam_config_file":"/opt/mpi-is/pam_interface/pamy1/pam_sim.json",
     "robot_position":[0.5, 0.0, -0.44],
     "target_position":[0.45,2.7,-0.45],
     "reference_posture":[[19900,16000],[16800,19100],[18700,17300],[18000,18000]],
@@ -59,8 +59,8 @@ When using a mujoco simulated pressure robot (i.e. "real_robot" set to false), t
 When using the real robot, the time step corresponding to the frequency selected at startup of the robot should be used.
 - mujoco_time_step: control frequency of the mujoco instances, 0.002 second is a reasonable value.
 - algo_time_step: frequency at which the learning algorithm will run
-- pam_config_file: configuration of the pam robot, including min and max pressures. Possibly use "/opt/mpi-is/pam_interface/pam_sim.json"
-for a mujoco simulated pressure robot, and "/opt/mpi-is/pam_interface/pam.json" when using the real robot.
+- pam_config_file: configuration of the pam robot, including min and max pressures. Possibly use "/opt/mpi-is/pam_interface/pamy1/pam_sim.json"
+for a mujoco simulated pressure robot, and "/opt/mpi-is/pam_interface/pamy2/pam.json" when using the real (pamy2) robot.
 - robot_position: position of the simulated robot in the xy plane
 - target_position: 3d position of the target, i.e. where the robot is trained to aim the ball when learning table tennis
 - reference_posture: when the environment reset, the robot will first "go" to this posture, i.e. this set of pressure,
@@ -169,7 +169,7 @@ The bin folder has exemple of configuration files, except for:
 - the ```pam_model``` configuration file, which has an example in ```/opt/mpi-is/pam_models/```
 (possibly you will want to use ```/opt/mpi-is/pam_models/hill.json```).
 
-- the ```pam_config``` configuration file (very possibly you will want to use ```/opt/mpi-is/pam_interface/pam_sim.json```)
+- the ```pam_config``` configuration file (very possibly you will want to use ```/opt/mpi-is/pam_interface/pamy1/pam_sim.json```)
 
 Once the configuration file has been set in the current directory, the executable can be started, e.g.:
 
