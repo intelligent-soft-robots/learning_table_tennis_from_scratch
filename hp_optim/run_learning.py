@@ -149,7 +149,26 @@ def read_reward_from_log(log_dir: pathlib.PurePath) -> float:
 
 
 # TODO maybe better to implement this in a class
-def run_learning(config_file, env, proc_backend):  # TODO type hints
+def run_learning(
+    config_file: typing.Union[str, os.PathLike],
+    env: typing.Dict[str, str],
+    proc_backend: subprocess.Popen,
+) -> float:
+    """Start the learning and monitor processes.
+
+    Args:
+        config_file: Path to the config file for hysr_one_ball_ppo.
+        env: Dictionary with environment variables used to set up the environment of the
+            learning process.
+        proc_backend: The already started backend process (hysr_start_robots).  Used to
+            monitor for failures.
+
+    Returns:
+        The score of the learning (eprewmean).
+
+    Raises:
+        subprocess.CalledProcessError: if one of the processes fails.
+    """
     print("\n\n#### Start learning\n", flush=True)
     start = time.time()
     proc_learning = subprocess.Popen(
@@ -189,7 +208,7 @@ def run_learning(config_file, env, proc_backend):  # TODO type hints
     return eprewmean
 
 
-def main():
+def main() -> int:
     # get parameters (make mutable so defaults can easily be set later)
     params = cluster.read_params_from_cmdline(make_immutable=False)
     working_dir = pathlib.Path(params.working_dir)
