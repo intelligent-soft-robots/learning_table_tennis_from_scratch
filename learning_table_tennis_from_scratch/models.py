@@ -49,7 +49,12 @@ def run_openai_baselines(
     model_file_path=None,
     seed=None,
 ):
+    import warnings
+    warnings.filterwarnings("ignore", message=r"Passing", category=FutureWarning)
+
     import tensorflow as tf
+    tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.ERROR)
+
     from stable_baselines.common import make_vec_env
 
     env_config = {

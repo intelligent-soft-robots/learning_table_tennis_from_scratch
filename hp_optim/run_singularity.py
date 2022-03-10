@@ -91,9 +91,12 @@ def main():
     # locally
     stdout_file = working_dir / "stdout.txt"
     stderr_file = working_dir / "stderr.txt"
-    with open(stdout_file, "wb") as f_out, open(stderr_file, "wb") as f_err:
-        subprocess.run(cmd, check=True, stdout=f_out, stderr=f_err)
+    with open(stdout_file, "ab") as f_out, open(stderr_file, "ab") as f_err:
+        result = subprocess.run(cmd, stdout=f_out, stderr=f_err)
+
+    # forward the return code
+    return result.returncode
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

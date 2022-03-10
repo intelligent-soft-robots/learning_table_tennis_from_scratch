@@ -16,8 +16,15 @@ import sys
 import time
 import typing
 
+import numpy as np
 import cluster
 import smart_settings.param_classes
+
+
+# Max. number of attempts.  If it fails this many times, do not try again.
+DEFAULT_MAX_ATTEMPTS = 3
+DEFAULT_LEARNING_RUNS_PER_JOB = 3
+RESTART_INFO_FILENAME = "restarts.json"
 
 
 def prepare_config_file(
@@ -118,7 +125,7 @@ def setup_config(working_dir: pathlib.Path, params: dict) -> pathlib.Path:
     return main_config_file
 
 
-def read_reward_from_log(log_dir: pathlib.PurePath):
+def read_reward_from_log(log_dir: pathlib.PurePath) -> float:
     """Extract 'eprewmean' from the log.
 
     Args:
@@ -141,15 +148,94 @@ def read_reward_from_log(log_dir: pathlib.PurePath):
     return eprewmean
 
 
-def main():
+# TODO maybe better to implement this in a class
+def run_learning(
+    config_file: typing.Union[str, os.PathLike],
+    env: typing.Dict[str, str],
+    proc_backend: subprocess.Popen,
+) -> float:
+    """Start the learning and monitor processes.
+
+    Args:
+        config_file: Path to the config file for hysr_one_ball_ppo.
+        env: Dictionary with environment variables used to set up the environment of the
+            learning process.
+        proc_backend: The already started backend process (hysr_start_robots).  Used to
+            monitor for failures.
+
+    Returns:
+        The score of the learning (eprewmean).
+
+    Raises:
+        subprocess.CalledProcessError: if one of the processes fails.
+    """
+    print("\n\n#### Start learning\n", flush=True)
+    start = time.time()
+    proc_learning = subprocess.Popen(
+        ["hysr_one_ball_ppo", os.fspath(config_file)], env=env
+    )
+
+    # monitor processes
+    while True:
+        time.sleep(5)
+
+        if proc_backend.poll() is not None:
+            # backend terminated, this is bad!
+            # kill learning and fail
+            proc_learning.kill()
+            raise subprocess.CalledProcessError(
+                proc_backend.returncode, proc_backend.args
+            )
+
+        if proc_learning.poll() is not None:
+            if proc_learning.returncode == 0:
+                break
+            else:
+                raise subprocess.CalledProcessError(
+                    proc_learning.returncode, proc_learning.args
+                )
+                # there is no need to explicitly terminate the backend
+                # here, this is done by hysr_stop below
+
+    duration = (time.time() - start) / 60
+    print("\n\nlearning took %0.2f min" % duration, flush=True)
+
+    # extract eprewmean from the log
+    log_dir = pathlib.Path(env["OPENAI_LOGDIR"])
+    eprewmean = read_reward_from_log(log_dir)
+    print("Final Reward:", eprewmean, flush=True)
+
+    return eprewmean
+
+
+def main() -> int:
     # get parameters (make mutable so defaults can easily be set later)
     params = cluster.read_params_from_cmdline(make_immutable=False)
+    working_dir = pathlib.Path(params.working_dir)
+
+    # Overwrite some values from the config templates to disable any graphical
+    # interfaces and to save the model in working_dir (unless a different value
+    # is already explicitly set in params).
+    default_params = {
+        "config": {
+            "hysr_config": {
+                "graphics": False,
+                "xterms": False,
+            },
+            "ppo_config": {
+                "save_path": os.fspath(working_dir / "model"),
+            },
+        },
+        "learning_runs_per_job": DEFAULT_LEARNING_RUNS_PER_JOB,
+        "max_attempts": DEFAULT_MAX_ATTEMPTS,
+    }
+    params = smart_settings.param_classes.update_recursive(
+        params, default_params, overwrite=False
+    )
 
     print("Params:")
     print(params)
-    print("---")
-
-    working_dir = pathlib.Path(params.working_dir)
+    print("-------------")
 
     # prepare environment
     env = dict(
@@ -158,114 +244,93 @@ def main():
         OPENAI_LOGDIR=os.fspath(working_dir / "training_logs"),
     )
 
-    # Overwrite some values from the config templates to disable any graphical
-    # interfaces and to save the model in working_dir (unless a different value
-    # is already explicitly set in params).
-    default_params = {
-        "hysr_config": {
-            "graphics": False,
-            "xterms": False,
-        },
-        "ppo_config": {
-            "save_path": os.fspath(working_dir / "model"),
-        },
-    }
-    params.config = smart_settings.param_classes.update_recursive(
-        params.config, default_params, overwrite=False
-    )
-
     config_file = setup_config(working_dir, params.config)
     os.chdir(working_dir)
 
-    try:
-        print("Start robots")
-        proc_backend = subprocess.Popen(["hysr_start_robots", os.fspath(config_file)])
+    restart_info_path = working_dir / RESTART_INFO_FILENAME
+    if restart_info_path.exists():
+        with open(restart_info_path, "r") as f:
+            restart_info = json.load(f)
+    else:
+        restart_info = {
+            "finished_runs": 0,
+            "eprewmean": [],
+            "failed_runs": [0] * params.learning_runs_per_job,
+        }
 
-        print("Start learning")
-        start = time.time()
-        proc_learning = subprocess.Popen(
-            ["hysr_one_ball_ppo", os.fspath(config_file)], env=env
+    run_number = restart_info["finished_runs"]
+    failed_runs = restart_info["failed_runs"][run_number]
+    run_id = f"{run_number}-{failed_runs}"
+
+    try:
+        print(
+            f"\n\n############################# Start Run {run_id}\n",
+            flush=True,
         )
 
-        # monitor processes
-        while True:
-            time.sleep(5)
+        print("#### Start robots\n", flush=True)
+        proc_backend = subprocess.Popen(["hysr_start_robots", os.fspath(config_file)])
 
-            if proc_backend.poll() is not None:
-                # backend terminated, this is bad!
-                # kill learning and fail
-                proc_learning.kill()
-                raise subprocess.CalledProcessError(
-                    proc_backend.returncode, proc_backend.args
-                )
+        eprewmean = run_learning(config_file, env, proc_backend)
 
-            if proc_learning.poll() is not None:
-                if proc_learning.returncode == 0:
-                    break
-                else:
-                    raise subprocess.CalledProcessError(
-                        proc_learning.returncode, proc_learning.args
-                    )
-                    # there is no need to explicitly terminate the backend
-                    # here, this is done by hysr_stop below
-
-        duration = (time.time() - start) / 60
-        print("\n\nlearning took %0.2f min" % duration)
+        restart_info["finished_runs"] += 1
+        restart_info["eprewmean"].append(eprewmean)
 
     except subprocess.CalledProcessError as e:
-        # In case of any failure, restart with the same parameters (using
-        # cluster.exit_for_resume()).
-
-        # Max. number of attempts.  If it fails this many times, do not try
-        # again.
-        # TODO: Make this configurable?
-        MAX_ATTEMPTS = 3
-
-        print("\nXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX")
+        print("\n!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
         print("RUN FAILED! (%s terminated with exit code %d)" % (e.cmd, e.returncode))
 
-        # NOTE: Do not use ".json" extension for the file to not mess with the
-        # automatic detection of "config.json" by the hysr scripts.
-        restart_log_file = working_dir / "restarts.log"
-        failed_runs = 0
-        if restart_log_file.exists():
-            with open(restart_log_file, "r") as f:
-                restart_log = json.load(f)
-                failed_runs = restart_log["failed_runs"]
-
         failed_runs += 1
-        with open(restart_log_file, "w") as f:
-            json.dump({"failed_runs": failed_runs}, f)
-
-        if failed_runs >= MAX_ATTEMPTS:
-            print("Maximum number of restarts is reached.  Exit with failure.")
-            return 1
-        else:
-            print("Exit for restart.")
-
-            # move training log files to separate directory to avoid confusion
-            training_log_dir = pathlib.Path(env["OPENAI_LOGDIR"])
-            if training_log_dir.exists():
-                new_trainig_log_dir = env["OPENAI_LOGDIR"] + "_failed_{}".format(
-                    failed_runs
-                )
-                training_log_dir.rename(new_trainig_log_dir)
-
-            # we don't really plan to resume but restart from scratch but it
-            # shouldn't make a difference for cluster_utils
-            cluster.exit_for_resume()
+        restart_info["failed_runs"][run_number] = failed_runs
 
     finally:
-        print("We are done, shut down.")
+        print("Stop backend [hysr_stop]")
         subprocess.run(["hysr_stop"])
 
-    # extract eprewmean from the log
-    log_dir = pathlib.Path(env["OPENAI_LOGDIR"])
-    eprewmean = read_reward_from_log(log_dir)
-    print("Final Reward:", float(eprewmean))
+    # rename training log directory, so it does not get overwritten by next run
+    training_log_dir = pathlib.Path(env["OPENAI_LOGDIR"])
+    if training_log_dir.exists():
+        new_trainig_log_dir = env["OPENAI_LOGDIR"] + "_" + run_id
+        training_log_dir.rename(new_trainig_log_dir)
+
+    # store the restart log
+    with open(restart_info_path, "w") as f:
+        json.dump(restart_info, f)
+
+    # if it failed too often, abort with error
+    if failed_runs >= params.max_attempts:
+        raise RuntimeError("Maximum number of retries is reached.  Exit with failure.")
+
+    # if desired number of runs have not yet finished, exit for resume (i.e. restart
+    # with a new cluster job)
+    if restart_info["finished_runs"] < params.learning_runs_per_job:
+        # print separator to both stdout and stderr
+        print(
+            f"Exit for restart [{run_id}].\n"
+            "==========================================\n\n"
+        )
+        print(
+            f"Exit for restart [{run_id}].\n"
+            "==========================================\n\n",
+            file=sys.stderr,
+        )
+
+        fraction_finished = restart_info["finished_runs"] / params.learning_runs_per_job
+        cluster.announce_fraction_finished(fraction_finished)
+        cluster.exit_for_resume()
+
+    # if this line is reached, all N runs have finished --> save the results
 
     # save the reward for cluster utils
-    metrics = {"eprewmean": eprewmean}
+    metrics = {
+        "mean_eprewmean": np.mean(restart_info["eprewmean"]),
+        "std_eprewmean": np.std(restart_info["eprewmean"]),
+    }
+    print(
+        "Result of {} runs: {mean_eprewmean:.4f} (std: {std_eprewmean:.4f})".format(
+            params.learning_runs_per_job, **metrics
+        )
+    )
     cluster.save_metrics_params(metrics, params)
 
     return 0
