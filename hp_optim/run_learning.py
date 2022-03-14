@@ -9,6 +9,7 @@ this to work.
 """
 import csv
 import json
+import logging
 import os
 import pathlib
 import subprocess
@@ -25,6 +26,61 @@ import smart_settings.param_classes
 DEFAULT_MAX_ATTEMPTS = 3
 DEFAULT_LEARNING_RUNS_PER_JOB = 3
 RESTART_INFO_FILENAME = "restarts.json"
+
+_logger = None
+
+
+def init_logger(name: str = None) -> logging.Logger:
+    """Initialise stdout/stderr-logger.
+
+    The logger is configured to write messages with level <= INFO to stdout and any
+    higher levels to stderr.
+
+    Args:
+        name: Name of the application (added to each message).
+    """
+    if name is None:
+        name = pathlib.PurePath(__file__).name
+    formatter = logging.Formatter(
+        "[{} %(levelname)s %(asctime)s] %(message)s".format(name)
+    )
+
+    # Code below mostly by Zoey Greer, CC BY-SA 3.0
+    # (https://stackoverflow.com/a/31459386, 2022-03-10)
+    class LessThanFilter(logging.Filter):
+        def __init__(self, exclusive_maximum, name=""):
+            super(LessThanFilter, self).__init__(name)
+            self.max_level = exclusive_maximum
+
+        def filter(self, record):
+            # non-zero return means we log this message
+            return 1 if record.levelno < self.max_level else 0
+
+    logger = logging.getLogger()
+    logger.setLevel(logging.NOTSET)
+
+    handler_stdout = logging.StreamHandler(sys.stdout)
+    handler_stdout.setLevel(logging.DEBUG)
+    handler_stdout.addFilter(LessThanFilter(logging.WARNING))
+    handler_stdout.setFormatter(formatter)
+    logger.addHandler(handler_stdout)
+
+    handler_stderr = logging.StreamHandler(sys.stderr)
+    handler_stderr.setLevel(logging.WARNING)
+    handler_stderr.setFormatter(formatter)
+    logger.addHandler(handler_stderr)
+
+    return logger
+
+
+def get_logger() -> logging.Logger:
+    """Get global logger instance."""
+    global _logger
+
+    if _logger is None:
+        _logger = init_logger()
+
+    return _logger
 
 
 def prepare_config_file(
@@ -95,11 +151,13 @@ def setup_config(working_dir: pathlib.Path, params: dict) -> pathlib.Path:
     Returns:
         Path to the main config file.
     """
+    logger = get_logger()
+
     main_config_file = working_dir / "config.json"
     # if config is already there, skip creation (this is the case when
     # restarting after a failure)
     if main_config_file.exists():
-        print("config.json already exists, skip setup.")
+        logger.info("config.json already exists, skip setup.")
     else:
         with open(params["config_templates"], "r") as f:
             config_file_templates = json.load(f)
@@ -148,70 +206,208 @@ def read_reward_from_log(log_dir: pathlib.PurePath) -> float:
     return eprewmean
 
 
-# TODO maybe better to implement this in a class
-def run_learning(
-    config_file: typing.Union[str, os.PathLike],
-    env: typing.Dict[str, str],
-    proc_backend: subprocess.Popen,
-) -> float:
-    """Start the learning and monitor processes.
+def rename_directory(path: typing.Union[str, os.PathLike], suffix: str):
+    """Rename the given directory by adding ``suffix`` at the end if it exists.
+
+    If path exists, rename it by appending suffix (separated with an underscore) to its
+    name.  If it does not exist, do nothing.
 
     Args:
-        config_file: Path to the config file for hysr_one_ball_ppo.
-        env: Dictionary with environment variables used to set up the environment of the
-            learning process.
-        proc_backend: The already started backend process (hysr_start_robots).  Used to
-            monitor for failures.
-
-    Returns:
-        The score of the learning (eprewmean).
-
-    Raises:
-        subprocess.CalledProcessError: if one of the processes fails.
+        path: Path that is to be renamed.
+        suffix: Suffix that is added to the current name.
     """
-    print("\n\n#### Start learning\n", flush=True)
-    start = time.time()
-    proc_learning = subprocess.Popen(
-        ["hysr_one_ball_ppo", os.fspath(config_file)], env=env
-    )
+    path = pathlib.Path(path)
+    if path.exists():
+        new_path = "{}_{}".format(path, suffix)
+        path.rename(new_path)
 
-    # monitor processes
-    while True:
-        time.sleep(5)
 
-        if proc_backend.poll() is not None:
-            # backend terminated, this is bad!
-            # kill learning and fail
-            proc_learning.kill()
-            raise subprocess.CalledProcessError(
-                proc_backend.returncode, proc_backend.args
-            )
+class Runner:
+    """Run learning in subprocesses.
 
-        if proc_learning.poll() is not None:
-            if proc_learning.returncode == 0:
-                break
-            else:
+    This class takes care of starting the necessary scripts for the learning (using
+    subprocesses), monitoring them while they are running (to detect failures) and
+    acquire the final reward from the generated log files.
+    """
+
+    def __init__(
+        self,
+        config_file: typing.Union[str, os.PathLike],
+        openai_logdir: typing.Union[str, os.PathLike],
+    ):
+        """
+        Args:
+            config_file: Path to the config file for hysr_one_ball_ppo.
+            openai_log_dir: Directory to which leaning log files are written (used to
+                set environment variable OPENAI_LOGDIR for the learning process).
+        """
+        # prepare environment
+        self.env = dict(
+            os.environ,
+            OPENAI_LOG_FORMAT="log,csv,tensorboard",
+            OPENAI_LOGDIR=os.fspath(openai_logdir),
+        )
+        self.config_file = config_file
+
+    def start_backend(self):
+        get_logger().info("#### Start robots [hysr_start_robots]\n")
+        self.proc_backend = subprocess.Popen(
+            ["hysr_start_robots", os.fspath(self.config_file)]
+        )
+
+    def stop_backend(self):
+        get_logger().info("#### Stop backend [hysr_stop]")
+        subprocess.run(["hysr_stop"])
+
+    def start_learning(self):
+        get_logger().info("\n\n#### Start learning [hysr_one_ball_ppo]\n")
+        self.learning_start_time = time.time()
+        self.proc_learning = subprocess.Popen(
+            ["hysr_one_ball_ppo", os.fspath(self.config_file)], env=self.env
+        )
+
+    def monitor_processes(self):
+        """Monitor running processes of backend and learning script.
+
+        Blocks until the learning is finished.  While it is running, the processes are
+        monitored, raising an CalledProcessError if one of them terminates unexpectedly.
+
+        Raises:
+            subprocess.CalledProcessError: if one of the processes fails.
+        """
+        while True:
+            time.sleep(5)
+
+            if self.proc_backend.poll() is not None:
+                # backend terminated, this is bad!
+                # kill learning and fail
+                self.proc_learning.kill()
                 raise subprocess.CalledProcessError(
-                    proc_learning.returncode, proc_learning.args
+                    self.proc_backend.returncode, self.proc_backend.args
                 )
-                # there is no need to explicitly terminate the backend
-                # here, this is done by hysr_stop below
 
-    duration = (time.time() - start) / 60
-    print("\n\nlearning took %0.2f min" % duration, flush=True)
+            if self.proc_learning.poll() is not None:
+                if self.proc_learning.returncode == 0:
+                    # learning finished cleanly, all good
+                    break
+                else:
+                    raise subprocess.CalledProcessError(
+                        self.proc_learning.returncode, self.proc_learning.args
+                    )
+                    # there is no need to explicitly terminate the backend
+                    # here, this is done by hysr_stop below
 
-    # extract eprewmean from the log
-    log_dir = pathlib.Path(env["OPENAI_LOGDIR"])
-    eprewmean = read_reward_from_log(log_dir)
-    print("Final Reward:", eprewmean, flush=True)
+    def run(self) -> float:
+        """Start the learning and monitor processes.
 
-    return eprewmean
+        Args:
+            config_file: Path to the config file for hysr_one_ball_ppo.
+            env: Dictionary with environment variables used to set up the environment of
+                the learning process.
+            proc_backend: The already started backend process (hysr_start_robots).  Used
+                to monitor for failures.
+
+        Returns:
+            The score of the learning (eprewmean).
+
+        Raises:
+            subprocess.CalledProcessError: if one of the processes fails.
+        """
+        logger = get_logger()
+
+        self.start_backend()
+        self.start_learning()
+
+        # monitor processes
+        self.monitor_processes()
+
+        duration = (time.time() - self.learning_start_time) / 60.0
+        logger.info("\n\nlearning took %0.2f min" % duration)
+
+        # extract eprewmean from the log
+        eprewmean = read_reward_from_log(pathlib.Path(self.env["OPENAI_LOGDIR"]))
+        logger.info("Final Reward: %0.2f" % eprewmean)
+
+        return eprewmean
+
+
+class RestartInfo:
+    """Provides access to the restart info.
+
+    The "restart info" contains information about the number of already finished
+    training runs as well as failed attempts of the current job.
+    """
+
+    def __init__(self, file_path: typing.Union[str, os.PathLike]):
+        """
+        Args:
+            file_path: Path to the file in which the restart info is stored.
+        """
+        self._file_path = pathlib.Path(file_path)
+
+        # load
+        if self._file_path.exists():
+            with open(self._file_path, "r") as f:
+                self._data = json.load(f)
+        else:
+            self._data = {"finished_runs": 0, "eprewmean": [], "failed_attempts": {}}
+
+    def save(self):
+        """Save changes to file.
+
+        Call this to save changes on the restart info to the file.
+        """
+        with open(self._file_path, "w") as f:
+            json.dump(self._data, f)
+
+    @property
+    def finished_runs(self) -> int:
+        """Get number of already finished runs.
+
+        This also corresponds to the index of the current run (starting at zero).
+        """
+        return self._data["finished_runs"]
+
+    @property
+    def failed_attempts(self) -> int:
+        """Get number of failed attempts for the current run."""
+        try:
+            return self._data["failed_attempts"][self.finished_runs]
+        except KeyError:
+            self._data["failed_attempts"][self.finished_runs] = 0
+            return 0
+
+    @property
+    def rewards(self) -> typing.List[float]:
+        """Get list of rewards of all runs."""
+        return self._data["eprewmean"]
+
+    def mark_run_finished(self, eprewmean: float):
+        """Mark the current run as successfully finished and log its reward.
+
+        Args:
+            eprewmean: Reward that was achieved by the run.
+        """
+        self._data["finished_runs"] += 1
+        self._data["eprewmean"].append(eprewmean)
+
+    def mark_attempt_failed(self):
+        """Mark the current attempt as failed."""
+        try:
+            self._data["failed_attempts"][self.finished_runs] += 1
+        except KeyError:
+            self._data["failed_attempts"][self.finished_runs] = 1
 
 
 def main() -> int:
+    logger = get_logger()
+
     # get parameters (make mutable so defaults can easily be set later)
     params = cluster.read_params_from_cmdline(make_immutable=False)
+
     working_dir = pathlib.Path(params.working_dir)
+    openai_logdir = working_dir / "training_logs"
+    restart_info_file = working_dir / RESTART_INFO_FILENAME
 
     # Overwrite some values from the config templates to disable any graphical
     # interfaces and to save the model in working_dir (unless a different value
@@ -232,101 +428,65 @@ def main() -> int:
     params = smart_settings.param_classes.update_recursive(
         params, default_params, overwrite=False
     )
-
-    print("Params:")
-    print(params)
-    print("-------------")
-
-    # prepare environment
-    env = dict(
-        os.environ,
-        OPENAI_LOG_FORMAT="log,csv,tensorboard",
-        OPENAI_LOGDIR=os.fspath(working_dir / "training_logs"),
-    )
+    logger.info("Params:\n%s\n-------------" % params)
 
     config_file = setup_config(working_dir, params.config)
     os.chdir(working_dir)
 
-    restart_info_path = working_dir / RESTART_INFO_FILENAME
-    if restart_info_path.exists():
-        with open(restart_info_path, "r") as f:
-            restart_info = json.load(f)
-    else:
-        restart_info = {
-            "finished_runs": 0,
-            "eprewmean": [],
-            "failed_runs": [0] * params.learning_runs_per_job,
-        }
+    restart_info = RestartInfo(restart_info_file)
+    runner = Runner(config_file, openai_logdir)
 
-    run_number = restart_info["finished_runs"]
-    failed_runs = restart_info["failed_runs"][run_number]
-    run_id = f"{run_number}-{failed_runs}"
-
+    run_id = f"{restart_info.finished_runs}-{restart_info.failed_attempts}"
     try:
-        print(
-            f"\n\n############################# Start Run {run_id}\n",
-            flush=True,
-        )
+        logger.info(f"\n\n############################# Start Run {run_id}\n")
 
-        print("#### Start robots\n", flush=True)
-        proc_backend = subprocess.Popen(["hysr_start_robots", os.fspath(config_file)])
-
-        eprewmean = run_learning(config_file, env, proc_backend)
-
-        restart_info["finished_runs"] += 1
-        restart_info["eprewmean"].append(eprewmean)
+        eprewmean = runner.run()
+        restart_info.mark_run_finished(eprewmean)
 
     except subprocess.CalledProcessError as e:
-        print("\n!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
-        print("RUN FAILED! (%s terminated with exit code %d)" % (e.cmd, e.returncode))
+        logger.error("\n!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
+        logger.error(
+            "RUN FAILED! (%s terminated with exit code %d)" % (e.cmd, e.returncode)
+        )
 
-        failed_runs += 1
-        restart_info["failed_runs"][run_number] = failed_runs
+        restart_info.mark_attempt_failed()
 
     finally:
-        print("Stop backend [hysr_stop]")
-        subprocess.run(["hysr_stop"])
+        runner.stop_backend()
 
     # rename training log directory, so it does not get overwritten by next run
-    training_log_dir = pathlib.Path(env["OPENAI_LOGDIR"])
-    if training_log_dir.exists():
-        new_trainig_log_dir = env["OPENAI_LOGDIR"] + "_" + run_id
-        training_log_dir.rename(new_trainig_log_dir)
+    rename_directory(openai_logdir, run_id)
 
-    # store the restart log
-    with open(restart_info_path, "w") as f:
-        json.dump(restart_info, f)
+    # store the restart info
+    restart_info.save()
 
     # if it failed too often, abort with error
-    if failed_runs >= params.max_attempts:
+    if restart_info.failed_attempts >= params.max_attempts:
         raise RuntimeError("Maximum number of retries is reached.  Exit with failure.")
 
     # if desired number of runs have not yet finished, exit for resume (i.e. restart
     # with a new cluster job)
-    if restart_info["finished_runs"] < params.learning_runs_per_job:
-        # print separator to both stdout and stderr
-        print(
+    if restart_info.finished_runs < params.learning_runs_per_job:
+        # print separator to both stdout and stderr (so we have it in both log files)
+        logger.info(
             f"Exit for restart [{run_id}].\n"
             "==========================================\n\n"
         )
-        print(
+        logger.warn(
             f"Exit for restart [{run_id}].\n"
             "==========================================\n\n",
-            file=sys.stderr,
         )
 
-        fraction_finished = restart_info["finished_runs"] / params.learning_runs_per_job
+        fraction_finished = restart_info.finished_runs / params.learning_runs_per_job
         cluster.announce_fraction_finished(fraction_finished)
         cluster.exit_for_resume()
 
     # if this line is reached, all N runs have finished --> save the results
-
-    # save the reward for cluster utils
     metrics = {
-        "mean_eprewmean": np.mean(restart_info["eprewmean"]),
-        "std_eprewmean": np.std(restart_info["eprewmean"]),
+        "mean_eprewmean": np.mean(restart_info.rewards),
+        "std_eprewmean": np.std(restart_info.rewards),
     }
-    print(
+    logger.info(
         "Result of {} runs: {mean_eprewmean:.4f} (std: {std_eprewmean:.4f})".format(
             params.learning_runs_per_job, **metrics
         )
