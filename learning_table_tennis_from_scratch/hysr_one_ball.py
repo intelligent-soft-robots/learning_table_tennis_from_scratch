@@ -51,8 +51,10 @@ class HysrOneBallConfig:
         "world_boundaries",
         "pressure_change_range",
         "trajectory",
-        "trajectory_augmentation",
-        "trajectory_augmentation_range",
+        "trajectory_angle_augmentation",
+        "trajectory_angle_augmentation_range",
+        "trajectory_time_augmentation",
+        "trajectory_time_augmentation_factor",
         "accelerated_time",
         "graphics_pseudo_real",
         "graphics_simulation",
@@ -134,13 +136,14 @@ class _BallBehavior:
     LINE = -1
     INDEX = -2
     RANDOM = -3
-    AUGMENTATION = -11
 
     _trajectory_reader = context.BallTrajectories()
 
-    def __init__(self, line=False, index=False, random=False, augmentation=False, augmentation_range = 0):
-        self.AUGMENTATION = augmentation
-        self.augmentation_range = augmentation_range
+    def __init__(self, line=False, index=False, random=False, angle_augmentation=False, angle_augmentation_range = 0, time_augmentation=False, time_augmentation_factor = 0):
+        self.ANGLE_AUGMENTATION = angle_augmentation
+        self.TIME_AUGMENTATION = time_augmentation
+        self.angle_augmentation_range = angle_augmentation_range
+        self.time_augmentation_factor = time_augmentation_factor
         not_false = [a for a in (line, index, random) if a]
         if not not_false:
             raise ValueError("type of ball behavior not specified")
@@ -162,15 +165,19 @@ class _BallBehavior:
             return trajectory_points
         # ball behavior is a specified pre-recorded trajectory
         if self.type == self.INDEX:
-            if self.AUGMENTATION:
-                trajectory_points = self._trajectory_reader.get_trajectory_random_rotation(self.value, self.augmentation_range)
+            if self.ANGLE_AUGMENTATION:
+                trajectory_points = self._trajectory_reader.get_trajectory_random_rotation(self.value, self.angle_augmentation_range)
+            elif self.TIME_AUGMENTATION:
+                trajectory_points = self._trajectory_reader.get_trajectory_interpolate_time(self.value, self.time_augmentation_factor)
             else:
                 trajectory_points = self._trajectory_reader.get_trajectory(self.value)
             return trajectory_points
         # ball behavior is a randomly selected pre-recorded trajectory
         if self.type == self.RANDOM:
-            if self.AUGMENTATION:
+            if self.ANGLE_AUGMENTATION:
                 _, trajectory_points = self._trajectory_reader.random_trajectory_random_rotation(self.augmentation_range)
+            elif self.TIME_AUGMENTATION:
+                _, trajectory_points = self._trajectory_reader.random_trajectory_interpolated_time(self.time_augmentation_factor)
             else:
                 _, trajectory_points = self._trajectory_reader.random_trajectory()
             return trajectory_points
@@ -377,9 +384,19 @@ class HysrOneBall:
         # corresponding indexed pre-recorded trajectory) or a negative int
         # (playing randomly selected indexed trajectories)
         if hysr_config.trajectory >= 0:
-            self._ball_behavior = _BallBehavior(index=hysr_config.trajectory, augmentation = hysr_config.trajectory_augmentation, augmentation_range = hysr_config.trajectory_augmentation_range)
+            self._ball_behavior = _BallBehavior(
+                index=hysr_config.trajectory,
+                angle_augmentation = hysr_config.trajectory_angle_augmentation,
+                angle_augmentation_range = hysr_config.trajectory_angle_augmentation_range,
+                time_augmentation = hysr_config.trajectory_time_augmentation,
+                time_augmentation_factor = hysr_config.trajectory_time_augmentation_factor)
         else:
-            self._ball_behavior = _BallBehavior(random=True, augmentation = hysr_config.trajectory_augmentation, augmentation_range = hysr_config.trajectory_augmentation_range)
+            self._ball_behavior = _BallBehavior(
+                random=True,
+                angle_augmentation = hysr_config.trajectory_angle_augmentation,
+                angle_augmentation_range = hysr_config.trajectory_angle_augmentation_range,
+                time_augmentation = hysr_config.trajectory_time_augmentation,
+                time_augmentation_factor = hysr_config.trajectory_time_augmentation_factor)
 
         # the robot will interpolate between current and
         # target posture over this duration
@@ -503,13 +520,21 @@ class HysrOneBall:
         # (called in the step method) to return True
         self._force_episode_over = True
 
-    def set_ball_behavior(self, line=False, index=False, random=False, augmentation=False, augmentation_range = 0):
+    def set_ball_behavior(self, line=False, index=False, random=False, angle_augmentation=False, angle_augmentation_range = 0, time_augmentation=False, time_augmentation_factor=1.0):
         # overwrite the ball behavior (set to a trajectory in the constructor)
         # see comments in _BallBehavior, in this file
-        self._ball_behavior = _BallBehavior(line=line, index=index, random=random, augmentation=augmentation, augmentation_range = augmentation_range)
+        self._ball_behavior = _BallBehavior(
+            line=line,
+            index=index,
+            random=random,
+            angle_augmentation=angle_augmentation,
+            angle_augmentation_range=angle_augmentation_range,
+            time_augmentation=time_augmentation,
+            time_augmentation_factor=time_augmentation_factor
+            )
 
     def set_extra_ball_behavior(
-        self, ball_index, line=False, index=False, random=False, augmentation=False, augmentation_range = 0
+        self, ball_index, line=False, index=False, random=False, angle_augmentation=False, angle_augmentation_range = 0, time_augmentation=False, time_augmentation_factor=1.0
     ):
         # overwrite the ball behavior of the extra ball (set to random
         # selected pre-recorded trajectory in constructor)
@@ -517,7 +542,13 @@ class HysrOneBall:
         if ball_index < 0 or ball_index >= len(self._extra_balls):
             raise IndexError(ball_index)
         self._extra_balls[ball_index].ball_behavior = _BallBehavior(
-            line=line, index=index, random=random, augmentation=augmentation, augmentation_range = augmentation_range
+            line=line,
+            index=index,
+            random=random,
+            angle_augmentation=angle_augmentation,
+            angle_augmentation_range=angle_augmentation_range,
+            time_augmentation=time_augmentation,
+            time_augmentation_factor=time_augmentation_factor
         )
 
     def _create_observation(self):
