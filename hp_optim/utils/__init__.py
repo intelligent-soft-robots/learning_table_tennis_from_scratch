@@ -48,7 +48,7 @@ class RestartInfo:
     def failed_attempts(self) -> int:
         """Get number of failed attempts for the current run."""
         try:
-            return self._data["failed_attempts"][self.finished_runs]
+            return self._data["failed_attempts"][str(self.finished_runs)]
         except KeyError:
             return 0
 
@@ -69,6 +69,6 @@ class RestartInfo:
     def mark_attempt_failed(self):
         """Mark the current attempt as failed."""
         try:
-            self._data["failed_attempts"][self.finished_runs] += 1
+            self._data["failed_attempts"][str(self.finished_runs)] += 1
         except KeyError:
-            self._data["failed_attempts"][self.finished_runs] = 1
+            self._data["failed_attempts"][str(self.finished_runs)] = 1
