@@ -9,6 +9,7 @@ def run_stable_baselines(
     ppo_config_file,
     log_episodes=False,
     log_tensorboard=False,
+    seed=None,
 ):
 
     from stable_baselines.common.policies import MlpPolicy
@@ -26,7 +27,12 @@ def run_stable_baselines(
     ppo_config = PPOConfig.from_json(ppo_config_file)
     if log_tensorboard:
         model = PPO2(
-            MlpPolicy, env, verbose=1, log_tensorboard=log_tensorboard, **ppo_config
+            MlpPolicy,
+            env,
+            verbose=1,
+            log_tensorboard=log_tensorboard,
+            seed=seed,
+            **ppo_config
         )
     else:
         model = PPO2(MlpPolicy, env, verbose=1, **ppo_config)
@@ -41,8 +47,14 @@ def run_openai_baselines(
     log_episodes=False,
     log_tensorboard=False,
     model_file_path=None,
+    seed=None,
 ):
+    import warnings
+    warnings.filterwarnings("ignore", message=r"Passing", category=FutureWarning)
+
     import tensorflow as tf
+    tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.ERROR)
+
     from stable_baselines.common import make_vec_env
 
     env_config = {
@@ -65,25 +77,14 @@ def run_openai_baselines(
     alg = "ppo2"
     learn = get_alg_module_openai_baselines(alg).learn
 
-    # seed = 123
     if model_file_path is None:
         print("total timesteps:", total_timesteps)
-        model = learn(
-            env=env,
-            # seed=seed,
-            total_timesteps=total_timesteps,
-            **ppo_config
-        )
+        model = learn(env=env, seed=seed, total_timesteps=total_timesteps, **ppo_config)
         model.save("ppo2_openai_baselines_hysr_one_ball")
 
     else:
         ppo_config["load_path"] = model_file_path
-        model = learn(
-            env=env,
-            # seed=seed,
-            total_timesteps=0,
-            **ppo_config
-        )
+        model = learn(env=env, seed=seed, total_timesteps=0, **ppo_config)
 
     if save_path:
         model.save(save_path)

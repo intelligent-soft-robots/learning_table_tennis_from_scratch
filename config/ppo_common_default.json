@@ -1,5 +1,6 @@
 {
-    "use_openai_baselines":true,
-    "log_episodes":false,
-    "log_tensorboard":true
+    "use_openai_baselines": true,
+    "log_episodes": false,
+    "log_tensorboard": true,
+    "random_seed": null
 }

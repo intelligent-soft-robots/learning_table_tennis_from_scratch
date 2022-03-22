@@ -127,3 +127,33 @@ E.g. to overwrite the parameters "num_hidden" in the config file that is given
 for "ppo_config" in the template file (see above), the name would be
 
     config.ppo_config.num_hidden
+
+
+### Configuring number of reruns and retries
+
+Independent of the `with_restarts` option of cluster utils, the
+`run_learning.py` script provides the option to rerun the learning multiple
+times in each job.  The metric for the optimisation is then the mean reward of
+these runs, thus reducing the variance.
+This can be configured in the configuration file by specifying
+`learning_runs_per_job` in the `fixed_params` section:
+
+    "fixed_params": {
+        "learning_runs_per_job": 2
+    }
+
+The default is 3.
+
+Further failed jobs can be retried for a configurable number of times.  This can
+be useful for failure cases that only happen sometimes (e.g. based on the random
+seed) so that there is a high chance that the run will be successful when simply
+trying again with the same settings.
+This can be configured in the configuration file by specifying
+`max_attempts` in the `fixed_params` section:
+
+    "fixed_params": {
+        "max_attempts": 2
+    }
+
+Set to 1 for a single attempt without retries.  The default is 3.
+
