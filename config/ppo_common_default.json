@@ -1,0 +1,6 @@
+{
+    "use_openai_baselines": false,
+    "log_episodes": false,
+    "log_tensorboard": true,
+    "random_seed": null
+}
