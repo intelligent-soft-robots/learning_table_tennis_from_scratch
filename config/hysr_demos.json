@@ -3,7 +3,7 @@
     "o80_pam_time_step":0.002,
     "mujoco_time_step":0.002,
     "algo_time_step":0.01,
-    "pam_config_file":"/opt/mpi-is/pam_interface/pamy1/pam_sim.json",
+    "pam_config_file":"/home/felixwidmaier/.mpi-is/pam/pam_interface/pamy1/config/pam_sim.json",
     "robot_position":[0.435, 0.1175, -0.0],
     "robot_orientation":"-1 0 0 0 -1 0",
     "table_position":[0.8, 1.7, -0.475],

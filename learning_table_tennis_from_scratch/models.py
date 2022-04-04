@@ -15,6 +15,7 @@ def run_stable_baselines(
     from stable_baselines.common.policies import MlpPolicy
     from stable_baselines.common import make_vec_env
     from stable_baselines import PPO2
+    import tensorflow as tf
 
     env_config = {
         "reward_config_file": reward_config_file,
@@ -27,16 +28,21 @@ def run_stable_baselines(
     ppo_config = PPOConfig.from_json(ppo_config_file)
     if log_tensorboard:
         model = PPO2(
-            MlpPolicy,
+            "MlpPolicy",
             env,
             verbose=1,
-            log_tensorboard=log_tensorboard,
+            #log_tensorboard=log_tensorboard,
+            tensorboard_log="/tmp/tensorboard",
             seed=seed,
+            policy_kwargs={
+                "layers": [512],
+                "act_fun": tf.tanh,
+            },
             **ppo_config
         )
     else:
         model = PPO2(MlpPolicy, env, verbose=1, **ppo_config)
-    model.learn(total_timesteps=1000000)
+    model.learn(total_timesteps=500000)
     model.save("ppo2_hysr_one_ball")
 
 
