@@ -29,7 +29,6 @@ def _read_ppo_common_config(jsonpath):
     expected_keys = (
         "use_openai_baselines",
         "log_episodes",
-        "log_tensorboard",
         "random_seed",
     )
 
@@ -62,7 +61,6 @@ def _execute(
             hysr_config_file,
             ppo_config_file,
             common_conf["log_episodes"],
-            common_conf["log_tensorboard"],
             seed=seed,
         )
     else:
@@ -71,7 +69,6 @@ def _execute(
             hysr_config_file,
             ppo_config_file,
             common_conf["log_episodes"],
-            common_conf["log_tensorboard"],
         )
 
 

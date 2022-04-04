@@ -15,7 +15,7 @@
         "min":[0.0,-1.0,0.17],
         "max":[1.6,3.5,1.5]
     },
-    "pam_config_file":"~/.mpi-is/pam/pam_interface/pamy1/config/pam_sim.json",
+    "pam_config_file":"/opt/mpi-is/pam/pam_interface/pamy1/config/pam_sim.json",
     "pressure_change_range":1800,
     "trajectory":-1,
     "accelerated_time":true,

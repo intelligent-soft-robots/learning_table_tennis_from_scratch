@@ -17,5 +17,6 @@
     "load_path": null,
     "save_path": "/tmp/model",
     "log_interval":1,
-    "save_interval":1
+    "save_interval":1,
+    "log_tensorboard": true
 }
