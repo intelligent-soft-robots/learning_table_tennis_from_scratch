@@ -77,6 +77,8 @@ class HysrOneBallEnv(gym.Env):
 
         super().__init__()
 
+        self.extend_observation = True
+
         self._log_episodes = log_episodes
         self._log_tensorboard = log_tensorboard
 
@@ -116,6 +118,9 @@ class HysrOneBallEnv(gym.Env):
             3,
         )
         self._obs_boxes.add_box("ball_velocity", -10.0, +10.0, 3)
+
+        if self.extend_observation:
+            self._obs_boxes.add_box("min_distance_ball_racket", 0, 3, 1)
 
         self.observation_space = self._obs_boxes.get_gym_box()
 
@@ -193,7 +198,7 @@ class HysrOneBallEnv(gym.Env):
                 - self._config.min_pressures_antago[dof]
             )
 
-    def _convert_observation(self, observation):
+    def _convert_observation(self, observation, extended_observation):
         self._obs_boxes.set_values_non_norm(
             "robot_position", observation.joint_positions
         )
@@ -205,6 +210,10 @@ class HysrOneBallEnv(gym.Env):
         )
         self._obs_boxes.set_values_non_norm("ball_position", observation.ball_position)
         self._obs_boxes.set_values_non_norm("ball_velocity", observation.ball_velocity)
+
+        if self.extend_observation:
+            self._obs_boxes.set_values_non_norm("min_distance_ball_racket", [extended_observation.min_distance_ball_racket])
+
         return self._obs_boxes.get_normalized_values()
 
     def step(self, action):
@@ -245,7 +254,12 @@ class HysrOneBallEnv(gym.Env):
         observation, reward, episode_over = self._hysr.step(list(action))
 
         # formatting observation in a format suitable for gym
-        observation = self._convert_observation(observation)
+        if self.extend_observation:
+            min_distance_ball_racket = min(self._hysr._ball_status.min_distance_ball_racket or 0, 3)
+            extended_observation = type('obj', (object,), {'min_distance_ball_racket': min_distance_ball_racket})
+        else:
+            extended_observation = None
+        observation = self._convert_observation(observation, extended_observation)
 
         # imposing frequency to learning agent
         if not self._accelerated_time:
@@ -254,6 +268,10 @@ class HysrOneBallEnv(gym.Env):
         # Ignore steps after hitting the ball
         if not episode_over and not self._hysr._ball_status.min_distance_ball_racket:
             return self.step(action_orig)
+
+        
+
+        print(observation)
 
         # logging
         self.n_steps += 1
@@ -281,9 +299,16 @@ class HysrOneBallEnv(gym.Env):
     def reset(self):
         self.init_episode()
         observation = self._hysr.reset()
-        observation = self._convert_observation(observation)
+        if self.extend_observation:
+            min_distance_ball_racket = min(self._hysr._ball_status.min_distance_ball_racket or 0, 3)
+            extended_observation = type('obj', (object,), {'min_distance_ball_racket': min_distance_ball_racket})
+        else:
+            extended_observation = None
+        observation = self._convert_observation(observation, extended_observation)
+        print(observation)
         if not self._accelerated_time:
             self._frequency_manager = None
+        
         return observation
 
     def dump_data(self, data_buffer):
