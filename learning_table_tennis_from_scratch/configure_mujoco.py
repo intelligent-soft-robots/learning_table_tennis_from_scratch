@@ -40,9 +40,11 @@ def configure_extra_set(setid, hysr_config):
     accelerated_time = True
     burst_mode = True
 
-    table = pam_mujoco.MujocoTable(SEGMENT_ID_TABLE,
-                                   position=hysr_config.table_position,
-                                   orientation=hysr_config.table_orientation)
+    table = pam_mujoco.MujocoTable(
+        SEGMENT_ID_TABLE,
+        position=hysr_config.table_position,
+        orientation=hysr_config.table_orientation,
+    )
 
     robot_segment_id = get_extra_robot_segment_id(setid)
     robot = pam_mujoco.MujocoRobot(
@@ -50,7 +52,7 @@ def configure_extra_set(setid, hysr_config):
         segment_id=robot_segment_id,
         position=hysr_config.robot_position,
         orientation=hysr_config.robot_orientation,
-        control=pam_mujoco.MujocoRobot.JOINT_CONTROL
+        control=pam_mujoco.MujocoRobot.JOINT_CONTROL,
     )
 
     extra_balls_segment_id = get_extra_balls_segment_id(setid)
@@ -106,7 +108,7 @@ def configure_pseudo_real(
 
     frontend = handle.frontends[SEGMENT_ID_PSEUDO_REAL_ROBOT]
 
-    return handle,frontend
+    return handle, frontend
 
 
 def configure_simulation(hysr_config, mujoco_id="simulation"):
@@ -115,16 +117,17 @@ def configure_simulation(hysr_config, mujoco_id="simulation"):
     burst_mode = True
     graphics = hysr_config.graphics_simulation
 
-    table = pam_mujoco.MujocoTable(SEGMENT_ID_TABLE,
-                                   position=hysr_config.table_position,
-                                   orientation=hysr_config.table_orientation
+    table = pam_mujoco.MujocoTable(
+        SEGMENT_ID_TABLE,
+        position=hysr_config.table_position,
+        orientation=hysr_config.table_orientation,
     )
     robot = pam_mujoco.MujocoRobot(
         pamy1=False,
         segment_id=SEGMENT_ID_ROBOT_MIRROR,
         position=hysr_config.robot_position,
         orientation=hysr_config.robot_orientation,
-        control=pam_mujoco.MujocoRobot.JOINT_CONTROL
+        control=pam_mujoco.MujocoRobot.JOINT_CONTROL,
     )
     ball = pam_mujoco.MujocoItem(
         SEGMENT_ID_BALL,

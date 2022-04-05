@@ -228,7 +228,7 @@ def compute_rewards(reward_function, target, nb_balls, observations, episode=Non
 
         # returns norm of a vector
         def _velocity_norm(velocity):
-            return math.sqrt(sum([v ** 2 for v in velocity]))
+            return math.sqrt(sum([v**2 for v in velocity]))
 
         # returns euclidian distance between two vectors
         def _distance(p1, p2):
