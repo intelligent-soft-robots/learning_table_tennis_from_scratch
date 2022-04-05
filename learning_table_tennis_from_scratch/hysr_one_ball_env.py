@@ -1,14 +1,15 @@
+import json
+import math
+import time
+from collections import OrderedDict
+
+import gym
+import numpy as np
 import o80
 import pam_interface
-import math
-import gym
-import time
-import json
-import numpy as np
+
 from .hysr_one_ball import HysrOneBall, HysrOneBallConfig
 from .rewards import JsonReward
-from collections import OrderedDict
-from baselines import logger
 
 
 class _ObservationSpace:
@@ -72,13 +73,13 @@ class HysrOneBallEnv(gym.Env):
         reward_config_file=None,
         hysr_one_ball_config_file=None,
         log_episodes=False,
-        log_tensorboard=False,
+        logger=None,
     ):
 
         super().__init__()
 
         self._log_episodes = log_episodes
-        self._log_tensorboard = log_tensorboard
+        self._logger = logger
 
         hysr_one_ball_config = HysrOneBallConfig.from_json(hysr_one_ball_config_file)
 
@@ -270,9 +271,9 @@ class HysrOneBallEnv(gym.Env):
             if self._log_episodes:
                 self.dump_data(self.data_buffer)
             self.n_eps += 1
-            if self._log_tensorboard:
-                logger.logkv("eprew", reward)
-                logger.dumpkvs()
+            if self._logger:
+                self._logger.record("eprew", reward)
+                self._logger.dump()
 
         return observation, reward, episode_over, {}
 
