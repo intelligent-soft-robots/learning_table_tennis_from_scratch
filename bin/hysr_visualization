@@ -47,19 +47,22 @@ class _Config:
     table_position = None
     table_orientation = None
 
-def _get_handle_to(mujoco_id,
-                   robot_position,
-                   robot_orientation,
-                   table_position,
-                   table_orientation,
-                   segment_id_table,
-                   segment_id_robot,
-                   segment_id_ball,
-                   segment_id_goal,
-                   segment_id_hit_point,
-                   segment_id_extra_balls,
-                   extra_balls_segment_ids):
-    
+
+def _get_handle_to(
+    mujoco_id,
+    robot_position,
+    robot_orientation,
+    table_position,
+    table_orientation,
+    segment_id_table,
+    segment_id_robot,
+    segment_id_ball,
+    segment_id_goal,
+    segment_id_hit_point,
+    segment_id_extra_balls,
+    extra_balls_segment_ids,
+):
+
     if segment_id_extra_balls is not None:
         balls = pam_mujoco.MujocoItems(segment_id_extra_balls)
         balls.contact_type = pam_mujoco_wrp.ContactTypes.no_contact
@@ -73,29 +76,37 @@ def _get_handle_to(mujoco_id,
     else:
         balls = []
 
-    table = pam_mujoco.MujocoTable(segment_id_table,
-                                   position=table_position,
-                                   orientation=table_orientation)
-    robot = pam_mujoco.MujocoRobot(pamy1=False,
-                                   segment_id=segment_id_robot,
-                                   position=robot_position,
-                                   orientation=robot_orientation,
-                                   control=pam_mujoco.MujocoRobot.JOINT_CONTROL)
-    ball = pam_mujoco.MujocoItem(segment_id_ball,
-                                 control=pam_mujoco.MujocoItem.CONSTANT_CONTROL,
-                                 color=[1.,0.,0.,1.])
-    goal = pam_mujoco.MujocoItem(segment_id_goal,
-                                 control=pam_mujoco.MujocoItem.CONSTANT_CONTROL)
-    hit_point = pam_mujoco.MujocoItem(segment_id_hit_point,
-                                      control=pam_mujoco.MujocoItem.CONSTANT_CONTROL)
-        
-    handle = pam_mujoco.MujocoHandle(mujoco_id,
-                                     table=table,
-                                     robot1=robot,
-                                     balls=(ball,),
-                                     goals=(goal,),
-                                     hit_points=(hit_point,),
-                                     combined=balls)
+    table = pam_mujoco.MujocoTable(
+        segment_id_table, position=table_position, orientation=table_orientation
+    )
+    robot = pam_mujoco.MujocoRobot(
+        pamy1=False,
+        segment_id=segment_id_robot,
+        position=robot_position,
+        orientation=robot_orientation,
+        control=pam_mujoco.MujocoRobot.JOINT_CONTROL,
+    )
+    ball = pam_mujoco.MujocoItem(
+        segment_id_ball,
+        control=pam_mujoco.MujocoItem.CONSTANT_CONTROL,
+        color=[1.0, 0.0, 0.0, 1.0],
+    )
+    goal = pam_mujoco.MujocoItem(
+        segment_id_goal, control=pam_mujoco.MujocoItem.CONSTANT_CONTROL
+    )
+    hit_point = pam_mujoco.MujocoItem(
+        segment_id_hit_point, control=pam_mujoco.MujocoItem.CONSTANT_CONTROL
+    )
+
+    handle = pam_mujoco.MujocoHandle(
+        mujoco_id,
+        table=table,
+        robot1=robot,
+        balls=(ball,),
+        goals=(goal,),
+        hit_points=(hit_point,),
+        combined=balls,
+    )
 
     return handle
 
@@ -123,19 +134,21 @@ def _execute_visualization(config):
     segment_id_ball_to = "visualization_ball"
     segment_id_goal_to = "visualization_goal"
     segment_id_hit_point_to = "visualization_hit_point"
-        
-    handle_to = _get_handle_to(config.mujoco_id_to,
-                               config.robot_position,
-                               config.robot_orientation,
-                               config.table_position,
-                               config.table_orientation,
-                               segment_id_table_to,
-                               segment_id_robot_to,
-                               segment_id_ball_to,
-                               segment_id_goal_to,
-                               segment_id_hit_point_to,
-                               segment_id_extra_balls_to,
-                               extra_balls_segment_ids_to)
+
+    handle_to = _get_handle_to(
+        config.mujoco_id_to,
+        config.robot_position,
+        config.robot_orientation,
+        config.table_position,
+        config.table_orientation,
+        segment_id_table_to,
+        segment_id_robot_to,
+        segment_id_ball_to,
+        segment_id_goal_to,
+        segment_id_hit_point_to,
+        segment_id_extra_balls_to,
+        extra_balls_segment_ids_to,
+    )
 
     ################################
     # config of mujoco data source #
@@ -233,11 +246,11 @@ def execute():
     print("\nusing configuration file:\n- {}\n".format(hysr_path))
     hysr_config = HysrOneBallConfig.from_json(hysr_path)
     config = _Config()
-    config.robot_position=hysr_config.robot_position
-    config.robot_orientation=hysr_config.robot_orientation
-    config.table_position=hysr_config.table_position
-    config.table_orientation=hysr_config.table_orientation
-    if hysr_config.extra_balls_sets>0:
+    config.robot_position = hysr_config.robot_position
+    config.robot_orientation = hysr_config.robot_orientation
+    config.table_position = hysr_config.table_position
+    config.table_orientation = hysr_config.table_orientation
+    if hysr_config.extra_balls_sets > 0:
         config.nb_extra_balls = hysr_config.extra_balls_per_set
     _execute_visualization(config)
     print()

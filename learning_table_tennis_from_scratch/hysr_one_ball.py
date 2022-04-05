@@ -282,7 +282,10 @@ class HysrOneBall:
 
         # to control pseudo-real robot (pressure control)
         if not hysr_config.real_robot:
-            self._real_robot_handle, self._real_robot_frontend = configure_mujoco.configure_pseudo_real(
+            (
+                self._real_robot_handle,
+                self._real_robot_frontend,
+            ) = configure_mujoco.configure_pseudo_real(
                 hysr_config.pam_config_file,
                 graphics=hysr_config.graphics_pseudo_real,
                 accelerated_time=hysr_config.accelerated_time,
@@ -292,17 +295,24 @@ class HysrOneBall:
             # real robot: making some sanity check that the
             # rest of the configuration is ok
             if hysr_config.instant_reset:
-                raise ValueError(str("HysrOneBall configured for "
-                                     "real robot and instant reset."
-                                     "Real robot does not support "
-                                     "instant reset."))
+                raise ValueError(
+                    str(
+                        "HysrOneBall configured for "
+                        "real robot and instant reset."
+                        "Real robot does not support "
+                        "instant reset."
+                    )
+                )
             if hysr_config.accelerated_time:
-                raise ValueError(str("HysrOneBall configured for "
-                                     "real robot and accelerated time."
-                                     "Real robot does not support "
-                                     "accelerated time."))
+                raise ValueError(
+                    str(
+                        "HysrOneBall configured for "
+                        "real robot and accelerated time."
+                        "Real robot does not support "
+                        "accelerated time."
+                    )
+                )
 
-            
         # to control the simulated robot (joint control)
         self._simulated_robot_handle = configure_mujoco.configure_simulation(
             hysr_config
@@ -385,9 +395,9 @@ class HysrOneBall:
             ]
         else:
             self._real_robot_frontend = o80_pam.FrontEnd(hysr_config.real_robot)
-            self._pressure_commands = o80_pam.o80Pressures(hysr_config.real_robot,
-                                                           frontend=self._real_robot_frontend)
-
+            self._pressure_commands = o80_pam.o80Pressures(
+                hysr_config.real_robot, frontend=self._real_robot_frontend
+            )
 
         # will encapsulate all information
         # about the ball (e.g. min distance with racket, etc)
@@ -406,7 +416,6 @@ class HysrOneBall:
         # (a call to the step function sets it to false, call to reset function sets it
         # back to true)
         self._first_episode_step = True
-
 
         # normally an episode ends when the ball z position goes
         # below a certain threshold (see method _episode_over)
@@ -468,7 +477,6 @@ class HysrOneBall:
         # and set values to all simulated robot via self._mirrorings)
         # source of mirroring in pam_mujoco.mirroring.py
         pam_mujoco.mirroring.align_robots(self._pressure_commands, self._mirrorings)
-
 
     def get_starting_pressures(self):
         return self._hysr_config.starting_pressures
@@ -633,29 +641,29 @@ class HysrOneBall:
             handle.reset()
         self._move_to_pressure(self._hysr_config.reference_posture)
 
-    def _move_to_pressure(self,pressures):
+    def _move_to_pressure(self, pressures):
         # moves to pseudo-real robot to desired pressure in synchronization
         # with the simulated robot(s)
         if self._accelerated_time:
             for _ in range(self._nb_robot_bursts):
                 self._pressure_commands.set(pressures, burst=1)
-                _,_,joint_positions,joint_velocities = self._pressure_commands.read()
+                _, _, joint_positions, joint_velocities = self._pressure_commands.read()
                 for mirroring_ in self._mirrorings:
                     mirroring_.set(joint_positions, joint_velocities)
                 self._parallel_burst.burst(1)
             return
         else:
             self._pressure_commands.set(pressures, burst=False)
-        time_start = self._real_robot_frontend.latest().get_time_stamp()*1e-9
-        current_time=time_start
-        timeout = 0.5 
-        while current_time-time_start < timeout:
-            current_time = self._real_robot_frontend.latest().get_time_stamp()*1e-9
-            _,_,joint_positions,joint_velocities = self._pressure_commands.read()
+        time_start = self._real_robot_frontend.latest().get_time_stamp() * 1e-9
+        current_time = time_start
+        timeout = 0.5
+        while current_time - time_start < timeout:
+            current_time = self._real_robot_frontend.latest().get_time_stamp() * 1e-9
+            _, _, joint_positions, joint_velocities = self._pressure_commands.read()
             for mirroring_ in self._mirrorings:
                 mirroring_.set(joint_positions, joint_velocities)
-            self._parallel_burst.burst(self._nb_sim_bursts)            
-        
+            self._parallel_burst.burst(self._nb_sim_bursts)
+
     def _move_to_position(self, position):
         # moves the pseudo-real robot to a desired position (in radians)
         # via a position controller (i.e. compute the pressure trajectory
@@ -663,47 +671,53 @@ class HysrOneBall:
         # synchronization with the simulated robot(s).
 
         # configuration for the controller
-        KP = [ 0.8 , -3.0  , 1.2,  -1.0 ]
-        KI = [ 0.015 , -0.25 , 0.02 ,-0.05 ]
-        KD = [ 0.04 , -0.09 , 0.09 , -0.09 ]
-        NDP = [ -0.3 , -0.5 , -0.34 , -0.48 ]
-        TIME_STEP = 0.01 # seconds
-        QD_DESIRED = [0.7,0.7,0.7,0.7] # radian per seconds
-        _,_,Q_CURRENT,_ = self._pressure_commands.read()
+        KP = [0.8, -3.0, 1.2, -1.0]
+        KI = [0.015, -0.25, 0.02, -0.05]
+        KD = [0.04, -0.09, 0.09, -0.09]
+        NDP = [-0.3, -0.5, -0.34, -0.48]
+        TIME_STEP = 0.01  # seconds
+        QD_DESIRED = [0.7, 0.7, 0.7, 0.7]  # radian per seconds
+        _, _, Q_CURRENT, _ = self._pressure_commands.read()
 
         # configuration for HYSR
-        NB_SIM_BURSTS = int ( (TIME_STEP/self._hysr_config.mujoco_time_step) +0.5 )
+        NB_SIM_BURSTS = int((TIME_STEP / self._hysr_config.mujoco_time_step) + 0.5)
 
         # configuration for accelerated time
         if self._accelerated_time:
-            NB_ROBOT_BURSTS = int( 
-                (TIME_STEP/hysr_config.o80_pam_time_step) +0.5 
-            )
+            NB_ROBOT_BURSTS = int((TIME_STEP / hysr_config.o80_pam_time_step) + 0.5)
 
         # configuration for real time
         if not self._accelerated_time:
-            frequency_manager = o80.FrequencyManager(1./TIME_STEP)
+            frequency_manager = o80.FrequencyManager(1.0 / TIME_STEP)
 
         # applying the controller twice yields better results
         for _ in range(2):
 
-            _,_,q_current,_ = self._pressure_commands.read()
+            _, _, q_current, _ = self._pressure_commands.read()
 
             # the position controller
-            controller = o80_pam.PositionController(q_current,position,QD_DESIRED,
-                                                    self._pam_config,
-                                                    KP,KD,KI,NDP,TIME_STEP)
+            controller = o80_pam.PositionController(
+                q_current,
+                position,
+                QD_DESIRED,
+                self._pam_config,
+                KP,
+                KD,
+                KI,
+                NDP,
+                TIME_STEP,
+            )
 
             # rolling the controller
             while controller.has_next():
                 # current position and velocity of the real robot
-                _,_,q,qd = self._pressure_commands.read()
+                _, _, q, qd = self._pressure_commands.read()
                 # mirroing the simulated robot(s)
                 for mirroring_ in self._mirrorings:
                     mirroring_.set(q, qd)
                 self._parallel_burst.burst(NB_SIM_BURSTS)
                 # applying the controller to get the pressure to set
-                pressures = controller.next(q,qd)
+                pressures = controller.next(q, qd)
                 # setting the pressures to real robot
                 if self._accelerated_time:
                     # if accelerated times, running the pseudo real robot iterations
@@ -713,8 +727,6 @@ class HysrOneBall:
                     # Should start acting now in the background if not accelerated time
                     self._pressure_commands.set(pressures, burst=False)
                     frequency_manager.wait()
-
-
 
     def reset(self):
 

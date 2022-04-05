@@ -85,7 +85,7 @@ class OpenAIPPOConfig:
         "save_path",
         "load_path",
         "log_interval",
-        "save_interval"
+        "save_interval",
     )  # , "seed")
 
     def __init__(self):
