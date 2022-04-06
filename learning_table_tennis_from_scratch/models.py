@@ -68,11 +68,11 @@ def run_openai_baselines(
     from baselines import logger
     from stable_baselines.common import make_vec_env
 
-    class LoggerWrapper:
+    class OpenaiLoggerWrapper:
         """Wrapper for baselines.logger so it has same methods as stable_baselines3."""
 
         def __init__(self, logger):
-            self.logger
+            self.logger = logger
 
         def record(self, key, value):
             self.logger.logkv(key, value)
@@ -83,7 +83,7 @@ def run_openai_baselines(
     ppo_config = OpenAIPPOConfig.from_json(ppo_config_file)
 
     if ppo_config["log_tensorboard"]:
-        tensorboard_logger = LoggerWrapper(logger)
+        tensorboard_logger = OpenaiLoggerWrapper(logger)
     else:
         tensorboard_logger = None
     del ppo_config["log_tensorboard"]
