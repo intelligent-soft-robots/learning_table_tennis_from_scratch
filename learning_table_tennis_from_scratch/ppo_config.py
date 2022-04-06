@@ -24,7 +24,6 @@ class PPOConfig:
         "gae_lambda",
         "batch_size",
         "n_epochs",
-        "tensorboard_log",
     )
 
     # Additional parameters
@@ -33,6 +32,7 @@ class PPOConfig:
         "save_path",  # If set the model is saved to the given path.
         "num_layers",  # Number of layers in the network
         "num_hidden",  # Size of each layer (all layers have same size)
+        "log_path",  # Destination for checkpoints and log files
     )
 
     __slots__ = _ppo_params + _additional_params

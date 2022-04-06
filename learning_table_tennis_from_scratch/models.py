@@ -1,3 +1,5 @@
+import pathlib
+
 from learning_table_tennis_from_scratch.hysr_one_ball_env import HysrOneBallEnv
 from learning_table_tennis_from_scratch.ppo_config import PPOConfig
 from learning_table_tennis_from_scratch.ppo_config import OpenAIPPOConfig
@@ -13,15 +15,23 @@ def run_stable_baselines(
     from stable_baselines3 import PPO
     from stable_baselines3.common import logger
     from stable_baselines3.common.env_util import make_vec_env
+    from stable_baselines3.common.callbacks import CheckpointCallback
 
     ppo_config = PPOConfig.from_json(ppo_config_file)
 
     tensorboard_logger = None
-    if ppo_config.tensorboard_log:
+    checkpoint_callback = None
+    if ppo_config.log_path:
         tensorboard_logger = logger.configure(
-            ppo_config.tensorboard_log, ["stdout", "csv", "tensorboard"]
+            ppo_config.log_path, ["stdout", "csv", "tensorboard"]
         )
         tensorboard_logger.set_level(logger.INFO)
+
+        # Save a checkpoint every n_steps steps
+        checkpoint_callback = CheckpointCallback(
+            save_freq=ppo_config.n_steps,
+            save_path=pathlib.Path(ppo_config.log_path) / "checkpoints",
+        )
 
     env_config = {
         "reward_config_file": reward_config_file,
@@ -43,7 +53,7 @@ def run_stable_baselines(
     # set custom logger, so we also get CSV output
     model.set_logger(tensorboard_logger)
 
-    model.learn(total_timesteps=ppo_config.num_timesteps)
+    model.learn(total_timesteps=ppo_config.num_timesteps, callback=checkpoint_callback)
 
     if ppo_config.save_path:
         model.save(ppo_config.save_path)
