@@ -267,10 +267,6 @@ class HysrOneBallEnv(gym.Env):
         if not episode_over and not self._hysr._ball_status.min_distance_ball_racket:
             return self.step(action_orig)
 
-        
-
-        print(observation)
-
         # logging
         self.n_steps += 1
         if self._log_episodes:
@@ -303,7 +299,6 @@ class HysrOneBallEnv(gym.Env):
         else:
             extended_observation = None
         observation = self._convert_observation(observation, extended_observation)
-        print(observation)
         if not self._accelerated_time:
             self._frequency_manager = None
         
