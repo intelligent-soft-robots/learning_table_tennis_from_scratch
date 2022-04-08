@@ -199,8 +199,8 @@ def read_reward_from_log(log_dir: pathlib.PurePath) -> float:
         reader = csv.DictReader(f)
         # go through all lines, get the last eprewmean value
         for line in reader:
-            if line["eprewmean"]:
-                eprewmean = float(line["eprewmean"])
+            if line["rollout/ep_rew_mean"]:
+                eprewmean = float(line["rollout/ep_rew_mean"])
 
     if eprewmean is None:
         raise RuntimeError("Failed to read eprewmean from log file.")
@@ -235,20 +235,16 @@ class Runner:
     def __init__(
         self,
         config_file: typing.Union[str, os.PathLike],
-        openai_logdir: typing.Union[str, os.PathLike],
+        training_log_dir: typing.Union[str, os.PathLike],
     ):
         """
         Args:
             config_file: Path to the config file for hysr_one_ball_ppo.
-            openai_log_dir: Directory to which leaning log files are written (used to
+            training_log_dir: Directory to which leaning log files are written (used to
                 set environment variable OPENAI_LOGDIR for the learning process).
         """
         # prepare environment
-        self.env = dict(
-            os.environ,
-            OPENAI_LOG_FORMAT="log,csv,tensorboard",
-            OPENAI_LOGDIR=os.fspath(openai_logdir),
-        )
+        self.training_log_dir = pathlib.Path(training_log_dir)
         self.config_file = config_file
 
     def start_backend(self):
@@ -265,7 +261,7 @@ class Runner:
         get_logger().info("\n\n#### Start learning [hysr_one_ball_ppo]\n")
         self.learning_start_time = time.time()
         self.proc_learning = subprocess.Popen(
-            ["hysr_one_ball_ppo", os.fspath(self.config_file)], env=self.env
+            ["hysr_one_ball_ppo", os.fspath(self.config_file)]
         )
 
     def monitor_processes(self):
@@ -302,13 +298,6 @@ class Runner:
     def run(self) -> float:
         """Start the learning and monitor processes.
 
-        Args:
-            config_file: Path to the config file for hysr_one_ball_ppo.
-            env: Dictionary with environment variables used to set up the environment of
-                the learning process.
-            proc_backend: The already started backend process (hysr_start_robots).  Used
-                to monitor for failures.
-
         Returns:
             The score of the learning (eprewmean).
 
@@ -327,7 +316,7 @@ class Runner:
         logger.info("\n\nlearning took %0.2f min" % duration)
 
         # extract eprewmean from the log
-        eprewmean = read_reward_from_log(pathlib.Path(self.env["OPENAI_LOGDIR"]))
+        eprewmean = read_reward_from_log(self.training_log_dir)
         logger.info("Final Reward: %0.2f" % eprewmean)
 
         return eprewmean
@@ -340,7 +329,7 @@ def main() -> int:
     params = cluster.read_params_from_cmdline(make_immutable=False)
 
     working_dir = pathlib.Path(params.working_dir)
-    openai_logdir = working_dir / "training_logs"
+    training_log_dir = working_dir / "training_logs"
     restart_info_file = working_dir / RESTART_INFO_FILENAME
 
     # Overwrite some values from the config templates to disable any graphical
@@ -354,6 +343,7 @@ def main() -> int:
             },
             "ppo_config": {
                 "save_path": os.fspath(working_dir / "model"),
+                "log_path": os.fspath(training_log_dir),
             },
         },
         "learning_runs_per_job": DEFAULT_LEARNING_RUNS_PER_JOB,
@@ -368,7 +358,7 @@ def main() -> int:
     os.chdir(working_dir)
 
     restart_info = RestartInfo(restart_info_file)
-    runner = Runner(config_file, openai_logdir)
+    runner = Runner(config_file, training_log_dir)
 
     run_id = f"{restart_info.finished_runs}-{restart_info.failed_attempts}"
     try:
@@ -389,7 +379,7 @@ def main() -> int:
         runner.stop_backend()
 
     # rename training log directory, so it does not get overwritten by next run
-    rename_directory(openai_logdir, run_id)
+    rename_directory(training_log_dir, run_id)
 
     # store the restart info
     restart_info.save()
