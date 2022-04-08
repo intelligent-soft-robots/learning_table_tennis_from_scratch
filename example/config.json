@@ -1,7 +1,7 @@
 {
     "reward_config": "../config/reward_default.json",
     "hysr_config": "../config/hysr_demos.json",
-    "pam_config": "/opt/mpi-is/pam_models/hill.json",
+    "pam_config": "~/.mpi-is/pam/pam_models/hill.json",
     "ppo_config": "../config/openai_ppo_default.json",
     "ppo_common_config": "../config/ppo_common_default.json"
 }
