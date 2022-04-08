@@ -31,7 +31,7 @@
         "num_jobs_in_elite": 10
     },
     "optimization_setting": {
-        "metric_to_optimize": "eprewmean",
+        "metric_to_optimize": "mean_eprewmean",
         "minimize": false,
         "number_of_samples": 100,
         "n_jobs_per_iteration": 10
