@@ -8,13 +8,8 @@ from learning_table_tennis_from_scratch.rl_config import OpenAIRLConfig
 def run_stable_baselines(
     reward_config_file,
     hysr_one_ball_config_file,
-<<<<<<< HEAD
     rl_config_file,
     algorithm,
-=======
-    ppo_config_file,
-    algorithm="ppo",
->>>>>>> add SAC to stable baselines 3
     log_episodes=False,
     seed=None,
 ):
@@ -25,14 +20,10 @@ def run_stable_baselines(
     from stable_baselines3.common.utils import set_random_seed
     from stable_baselines3.common.callbacks import CheckpointCallback
 
-<<<<<<< HEAD
     if seed is not None:
         set_random_seed(seed)
 
     rl_config = RLConfig.from_json(rl_config_file, algorithm)
-=======
-    ppo_config = PPOConfig.from_json(ppo_config_file, algorithm)
->>>>>>> add SAC to stable baselines 3
 
     tensorboard_logger = None
     checkpoint_callback = None
@@ -42,7 +33,6 @@ def run_stable_baselines(
         )
         tensorboard_logger.set_level(logger.INFO)
 
-<<<<<<< HEAD
         # Save a checkpoint every n_steps steps, or every 10000 steps if n_steps does
         # not exist (e.g. SAC)
         save_freq = getattr(rl_config, "n_steps", 10000)
@@ -50,16 +40,6 @@ def run_stable_baselines(
         checkpoint_callback = CheckpointCallback(
             save_freq=save_freq,
             save_path=pathlib.Path(rl_config.log_path) / "checkpoints",
-=======
-        # Save a checkpoint every n_steps steps, or every 10000 steps if n_steps does not exist (e.g. SAC)
-        try:
-            save_freq = getattr(ppo_config, "n_steps", 10000) 
-        except:
-            save_freq = 10000
-        checkpoint_callback = CheckpointCallback(
-            save_freq=save_freq,
-            save_path=pathlib.Path(ppo_config.log_path) / "checkpoints",
->>>>>>> add SAC to stable baselines 3
         )
 
     env_config = {
