@@ -26,6 +26,17 @@ class PPOConfig:
         "n_epochs",
     )
 
+    _sac_params = (
+        "gamma",
+        "ent_coef",
+        "learning_rate",
+        "batch_size",
+        "gradient_steps",
+        "train_freq",
+        "buffer_size",
+        "learning_starts",
+    )
+
     # Additional parameters
     _additional_params = (
         "num_timesteps",  # 'total_timesteps' passed to PPO.learn()
@@ -35,9 +46,17 @@ class PPOConfig:
         "log_path",  # Destination for checkpoints and log files
     )
 
-    __slots__ = _ppo_params + _additional_params
+    __slots_ppo__ = _ppo_params + _additional_params
+    __slots_sac__ = _sac_params + _additional_params
 
-    def __init__(self):
+
+    def __init__(self, algorithm):
+        if algorithm=="ppo":
+            self.__slots__ = self.__slots_ppo__
+            self.__algo_slots__ = self._ppo_params
+        elif algorithm=="sac":
+            self.__slots__ = self.__slots_sac__
+            self.__algo_slots__ = self._sac_params
         for s in self.__slots__:
             setattr(self, s, None)
 
@@ -51,17 +70,17 @@ class PPOConfig:
         This includes only the parameters that can be passed as keyword arguments to
         stable_baselines3.PPO.
         """
-        return {attr: getattr(self, attr) for attr in self._ppo_params}
+        return {attr: getattr(self, attr) for attr in self.__algo_slots__}
 
     @classmethod
-    def from_dict(cls, d: ConfigDict) -> "PPOConfig":
-        instance = cls()
+    def from_dict(cls, d: ConfigDict, algorithm) -> "PPOConfig":
+        instance = cls(algorithm)
         for s in instance.__slots__:
             setattr(instance, s, d[s])
         return instance
 
     @classmethod
-    def from_json(cls, jsonpath: typing.Union[str, os.PathLike]) -> "PPOConfig":
+    def from_json(cls, jsonpath: typing.Union[str, os.PathLike], algorithm) -> "PPOConfig":
         if not os.path.isfile(jsonpath):
             raise FileNotFoundError(
                 "failed to find PPO configuration file: {}".format(jsonpath)
@@ -73,8 +92,9 @@ class PPOConfig:
             raise ValueError(
                 "failed to parse PPO json configuration file {}: {}".format(jsonpath, e)
             )
-        instance = cls()
-        for s in cls.__slots__:
+
+        instance = cls(algorithm)
+        for s in instance.__slots__:
             try:
                 setattr(instance, s, conf[s])
             except Exception:

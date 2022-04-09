@@ -63,7 +63,7 @@ class _ObservationSpace:
     def get_normalized_values(self):
         values = list(self._values.values())
         r = np.concatenate(values)
-        r = np.array(r, dtype=np.float32)
+        r = np.array(r, dtype = np.float32)
         return r
 
 
@@ -283,7 +283,7 @@ class HysrOneBallEnv(gym.Env):
         observation = self._convert_observation(observation)
         if not self._accelerated_time:
             self._frequency_manager = None
-        return observation, {}
+        return observation.astype(type('float', (float,), {}))
 
     def dump_data(self, data_buffer):
         filename = "/tmp/ep_" + time.strftime("%Y%m%d-%H%M%S")
