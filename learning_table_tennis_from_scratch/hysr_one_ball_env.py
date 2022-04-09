@@ -284,7 +284,7 @@ class HysrOneBallEnv(gym.Env):
         observation = self._convert_observation(observation)
         if not self._accelerated_time:
             self._frequency_manager = None
-        return observation.astype(type('float', (float,), {}))
+        return observation
 
     def dump_data(self, data_buffer):
         filename = "/tmp/ep_" + time.strftime("%Y%m%d-%H%M%S")

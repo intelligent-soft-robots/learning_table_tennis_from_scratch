@@ -9,7 +9,7 @@ def run_stable_baselines(
     reward_config_file,
     hysr_one_ball_config_file,
     ppo_config_file,
-    algorithm="ppo",
+    algorithm,
     log_episodes=False,
     seed=None,
 ):
