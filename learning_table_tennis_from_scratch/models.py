@@ -9,15 +9,17 @@ def run_stable_baselines(
     reward_config_file,
     hysr_one_ball_config_file,
     ppo_config_file,
+    algorithm="ppo",
     log_episodes=False,
     seed=None,
 ):
     from stable_baselines3 import PPO
+    from stable_baselines3 import SAC
     from stable_baselines3.common import logger
     from stable_baselines3.common.env_util import make_vec_env
     from stable_baselines3.common.callbacks import CheckpointCallback
 
-    ppo_config = PPOConfig.from_json(ppo_config_file)
+    ppo_config = PPOConfig.from_json(ppo_config_file, algorithm)
 
     tensorboard_logger = None
     checkpoint_callback = None
@@ -27,9 +29,13 @@ def run_stable_baselines(
         )
         tensorboard_logger.set_level(logger.INFO)
 
-        # Save a checkpoint every n_steps steps
+        # Save a checkpoint every n_steps steps, or every 10000 steps if n_steps does not exist (e.g. SAC)
+        try:
+            save_freq = getattr(ppo_config, "n_steps", 10000) 
+        except:
+            save_freq = 10000
         checkpoint_callback = CheckpointCallback(
-            save_freq=ppo_config.n_steps,
+            save_freq=save_freq,
             save_path=pathlib.Path(ppo_config.log_path) / "checkpoints",
         )
 
@@ -41,15 +47,26 @@ def run_stable_baselines(
     }
     env = make_vec_env(HysrOneBallEnv, env_kwargs=env_config)
 
-    model = PPO(
-        "MlpPolicy",
-        env,
-        seed=seed,
-        policy_kwargs={
-            "net_arch": [ppo_config.num_hidden] * ppo_config.num_layers,
-        },
-        **ppo_config.get_ppo_params(),
-    )
+    if algorithm=="ppo":
+        model = PPO(
+            "MlpPolicy",
+            env,
+            seed=seed,
+            policy_kwargs={
+                "net_arch": [ppo_config.num_hidden] * ppo_config.num_layers,
+            },
+            **ppo_config.get_ppo_params(),
+        )
+    else:
+        model = SAC(
+            "MlpPolicy",
+            env,
+            seed=seed,
+            policy_kwargs={
+                "net_arch": [ppo_config.num_hidden] * ppo_config.num_layers,
+            },
+            **ppo_config.get_ppo_params(),
+        )
     # set custom logger, so we also get CSV output
     model.set_logger(tensorboard_logger)
 
