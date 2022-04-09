@@ -37,15 +37,15 @@ class _ObservationSpace:
 
     def add_box(self, name, low, high, size):
         self._obs_boxes[name] = _ObservationSpace.Box(low, high, size)
-        self._values[name] = np.zeros(size)
+        self._values[name] = np.zeros(size, dtype=np.float32)
 
     def get_gym_box(self):
         size = sum([b.size for b in self._obs_boxes.values()])
-        return gym.spaces.Box(low=0.0, high=1.0, shape=(size,), dtype=np.float)
+        return gym.spaces.Box(low=0.0, high=1.0, shape=(size,), dtype=np.float32)
 
     def set_values(self, name, values):
         normalize = self._obs_boxes[name].normalize
-        values_ = np.array(list(map(normalize, values)))
+        values_ = np.array(list(map(normalize, values)), dtype=np.float32)
         self._values[name] = values_
 
     def set_values_pressures(self, name, values, env):
@@ -54,16 +54,17 @@ class _ObservationSpace:
             values[2 * dof + 1] = env._reverse_scale_pressure(
                 dof, False, values[2 * dof + 1]
             )
-        values_ = np.array(values)
+        values_ = np.array(values, dtype=np.float32)
         self._values[name] = values_
 
     def set_values_non_norm(self, name, values):
-        values_ = np.array(values)
+        values_ = np.array(values, dtype=np.float32)
         self._values[name] = values_
 
     def get_normalized_values(self):
         values = list(self._values.values())
         r = np.concatenate(values)
+        r = np.array(r, dtype = np.float32)
         return r
 
 
@@ -96,7 +97,7 @@ class HysrOneBallEnv(gym.Env):
         self._hysr = HysrOneBall(hysr_one_ball_config, reward_function)
 
         self.action_space = gym.spaces.Box(
-            low=-1.0, high=+1.0, shape=(self._nb_dofs * 2,), dtype=np.float
+            low=-1.0, high=+1.0, shape=(self._nb_dofs * 2,), dtype=np.float32
         )
 
         self._obs_boxes = _ObservationSpace()
@@ -134,7 +135,7 @@ class HysrOneBallEnv(gym.Env):
             self.data_buffer = []
 
         # initialize initial action (for action diffs)
-        self.last_action = np.zeros(self._nb_dofs * 2)
+        self.last_action = np.zeros(self._nb_dofs * 2, dtype=np.float32)
         starting_pressures = self._hysr.get_starting_pressures()
         for dof in range(self._nb_dofs):
             self.last_action[2 * dof] = self._reverse_scale_pressure(
@@ -283,7 +284,7 @@ class HysrOneBallEnv(gym.Env):
         observation = self._convert_observation(observation)
         if not self._accelerated_time:
             self._frequency_manager = None
-        return observation
+        return observation.astype(type('float', (float,), {}))
 
     def dump_data(self, data_buffer):
         filename = "/tmp/ep_" + time.strftime("%Y%m%d-%H%M%S")

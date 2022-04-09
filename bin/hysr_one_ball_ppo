@@ -27,6 +27,7 @@ def _read_ppo_common_config(jsonpath):
         )
 
     expected_keys = (
+        "algorithm",
         "use_openai_baselines",
         "log_episodes",
         "random_seed",
@@ -68,6 +69,7 @@ def _execute(
             reward_config_file,
             hysr_config_file,
             ppo_config_file,
+            common_conf["algorithm"],
             common_conf["log_episodes"],
         )
 
