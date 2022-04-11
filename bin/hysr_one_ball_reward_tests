@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+import time
 import logging
 import o80
 from learning_table_tennis_from_scratch.hysr_one_ball import (
@@ -43,27 +44,27 @@ def execute(reward_config_path, hysr_config_path):
         return reward
 
     print("ball staying far from racket")
-    reward = _fixed_position([1.2, 2.7, 0.17])
+    reward = _fixed_position([0, 2.0, 1.8])
     print("\t\treward: ", reward)
 
     print("repeating")
-    reward = _fixed_position([1.2, 2.7, 0.17])
+    reward = _fixed_position([0, 2.0, 1.8])
     print("\t\treward: ", reward)
 
     print("ball getting closer to racket")
-    reward = _fixed_position([1.2, 1.7, 0.17])
+    reward = _fixed_position([0, 1.7, 1.8])
     print("\t\treward: ", reward)
 
     print("ball getting closer to racket")
-    reward = _fixed_position([1.2, 1.2, 0.17])
+    reward = _fixed_position([0, 1.2, 1.8])
     print("\t\treward: ", reward)
 
     print("repeating")
-    reward = _fixed_position([1.2, 1.2, 0.17])
+    reward = _fixed_position([0, 1.2, 1.8])
     print("\t\treward: ", reward)
 
     print("ball getting closer to racket")
-    reward = _fixed_position([1.2, 0.5, 0.17])
+    reward = _fixed_position([0.0, 1.0, 1.8])
     print("\t\treward: ", reward)
 
     ###########################
@@ -115,63 +116,72 @@ def execute(reward_config_path, hysr_config_path):
         )
 
     print("ball flying far from racket")
-    _moving([1.5, 2.7, 0.17], [1.5, -1.0, 0.17], 3000)
+    _moving([0.8, 2.0, 1.8], [0.8, -0.5, 1.8], 1000)
 
     print("repeat")
-    _moving([1.5, 2.7, 0.17], [1.5, -1.0, 0.17], 3000)
+    _moving([0.8, 2.0, 1.8], [0.8, -0.5, 1.8], 1000)
 
     print("ball flying closer to racket")
-    _moving([1.0, 2.7, 0.17], [1.0, -1.0, 0.17], 3000)
+    _moving([0.5, 2.0, 1.8], [0.5, -0.5, 1.8], 1000)
 
     ########################
     # moving ball, contact #
     ########################
 
+    start = [-0.05 , 2.0 , 2.0]
+    end = [-0.05, -0.5, 2.0]
+    x,y,z = 0.0 , 2.5 , 0.78
+    target = [x,y,z]
+    target_far = [x+0.3,y+0.3,z]
+    target_close = [x+0.2,y+0.2,z]
+    target_closer = [x+0.1,y+0.1,z]
+    target_almost = [x+0.02,y+0.02,z]
+    
     print("ball flying to racket, and bouncing")
-    _moving([0.70, 2.7, 0.28], [0.70, -1.0, 0.28], 3000)
+    _moving(start, end, 1000)
 
     print("repeat")
-    _moving([0.70, 2.7, 0.28], [0.70, -1.0, 0.28], 3000)
+    _moving(start, end, 1000)
 
     print("ball flying to racket, then flying far to target")
     _moving(
-        [0.70, 2.7, 0.28], [0.70, -1.0, 0.28], 3000, contact_ball_end=[0.6, 1.5, -1.0]
+        start, end, 1000, contact_ball_end=target_far
     )
 
     print("ball flying to racket, then flying closer to target")
     _moving(
-        [0.70, 2.7, 0.28], [0.70, -1.0, 0.28], 3000, contact_ball_end=[0.5, 2.7, -1.0]
+        start, end, 1000, contact_ball_end=target_close
     )
 
     print("repeat")
     _moving(
-        [0.70, 2.7, 0.28], [0.70, -1.0, 0.28], 3000, contact_ball_end=[0.5, 2.7, -1.0]
+        start, end, 1000, contact_ball_end=target_close
     )
-
+        
     print("ball flying to racket, then flying even closer to target")
     _moving(
-        [0.70, 2.7, 0.28], [0.70, -1.0, 0.28], 3000, contact_ball_end=[0.45, 4.1, -1.0]
+        start, end, 1000, contact_ball_end=target_closer
     )
 
     print("ball flying to racket, then flying even (even) closer to target")
     _moving(
-        [0.70, 2.7, 0.28],
-        [0.70, -1.0, 0.28],
-        3000,
-        contact_ball_end=[0.45, 2.71, -0.45],
+        start,
+        end,
+        1000,
+        contact_ball_end=target_almost
     )
 
     print("ball flying to racket, then flying even (even) closer to target, but faster")
     _moving(
-        [0.70, 2.7, 0.28],
-        [0.70, -1.0, 0.28],
-        2000,
-        contact_ball_end=[0.45, 2.71, -0.45],
+        start,
+        end,
+        500,
+        contact_ball_end=target_almost
     )
 
     print("ball flying to racket, then flying exactly at the target")
     _moving(
-        [0.70, 2.7, 0.28], [0.70, -1.0, 0.28], 3000, contact_ball_end=[0.45, 2.7, -0.45]
+        start, end, 500, contact_ball_end=target
     )
 
     hysr.close()
