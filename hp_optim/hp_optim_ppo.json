@@ -46,7 +46,7 @@
         {
             "param": "config.ppo_config.num_hidden",
             "distribution": "IntLogNormal",
-            "bounds": [32, 32768]
+            "bounds": [32, 8192]
         },
         {
             "param": "config.ppo_config.lr",
