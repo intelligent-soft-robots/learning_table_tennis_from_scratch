@@ -104,6 +104,10 @@ class HysrOneBallConfig:
         # robot type given as string in json config, but
         # the rest of the code will expect a pam_mujoco.RobotType
         instance.robot_type = _to_robot_type(instance.robot_type)
+
+        # convert paths to Path objects and expand '~'
+        instance.pam_config_file = pathlib.Path(instance.pam_config_file).expanduser()
+
         return instance
 
     @staticmethod
@@ -303,9 +307,7 @@ class HysrOneBall:
         self._mujoco_ids = []
 
         # pam muscles configuration
-        if hysr_config.pam_config_file.startswith('~'):
-            hysr_config.pam_config_file = str(pathlib.Path.home())+hysr_config.pam_config_file[1:]
-        self._pam_config = pam_interface.JsonConfiguration(hysr_config.pam_config_file)
+        self._pam_config = pam_interface.JsonConfiguration(str(hysr_config.pam_config_file))
 
         # to control pseudo-real robot (pressure control)
         if not hysr_config.real_robot:
@@ -313,7 +315,7 @@ class HysrOneBall:
                 self._real_robot_handle,
                 self._real_robot_frontend,
             ) = configure_mujoco.configure_pseudo_real(
-                hysr_config.pam_config_file,
+                str(hysr_config.pam_config_file),
                 hysr_config.robot_type,
                 graphics=hysr_config.graphics_pseudo_real,
                 accelerated_time=hysr_config.accelerated_time,
