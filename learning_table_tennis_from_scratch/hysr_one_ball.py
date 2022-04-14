@@ -26,10 +26,21 @@ SEGMENT_ID_EPISODE_FREQUENCY = "hysr_episode_frequency"
 SEGMENT_ID_STEP_FREQUENCY = "hysr_step_frequency"
 
 
+
+def _to_robot_type(robot_type:str)->pam_mujoco.RobotType:
+    try :
+        return pam_mujoco.RobotType[robot_type.upper()]
+    except KeyError:
+        error = str("hysr configuration robot_type should be either "
+                    "'pamy1' or 'pamy2' (entered value: {})").format(robot_type)
+        raise ValueError(error)
+
+
 class HysrOneBallConfig:
 
     __slots__ = (
         "real_robot",
+        "robot_type",
         "o80_pam_time_step",
         "mujoco_time_step",
         "algo_time_step",
@@ -62,7 +73,7 @@ class HysrOneBallConfig:
     def __init__(self):
         for s in self.__slots__:
             setattr(self, s, None)
-
+            
     def get(self):
         r = {s: getattr(self, s) for s in self.__slots__}
         return r
@@ -90,6 +101,9 @@ class HysrOneBallConfig:
                 raise ValueError(
                     "failed to find the attribute {} " "in {}".format(s, jsonpath)
                 )
+        # robot type given as string in json config, but
+        # the rest of the code will expect a pam_mujoco.RobotType
+        instance.robot_type = _to_robot_type(instance.robot_type)
         return instance
 
     @staticmethod
@@ -300,6 +314,7 @@ class HysrOneBall:
                 self._real_robot_frontend,
             ) = configure_mujoco.configure_pseudo_real(
                 hysr_config.pam_config_file,
+                hysr_config.robot_type,
                 graphics=hysr_config.graphics_pseudo_real,
                 accelerated_time=hysr_config.accelerated_time,
             )
