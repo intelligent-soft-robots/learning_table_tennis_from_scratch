@@ -28,11 +28,9 @@ SEGMENT_ID_STEP_FREQUENCY = "hysr_step_frequency"
 
 
 def _to_robot_type(robot_type:str)->pam_mujoco.RobotType:
-    if robot_type=="pamy1":
-        return pam_mujoco.RobotType.PAMY1
-    elif robot_type=="pamy2":
-        return pam_mujoco.RobotType.PAMY2
-    else:
+    try :
+        return pam_mujoco.RobotType[robot_type.upper()]
+    except KeyError:
         error = str("hysr configuration robot_type should be either "
                     "'pamy1' or 'pamy2' (entered value: {})").format(robot_type)
         raise ValueError(error)
