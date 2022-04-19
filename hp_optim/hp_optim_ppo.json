@@ -31,7 +31,7 @@
         "num_jobs_in_elite": 10
     },
     "optimization_setting": {
-        "metric_to_optimize": "eprewmean",
+        "metric_to_optimize": "mean_eprewmean",
         "minimize": false,
         "number_of_samples": 100,
         "n_jobs_per_iteration": 10
@@ -46,10 +46,10 @@
         {
             "param": "config.ppo_config.num_hidden",
             "distribution": "IntLogNormal",
-            "bounds": [32, 32768]
+            "bounds": [32, 8192]
         },
         {
-            "param": "config.ppo_config.lr",
+            "param": "config.ppo_config.learning_rate",
             "distribution": "TruncatedLogNormal",
             "bounds": [1e-5, 1e-1]
         },

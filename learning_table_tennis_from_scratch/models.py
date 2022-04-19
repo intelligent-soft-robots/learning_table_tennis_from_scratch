@@ -1,3 +1,5 @@
+import pathlib
+
 from learning_table_tennis_from_scratch.hysr_one_ball_env import HysrOneBallEnv
 from learning_table_tennis_from_scratch.ppo_config import PPOConfig
 from learning_table_tennis_from_scratch.ppo_config import OpenAIPPOConfig
@@ -8,36 +10,53 @@ def run_stable_baselines(
     hysr_one_ball_config_file,
     ppo_config_file,
     log_episodes=False,
-    log_tensorboard=False,
     seed=None,
 ):
+    from stable_baselines3 import PPO
+    from stable_baselines3.common import logger
+    from stable_baselines3.common.env_util import make_vec_env
+    from stable_baselines3.common.callbacks import CheckpointCallback
 
-    from stable_baselines.common.policies import MlpPolicy
-    from stable_baselines.common import make_vec_env
-    from stable_baselines import PPO2
+    ppo_config = PPOConfig.from_json(ppo_config_file)
+
+    tensorboard_logger = None
+    checkpoint_callback = None
+    if ppo_config.log_path:
+        tensorboard_logger = logger.configure(
+            ppo_config.log_path, ["stdout", "csv", "tensorboard"]
+        )
+        tensorboard_logger.set_level(logger.INFO)
+
+        # Save a checkpoint every n_steps steps
+        checkpoint_callback = CheckpointCallback(
+            save_freq=ppo_config.n_steps,
+            save_path=pathlib.Path(ppo_config.log_path) / "checkpoints",
+        )
 
     env_config = {
         "reward_config_file": reward_config_file,
         "hysr_one_ball_config_file": hysr_one_ball_config_file,
         "log_episodes": log_episodes,
-        "log_tensorboard": log_tensorboard,
+        "logger": tensorboard_logger,
     }
     env = make_vec_env(HysrOneBallEnv, env_kwargs=env_config)
 
-    ppo_config = PPOConfig.from_json(ppo_config_file)
-    if log_tensorboard:
-        model = PPO2(
-            MlpPolicy,
-            env,
-            verbose=1,
-            log_tensorboard=log_tensorboard,
-            seed=seed,
-            **ppo_config
-        )
-    else:
-        model = PPO2(MlpPolicy, env, verbose=1, **ppo_config)
-    model.learn(total_timesteps=1000000)
-    model.save("ppo2_hysr_one_ball")
+    model = PPO(
+        "MlpPolicy",
+        env,
+        seed=seed,
+        policy_kwargs={
+            "net_arch": [ppo_config.num_hidden] * ppo_config.num_layers,
+        },
+        **ppo_config.get_ppo_params(),
+    )
+    # set custom logger, so we also get CSV output
+    model.set_logger(tensorboard_logger)
+
+    model.learn(total_timesteps=ppo_config.num_timesteps, callback=checkpoint_callback)
+
+    if ppo_config.save_path:
+        model.save(ppo_config.save_path)
 
 
 def run_openai_baselines(
@@ -45,7 +64,6 @@ def run_openai_baselines(
     hysr_one_ball_config_file,
     ppo_config_file,
     log_episodes=False,
-    log_tensorboard=False,
     model_file_path=None,
     seed=None,
 ):
@@ -57,17 +75,37 @@ def run_openai_baselines(
 
     tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.ERROR)
 
+    from baselines import logger
     from stable_baselines.common import make_vec_env
+
+    class OpenaiLoggerWrapper:
+        """Wrapper for baselines.logger so it has same methods as stable_baselines3."""
+
+        def __init__(self, logger):
+            self.logger = logger
+
+        def record(self, key, value):
+            self.logger.logkv(key, value)
+
+        def dump(self):
+            self.logger.dumpkvs()
+
+    ppo_config = OpenAIPPOConfig.from_json(ppo_config_file)
+
+    if ppo_config["log_tensorboard"]:
+        tensorboard_logger = OpenaiLoggerWrapper(logger)
+    else:
+        tensorboard_logger = None
+    del ppo_config["log_tensorboard"]
 
     env_config = {
         "reward_config_file": reward_config_file,
         "hysr_one_ball_config_file": hysr_one_ball_config_file,
         "log_episodes": log_episodes,
-        "log_tensorboard": log_tensorboard,
+        "logger": tensorboard_logger,
     }
     env = make_vec_env(HysrOneBallEnv, env_kwargs=env_config)
 
-    ppo_config = OpenAIPPOConfig.from_json(ppo_config_file)
     total_timesteps = ppo_config["num_timesteps"]
     del ppo_config["num_timesteps"]
     save_path = ppo_config["save_path"]
@@ -102,7 +140,6 @@ def replay_openai_baselines(
     hysr_one_ball_config_file,
     ppo_config_file,
     log_episodes=False,
-    log_tensorboard=False,
 ):
 
     model, env = run_openai_baselines(
@@ -110,7 +147,6 @@ def replay_openai_baselines(
         hysr_one_ball_config_file,
         ppo_config_file,
         log_episodes=False,
-        log_tensorboard=False,
         model_file_path=model_file_path,
     )
 
