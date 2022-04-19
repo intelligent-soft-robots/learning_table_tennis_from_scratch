@@ -49,7 +49,7 @@
             "bounds": [32, 8192]
         },
         {
-            "param": "config.ppo_config.lr",
+            "param": "config.ppo_config.learning_rate",
             "distribution": "TruncatedLogNormal",
             "bounds": [1e-5, 1e-1]
         },
