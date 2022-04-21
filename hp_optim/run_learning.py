@@ -110,6 +110,16 @@ def prepare_config_file(
     with open(template_file, "r") as f:
         config = json.load(f)
 
+    # check if all provided parameter updates correspond to existing parameters
+    for param in parameter_updates:
+        if param not in config:
+            raise KeyError(
+                (
+                    "Provided update for parameter '{param}' in {config_name} [{file}],"
+                    " but such parameter does not exist."
+                ).format(config_name=name, file=template_file, param=param)
+            )
+
     config.update(parameter_updates)
 
     destination_file = destination_directory / "{}.json".format(name)

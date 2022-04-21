@@ -14,5 +14,5 @@
     "num_timesteps": 500000,
     "save_path": "/tmp/model",
     "num_layers": 1,
-    "num_hidden": 512
+    "num_hidden": 100
 }
