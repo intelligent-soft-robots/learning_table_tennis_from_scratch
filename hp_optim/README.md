@@ -164,7 +164,7 @@ the training parameters of the model.  However, once finished, it is marked for
 continuation.  The cluster job will be restarted and the new job will load the model
 from the previous one to continue training on (again for the configured number of time
 steps).
-
+git add
 Example: Instead of having one job that trains for 1,000,000 steps, one can reduce the
 training steps to 100,000 and set `training_iterations` to 10.  It will then run ten
 shorter trainings, each building upon the previous one, thus resulting in the same total

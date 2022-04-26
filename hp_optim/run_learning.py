@@ -371,7 +371,6 @@ def main() -> int:
 
     run_data_dir = working_dir / f"run_{run_id}"
     training_log_dir = run_data_dir / "training_logs"
-    model_save_path = os.fspath(run_data_dir / "model")
 
     # Overwrite some values from the config templates to disable any graphical
     # interfaces and to save the model in working_dir (unless a different value
@@ -384,7 +383,7 @@ def main() -> int:
             },
             "rl_config": {
                 "load_path": restart_info.unfinished_model,
-                "save_path": model_save_path,
+                "save_path": os.fspath(working_dir / "model"),
                 "log_path": os.fspath(training_log_dir),
             },
         },
