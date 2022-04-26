@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Run learning with cluster_utils
 
-This is a wrapper script around running hysr_start_robots and hysr_one_ball_ppo
+This is a wrapper script around running hysr_start_robots and hysr_one_ball_rl
 that is intended to be used by cluster_utils (for hyperparameter optimisation).
 
 See the accompanying README on how cluster_utils needs to be configured for
@@ -137,8 +137,8 @@ def setup_config(working_dir: pathlib.Path, params: dict) -> pathlib.Path:
     - "reward_config"
     - "hysr_config"
     - "pam_config"
-    - "ppo_config"
-    - "ppo_common_config"
+    - "rl_config"
+    - "rl_common_config"
 
     Further *params* may contain contain an entry for any of the template files listed
     above, which again contains a dictionary with parameter updates for that file.
@@ -150,7 +150,7 @@ def setup_config(working_dir: pathlib.Path, params: dict) -> pathlib.Path:
 
         {
             "config_templates": "./templates/base_config.json",
-            "ppo_config": {
+            "rl_config": {
                 "num_timesteps": 1000000,
                 "num_layers": 2
             }
@@ -181,8 +181,8 @@ def setup_config(working_dir: pathlib.Path, params: dict) -> pathlib.Path:
             "reward_config": "./config/reward_config.json",
             "hysr_config": "./config/hysr_config.json",
             "pam_config": "./config/pam_config.json",
-            "ppo_config": "./config/ppo_config.json",
-            "ppo_common_config": "./config/ppo_common_config.json",
+            "rl_config": "./config/ppo_config.json",
+            "rl_common_config": "./config/rl_common_config.json",
         }
         with open(main_config_file, "w") as f:
             json.dump(base_config, f)
@@ -249,7 +249,7 @@ class Runner:
     ):
         """
         Args:
-            config_file: Path to the config file for hysr_one_ball_ppo.
+            config_file: Path to the config file for hysr_one_ball_rl.
             training_log_dir: Directory to which leaning log files are written (used to
                 set environment variable OPENAI_LOGDIR for the learning process).
         """
@@ -268,10 +268,10 @@ class Runner:
         subprocess.run(["hysr_stop"])
 
     def start_learning(self):
-        get_logger().info("\n\n#### Start learning [hysr_one_ball_ppo]\n")
+        get_logger().info("\n\n#### Start learning [hysr_one_ball_rl]\n")
         self.learning_start_time = time.time()
         self.proc_learning = subprocess.Popen(
-            ["hysr_one_ball_ppo", os.fspath(self.config_file)]
+            ["hysr_one_ball_rl", os.fspath(self.config_file)]
         )
 
     def monitor_processes(self):
@@ -351,7 +351,7 @@ def main() -> int:
                 "graphics": False,
                 "xterms": False,
             },
-            "ppo_config": {
+            "rl_config": {
                 "save_path": os.fspath(working_dir / "model"),
                 "log_path": os.fspath(training_log_dir),
             },

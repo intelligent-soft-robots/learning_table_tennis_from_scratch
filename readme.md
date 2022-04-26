@@ -66,7 +66,7 @@ for a mujoco simulated pressure robot, and "/opt/mpi-is/pam_interface/pamy2/pam.
 - reference_posture: when the environment reset, the robot will first "go" to this posture, i.e. this set of pressure,
 in the format [[agonist muscle pressure, agonist muscle pressure] ...]
 - world_boundaries: boundaries of the 3d world (in meters)
-- pressure_change_range: the action of the ppo2 algorithm will consist of delta of pressures, the pressure change range is the maximal
+- pressure_change_range: the action of the rl algorithm will consist of delta of pressures, the pressure change range is the maximal
 delta value
 - trajectory: the ball will play at each episode a pre-recorded trajectory. A negative value indicate that at each episode, a pre-recorded
 trajectory will be selected randomly. A positive value will be the index of the trajectory to play (same trajectory played at each episode)
@@ -129,7 +129,7 @@ Executables for testing and debug:
  
 Executable for learning:
 
-- hysr_one_ball_ppo: learning table tennis using PPO and HYSR.
+- hysr_one_ball_rl: learning table tennis using RL and HYSR.
 
 ### Configuring and starting the executable
 
@@ -159,8 +159,8 @@ The learning executable configuration json file requires this content:
     "reward_config":"/path/to/reward/json/config/file",
     "hysr_config":"/path/to/hysr/json/config/file",
     "pam_config":"/path/to/pam/json/config/file",
-    "ppo_config":"/path/to/ppo/json/config/file",
-    "ppo_common_config":"/path/to/ppo-common/json/config/file"
+    "rl_config":"/path/to/rl/json/config/file",
+    "rl_common_config":"/path/to/rl-common/json/config/file"
 }
 ```
 
@@ -174,7 +174,7 @@ The bin folder has exemple of configuration files, except for:
 Once the configuration file has been set in the current directory, the executable can be started, e.g.:
 
 ```
-hysr_one_ball_ppo
+hysr_one_ball_rl
 ```
 
 This will trigger the start of the mujoco simulations. Whether or not the simulations open a graphical display
@@ -270,6 +270,6 @@ same folder (i.e. using the same json configuration file).
 In a terminal:
 
 ```
-tensorboard --logdir /tmp/ppo2
+tensorboard --logdir /tmp/rl
 ```
 
