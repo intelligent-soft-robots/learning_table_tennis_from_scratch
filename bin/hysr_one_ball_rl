@@ -12,7 +12,7 @@ from learning_table_tennis_from_scratch.models import run_openai_baselines
 from learning_table_tennis_from_scratch.jsonconfig import get_json_config
 
 
-def _read_ppo_common_config(jsonpath):
+def _read_rl_common_config(jsonpath):
 
     if not os.path.isfile(jsonpath):
         raise FileNotFoundError(
@@ -41,10 +41,10 @@ def _read_ppo_common_config(jsonpath):
 
 
 def _execute(
-    reward_config_file, hysr_config_file, ppo_config_file, ppo_common_config_file
+    reward_config_file, hysr_config_file, rl_config_file, rl_common_config_file
 ):
 
-    common_conf = _read_ppo_common_config(ppo_common_config_file)
+    common_conf = _read_rl_common_config(rl_common_config_file)
 
     seed = common_conf["random_seed"]
     if not seed:
@@ -60,7 +60,7 @@ def _execute(
         run_openai_baselines(
             reward_config_file,
             hysr_config_file,
-            ppo_config_file,
+            rl_config_file,
             common_conf["log_episodes"],
             seed=seed,
         )
@@ -68,7 +68,7 @@ def _execute(
         run_stable_baselines(
             reward_config_file,
             hysr_config_file,
-            ppo_config_file,
+            rl_config_file,
             common_conf["algorithm"],
             common_conf["log_episodes"],
         )
@@ -79,8 +79,8 @@ def _configure(config_file):
         expected_keys=[
             "reward_config",
             "hysr_config",
-            "ppo_config",
-            "ppo_common_config",
+            "rl_config",
+            "rl_common_config",
         ],
         config_file=config_file,
     )
@@ -106,8 +106,8 @@ def _run():
     _execute(
         config["reward_config"],
         config["hysr_config"],
-        config["ppo_config"],
-        config["ppo_common_config"],
+        config["rl_config"],
+        config["rl_common_config"],
     )
 
 

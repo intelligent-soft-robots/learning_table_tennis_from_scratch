@@ -83,7 +83,7 @@ When using this, keep the following in mind:
 
 ## Configuration for run_learning.py
 
-`run_learning.py` is a wrapper script around running `hysr_one_ball_ppo` which
+`run_learning.py` is a wrapper script around running `hysr_one_ball_rl` which
 sets up the necessary configuration files based on the parameters given by
 `cluster_utils`.
 
@@ -109,8 +109,8 @@ the hysr exectuables:
         "reward_config": "../config/reward_default.json",
         "hysr_config": "../config/hysr_one_ball_default_sim.json",
         "pam_config": "/opt/mpi-is/pam_models/hill.json",
-        "ppo_config": "../config/openai_ppo_default.json",
-        "ppo_common_config": "../config/ppo_common_default.json"
+        "rl_config": "../config/openai_ppo_default.json",
+        "rl_common_config": "../config/rl_common_default.json"
     }
 
 Paths are resolved relative to the location of the file.
@@ -124,9 +124,9 @@ configuration.  The names have to follow the pattern
     config.<config_file>.<parameter_name>
 
 E.g. to overwrite the parameters "num_hidden" in the config file that is given
-for "ppo_config" in the template file (see above), the name would be
+for "rl_config" in the template file (see above), the name would be
 
-    config.ppo_config.num_hidden
+    config.rl_config.num_hidden
 
 
 ### Configuring number of reruns and retries
