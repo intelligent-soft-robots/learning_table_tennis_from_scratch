@@ -63,7 +63,7 @@ class _ObservationSpace:
     def get_normalized_values(self):
         values = list(self._values.values())
         r = np.concatenate(values)
-        r = np.array(r, dtype = np.float32)
+        r = np.array(r, dtype=np.float32)
         return r
 
 
