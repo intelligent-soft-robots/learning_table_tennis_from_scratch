@@ -49,12 +49,11 @@ class RLConfig:
     __slots_ppo__ = _ppo_params + _additional_params
     __slots_sac__ = _sac_params + _additional_params
 
-
     def __init__(self, algorithm):
-        if algorithm=="ppo":
+        if algorithm == "ppo":
             self.__slots__ = self.__slots_ppo__
             self.__algo_slots__ = self._ppo_params
-        elif algorithm=="sac":
+        elif algorithm == "sac":
             self.__slots__ = self.__slots_sac__
             self.__algo_slots__ = self._sac_params
         for s in self.__slots__:
@@ -80,7 +79,9 @@ class RLConfig:
         return instance
 
     @classmethod
-    def from_json(cls, jsonpath: typing.Union[str, os.PathLike], algorithm) -> "RLConfig":
+    def from_json(
+        cls, jsonpath: typing.Union[str, os.PathLike], algorithm
+    ) -> "RLConfig":
         if not os.path.isfile(jsonpath):
             raise FileNotFoundError(
                 "failed to find RL configuration file: {}".format(jsonpath)

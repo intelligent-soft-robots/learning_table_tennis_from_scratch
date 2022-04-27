@@ -31,7 +31,7 @@ def run_stable_baselines(
 
         # Save a checkpoint every n_steps steps, or every 10000 steps if n_steps does not exist (e.g. SAC)
         try:
-            save_freq = getattr(rl_config, "n_steps", 10000) 
+            save_freq = getattr(rl_config, "n_steps", 10000)
         except:
             save_freq = 10000
         checkpoint_callback = CheckpointCallback(
@@ -47,7 +47,7 @@ def run_stable_baselines(
     }
     env = make_vec_env(HysrOneBallEnv, env_kwargs=env_config)
 
-    if algorithm=="ppo":
+    if algorithm == "ppo":
         model = PPO(
             "MlpPolicy",
             env,

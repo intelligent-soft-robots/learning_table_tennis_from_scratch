@@ -84,7 +84,11 @@ def configure_extra_set(setid, hysr_config):
 
 
 def configure_pseudo_real(
-        pam_config_file, robot_type, mujoco_id="pseudo-real", graphics=True, accelerated_time=False
+    pam_config_file,
+    robot_type,
+    mujoco_id="pseudo-real",
+    graphics=True,
+    accelerated_time=False,
 ):
 
     if accelerated_time:
