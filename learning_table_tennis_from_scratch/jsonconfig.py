@@ -3,6 +3,7 @@ import json
 import typing
 import pathlib
 
+
 class TooManyFilesError(Exception):
     def __init__(self, files):
         super().__init__()
@@ -93,8 +94,8 @@ def get_json_config(
     # if exist as relative path, fix to absolute path.
     # if does not exist, raise error
     def _exists(path):
-        if path.startswith('~'):
-            path = str(pathlib.Path.home())+path[1:]
+        if path.startswith("~"):
+            path = str(pathlib.Path.home()) + path[1:]
         fixed_path = os.path.join(current_folder, path)
         if os.path.isfile(fixed_path):
             return fixed_path
@@ -106,7 +107,7 @@ def get_json_config(
     for key, value in conf.items():
         fixed_value = _exists(value)
         if not fixed_value:
-            raise FileNotFoundError("{} (for key: {})".format(value,key))
+            raise FileNotFoundError("{} (for key: {})".format(value, key))
         fixed_conf[key] = fixed_value
 
     # done
