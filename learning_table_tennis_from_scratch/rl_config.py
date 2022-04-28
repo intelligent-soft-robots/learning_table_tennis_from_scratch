@@ -10,9 +10,9 @@ ConfigDict = typing.Dict[str, typing.Any]
 class RLConfig:
     """Configuration for stable_baselines3 RL."""
 
-    # These parameters are directly passed to stable_baselines3.RL, see the
+    # These parameters are directly passed to the stable_baselines3 model (e.g. stable_baselines3.PPO), see the
     # documentation there for their meaning.
-    _ppo_params = (
+    _algo_params_ppo = (
         "gamma",
         "n_steps",
         "ent_coef",
@@ -26,7 +26,7 @@ class RLConfig:
         "n_epochs",
     )
 
-    _sac_params = (
+    _algo_params_sac = (
         "gamma",
         "ent_coef",
         "learning_rate",
@@ -46,22 +46,22 @@ class RLConfig:
         "log_path",  # Destination for checkpoints and log files
     )
 
-    __slots_ppo__ = _ppo_params + _additional_params
-    __slots_sac__ = _sac_params + _additional_params
+    _params_ppo = _algo_params_ppo + _additional_params
+    _params_sac = _algo_params_sac + _additional_params
 
     def __init__(self, algorithm):
         if algorithm == "ppo":
-            self.__slots__ = self.__slots_ppo__
-            self.__algo_slots__ = self._ppo_params
+            self._params = self._params_ppo
+            self._algo_params = self._algo_params_ppo
         elif algorithm == "sac":
-            self.__slots__ = self.__slots_sac__
-            self.__algo_slots__ = self._sac_params
-        for s in self.__slots__:
+            self._params = self._params_sac
+            self._algo_params = self._algo_params_sac
+        for s in self._params:
             setattr(self, s, None)
 
     def get(self) -> ConfigDict:
         """Get dictionary with all parameters."""
-        return {attr: getattr(self, attr) for attr in self.__slots__}
+        return {attr: getattr(self, attr) for attr in self._params}
 
     def get_rl_params(self) -> ConfigDict:
         """Get dictionary with only the direct RL parameters.
@@ -69,12 +69,12 @@ class RLConfig:
         This includes only the parameters that can be passed as keyword arguments to
         stable_baselines3.RL.
         """
-        return {attr: getattr(self, attr) for attr in self.__algo_slots__}
+        return {attr: getattr(self, attr) for attr in self._algo_params}
 
     @classmethod
     def from_dict(cls, d: ConfigDict, algorithm) -> "RLConfig":
         instance = cls(algorithm)
-        for s in instance.__slots__:
+        for s in instance._params:
             setattr(instance, s, d[s])
         return instance
 
@@ -95,7 +95,7 @@ class RLConfig:
             )
 
         instance = cls(algorithm)
-        for s in instance.__slots__:
+        for s in instance._params:
             try:
                 setattr(instance, s, conf[s])
             except Exception:
@@ -113,7 +113,7 @@ class RLConfig:
 
 
 class OpenAIRLConfig:
-    __slots__ = (
+    _params = (
         "gamma",
         "num_timesteps",
         "ent_coef",
@@ -137,16 +137,16 @@ class OpenAIRLConfig:
     )  # , "seed")
 
     def __init__(self):
-        for s in self.__slots__:
+        for s in self._params:
             setattr(self, s, None)
 
     def get(self):
-        return {attr: getattr(self, attr) for attr in self.__slots__}
+        return {attr: getattr(self, attr) for attr in self._params}
 
     @classmethod
     def from_dict(cls, d):
         instance = cls()
-        for s in instance.__slots__:
+        for s in instance._params:
             setattr(instance, s, d[s])
         return instance
 
@@ -166,7 +166,7 @@ class OpenAIRLConfig:
                 )
             )
         instance = cls()
-        for s in cls.__slots__:
+        for s in cls._params:
             try:
                 setattr(instance, s, conf[s])
             except Exception:

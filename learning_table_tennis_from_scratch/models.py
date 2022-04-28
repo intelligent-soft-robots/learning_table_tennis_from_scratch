@@ -30,10 +30,8 @@ def run_stable_baselines(
         tensorboard_logger.set_level(logger.INFO)
 
         # Save a checkpoint every n_steps steps, or every 10000 steps if n_steps does not exist (e.g. SAC)
-        try:
-            save_freq = getattr(rl_config, "n_steps", 10000)
-        except:
-            save_freq = 10000
+        save_freq = getattr(rl_config, "n_steps", 10000)
+
         checkpoint_callback = CheckpointCallback(
             save_freq=save_freq,
             save_path=pathlib.Path(rl_config.log_path) / "checkpoints",
@@ -47,26 +45,18 @@ def run_stable_baselines(
     }
     env = make_vec_env(HysrOneBallEnv, env_kwargs=env_config)
 
-    if algorithm == "ppo":
-        model = PPO(
-            "MlpPolicy",
-            env,
-            seed=seed,
-            policy_kwargs={
-                "net_arch": [rl_config.num_hidden] * rl_config.num_layers,
-            },
-            **rl_config.get_rl_params(),
-        )
-    else:
-        model = SAC(
-            "MlpPolicy",
-            env,
-            seed=seed,
-            policy_kwargs={
-                "net_arch": [rl_config.num_hidden] * rl_config.num_layers,
-            },
-            **rl_config.get_rl_params(),
-        )
+    model_type = {"ppo": PPO, "sac": SAC}
+
+    model = model_type[algorithm](
+        "MlpPolicy",
+        env,
+        seed=seed,
+        policy_kwargs={
+            "net_arch": [rl_config.num_hidden] * rl_config.num_layers,
+        },
+        **rl_config.get_rl_params(),
+    )
+
     # set custom logger, so we also get CSV output
     model.set_logger(tensorboard_logger)
 
