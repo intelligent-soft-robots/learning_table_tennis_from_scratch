@@ -1,36 +1,40 @@
 import pathlib
 
 from learning_table_tennis_from_scratch.hysr_one_ball_env import HysrOneBallEnv
-from learning_table_tennis_from_scratch.ppo_config import PPOConfig
-from learning_table_tennis_from_scratch.ppo_config import OpenAIPPOConfig
+from learning_table_tennis_from_scratch.rl_config import RLConfig
+from learning_table_tennis_from_scratch.rl_config import OpenAIRLConfig
 
 
 def run_stable_baselines(
     reward_config_file,
     hysr_one_ball_config_file,
-    ppo_config_file,
+    rl_config_file,
+    algorithm,
     log_episodes=False,
     seed=None,
 ):
     from stable_baselines3 import PPO
+    from stable_baselines3 import SAC
     from stable_baselines3.common import logger
     from stable_baselines3.common.env_util import make_vec_env
     from stable_baselines3.common.callbacks import CheckpointCallback
 
-    ppo_config = PPOConfig.from_json(ppo_config_file)
+    rl_config = RLConfig.from_json(rl_config_file, algorithm)
 
     tensorboard_logger = None
     checkpoint_callback = None
-    if ppo_config.log_path:
+    if rl_config.log_path:
         tensorboard_logger = logger.configure(
-            ppo_config.log_path, ["stdout", "csv", "tensorboard"]
+            rl_config.log_path, ["stdout", "csv", "tensorboard"]
         )
         tensorboard_logger.set_level(logger.INFO)
 
-        # Save a checkpoint every n_steps steps
+        # Save a checkpoint every n_steps steps, or every 10000 steps if n_steps does not exist (e.g. SAC)
+        save_freq = getattr(rl_config, "n_steps", 10000)
+
         checkpoint_callback = CheckpointCallback(
-            save_freq=ppo_config.n_steps,
-            save_path=pathlib.Path(ppo_config.log_path) / "checkpoints",
+            save_freq=save_freq,
+            save_path=pathlib.Path(rl_config.log_path) / "checkpoints",
         )
 
     env_config = {
@@ -41,28 +45,31 @@ def run_stable_baselines(
     }
     env = make_vec_env(HysrOneBallEnv, env_kwargs=env_config)
 
-    model = PPO(
+    model_type = {"ppo": PPO, "sac": SAC}
+
+    model = model_type[algorithm](
         "MlpPolicy",
         env,
         seed=seed,
         policy_kwargs={
-            "net_arch": [ppo_config.num_hidden] * ppo_config.num_layers,
+            "net_arch": [rl_config.num_hidden] * rl_config.num_layers,
         },
-        **ppo_config.get_ppo_params(),
+        **rl_config.get_rl_params(),
     )
+
     # set custom logger, so we also get CSV output
     model.set_logger(tensorboard_logger)
 
-    model.learn(total_timesteps=ppo_config.num_timesteps, callback=checkpoint_callback)
+    model.learn(total_timesteps=rl_config.num_timesteps, callback=checkpoint_callback)
 
-    if ppo_config.save_path:
-        model.save(ppo_config.save_path)
+    if rl_config.save_path:
+        model.save(rl_config.save_path)
 
 
 def run_openai_baselines(
     reward_config_file,
     hysr_one_ball_config_file,
-    ppo_config_file,
+    rl_config_file,
     log_episodes=False,
     model_file_path=None,
     seed=None,
@@ -90,13 +97,13 @@ def run_openai_baselines(
         def dump(self):
             self.logger.dumpkvs()
 
-    ppo_config = OpenAIPPOConfig.from_json(ppo_config_file)
+    rl_config = OpenAIRLConfig.from_json(rl_config_file)
 
-    if ppo_config["log_tensorboard"]:
+    if rl_config["log_tensorboard"]:
         tensorboard_logger = OpenaiLoggerWrapper(logger)
     else:
         tensorboard_logger = None
-    del ppo_config["log_tensorboard"]
+    del rl_config["log_tensorboard"]
 
     env_config = {
         "reward_config_file": reward_config_file,
@@ -106,25 +113,26 @@ def run_openai_baselines(
     }
     env = make_vec_env(HysrOneBallEnv, env_kwargs=env_config)
 
-    total_timesteps = ppo_config["num_timesteps"]
-    del ppo_config["num_timesteps"]
-    save_path = ppo_config["save_path"]
-    del ppo_config["save_path"]
+    total_timesteps = rl_config["num_timesteps"]
+    del rl_config["num_timesteps"]
+    save_path = rl_config["save_path"]
+    del rl_config["save_path"]
 
-    if ppo_config["activation"] == "tf.tanh":
-        ppo_config["activation"] = tf.tanh
+    if rl_config["activation"] == "tf.tanh":
+        rl_config["activation"] = tf.tanh
 
+    # openai baselines only supported for ppo2 (legacy)
     alg = "ppo2"
     learn = get_alg_module_openai_baselines(alg).learn
 
     if model_file_path is None:
         print("total timesteps:", total_timesteps)
-        model = learn(env=env, seed=seed, total_timesteps=total_timesteps, **ppo_config)
+        model = learn(env=env, seed=seed, total_timesteps=total_timesteps, **rl_config)
         model.save("ppo2_openai_baselines_hysr_one_ball")
 
     else:
-        ppo_config["load_path"] = model_file_path
-        model = learn(env=env, seed=seed, total_timesteps=0, **ppo_config)
+        rl_config["load_path"] = model_file_path
+        model = learn(env=env, seed=seed, total_timesteps=0, **rl_config)
 
     if save_path:
         model.save(save_path)
@@ -138,14 +146,14 @@ def replay_openai_baselines(
     nb_episodes,
     reward_config_file,
     hysr_one_ball_config_file,
-    ppo_config_file,
+    rl_config_file,
     log_episodes=False,
 ):
 
     model, env = run_openai_baselines(
         reward_config_file,
         hysr_one_ball_config_file,
-        ppo_config_file,
+        rl_config_file,
         log_episodes=False,
         model_file_path=model_file_path,
     )

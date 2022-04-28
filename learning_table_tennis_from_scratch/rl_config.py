@@ -7,12 +7,12 @@ import typing
 ConfigDict = typing.Dict[str, typing.Any]
 
 
-class PPOConfig:
-    """Configuration for stable_baselines3 PPO."""
+class RLConfig:
+    """Configuration for stable_baselines3 RL."""
 
-    # These parameters are directly passed to stable_baselines3.PPO, see the
+    # These parameters are directly passed to the stable_baselines3 model (e.g. stable_baselines3.PPO), see the
     # documentation there for their meaning.
-    _ppo_params = (
+    _algo_params_ppo = (
         "gamma",
         "n_steps",
         "ent_coef",
@@ -26,55 +26,76 @@ class PPOConfig:
         "n_epochs",
     )
 
+    _algo_params_sac = (
+        "gamma",
+        "ent_coef",
+        "learning_rate",
+        "batch_size",
+        "gradient_steps",
+        "train_freq",
+        "buffer_size",
+        "learning_starts",
+    )
+
     # Additional parameters
     _additional_params = (
-        "num_timesteps",  # 'total_timesteps' passed to PPO.learn()
+        "num_timesteps",  # 'total_timesteps' passed to RL.learn()
         "save_path",  # If set the model is saved to the given path.
         "num_layers",  # Number of layers in the network
         "num_hidden",  # Size of each layer (all layers have same size)
         "log_path",  # Destination for checkpoints and log files
     )
 
-    __slots__ = _ppo_params + _additional_params
+    _params_ppo = _algo_params_ppo + _additional_params
+    _params_sac = _algo_params_sac + _additional_params
 
-    def __init__(self):
-        for s in self.__slots__:
+    def __init__(self, algorithm):
+        if algorithm == "ppo":
+            self._params = self._params_ppo
+            self._algo_params = self._algo_params_ppo
+        elif algorithm == "sac":
+            self._params = self._params_sac
+            self._algo_params = self._algo_params_sac
+        for s in self._params:
             setattr(self, s, None)
 
     def get(self) -> ConfigDict:
         """Get dictionary with all parameters."""
-        return {attr: getattr(self, attr) for attr in self.__slots__}
+        return {attr: getattr(self, attr) for attr in self._params}
 
-    def get_ppo_params(self) -> ConfigDict:
-        """Get dictionary with only the direct PPO parameters.
+    def get_rl_params(self) -> ConfigDict:
+        """Get dictionary with only the direct RL parameters.
 
         This includes only the parameters that can be passed as keyword arguments to
-        stable_baselines3.PPO.
+        stable_baselines3.RL.
         """
-        return {attr: getattr(self, attr) for attr in self._ppo_params}
+        return {attr: getattr(self, attr) for attr in self._algo_params}
 
     @classmethod
-    def from_dict(cls, d: ConfigDict) -> "PPOConfig":
-        instance = cls()
-        for s in instance.__slots__:
+    def from_dict(cls, d: ConfigDict, algorithm) -> "RLConfig":
+        instance = cls(algorithm)
+        for s in instance._params:
             setattr(instance, s, d[s])
         return instance
 
     @classmethod
-    def from_json(cls, jsonpath: typing.Union[str, os.PathLike]) -> "PPOConfig":
+    def from_json(
+        cls, jsonpath: typing.Union[str, os.PathLike], algorithm
+    ) -> "RLConfig":
         if not os.path.isfile(jsonpath):
             raise FileNotFoundError(
-                "failed to find PPO configuration file: {}".format(jsonpath)
+                "failed to find RL configuration file: {}".format(jsonpath)
             )
         try:
             with open(jsonpath) as f:
                 conf = json.load(f)
         except Exception as e:
             raise ValueError(
-                "failed to parse PPO json configuration file {}: {}".format(jsonpath, e)
+                "failed to parse RL json configuration file {}: {}".format(jsonpath, e)
             )
-        instance = cls()
-        for s in cls.__slots__:
+
+        instance = cls(algorithm)
+        for s in instance._params:
             try:
                 setattr(instance, s, conf[s])
             except Exception:
@@ -91,8 +112,8 @@ class PPOConfig:
         )
 
 
-class OpenAIPPOConfig:
-    __slots__ = (
+class OpenAIRLConfig:
+    _params = (
         "gamma",
         "num_timesteps",
         "ent_coef",
@@ -116,16 +137,16 @@ class OpenAIPPOConfig:
     )  # , "seed")
 
     def __init__(self):
-        for s in self.__slots__:
+        for s in self._params:
             setattr(self, s, None)
 
     def get(self):
-        return {attr: getattr(self, attr) for attr in self.__slots__}
+        return {attr: getattr(self, attr) for attr in self._params}
 
     @classmethod
     def from_dict(cls, d):
         instance = cls()
-        for s in instance.__slots__:
+        for s in instance._params:
             setattr(instance, s, d[s])
         return instance
 
@@ -145,7 +166,7 @@ class OpenAIPPOConfig:
                 )
             )
         instance = cls()
-        for s in cls.__slots__:
+        for s in cls._params:
             try:
                 setattr(instance, s, conf[s])
             except Exception:

@@ -29,7 +29,7 @@ setup(
     scripts=[
         "bin/hysr_one_ball_random",
         "bin/hysr_one_ball_swing",
-        "bin/hysr_one_ball_ppo",
+        "bin/hysr_one_ball_rl",
         "bin/hysr_one_ball_reset",
         "bin/hysr_one_ball_reward_tests",
         "bin/hysr_start_robots",

@@ -26,13 +26,14 @@ SEGMENT_ID_EPISODE_FREQUENCY = "hysr_episode_frequency"
 SEGMENT_ID_STEP_FREQUENCY = "hysr_step_frequency"
 
 
-
-def _to_robot_type(robot_type:str)->pam_mujoco.RobotType:
-    try :
+def _to_robot_type(robot_type: str) -> pam_mujoco.RobotType:
+    try:
         return pam_mujoco.RobotType[robot_type.upper()]
     except KeyError:
-        error = str("hysr configuration robot_type should be either "
-                    "'pamy1' or 'pamy2' (entered value: {})").format(robot_type)
+        error = str(
+            "hysr configuration robot_type should be either "
+            "'pamy1' or 'pamy2' (entered value: {})"
+        ).format(robot_type)
         raise ValueError(error)
 
 
@@ -73,7 +74,7 @@ class HysrOneBallConfig:
     def __init__(self):
         for s in self.__slots__:
             setattr(self, s, None)
-            
+
     def get(self):
         r = {s: getattr(self, s) for s in self.__slots__}
         return r
@@ -146,14 +147,16 @@ class _BallBehavior:
     RANDOM = -3
 
     @classmethod
-    def read_trajectories(cls,group:str)->None:
+    def read_trajectories(cls, group: str) -> None:
         cls._trajectory_reader = context.BallTrajectories(group)
-    
+
     def __init__(self, line=False, index=False, random=False):
 
-        if not hasattr(self.__class__,"_trajectory_reader"):
-            raise UnboundLocalError("_BallBehavior: the classmethod read_trajectories(group:str) "
-                                    "has to be called before the constructor")
+        if not hasattr(self.__class__, "_trajectory_reader"):
+            raise UnboundLocalError(
+                "_BallBehavior: the classmethod read_trajectories(group:str) "
+                "has to be called before the constructor"
+            )
 
         not_false = [a for a in (line, index, random) if a]
         if not not_false:
@@ -172,8 +175,12 @@ class _BallBehavior:
     def get_trajectory(self):
         # ball behavior is a straight line, self.value is (start,end,duration ms)
         if self.type == self.LINE:
-            duration_trajectory = context.ball_trajectories.duration_line_trajectory(*self.value)
-            trajectory = context.ball_trajectories.to_stamped_trajectory(duration_trajectory)
+            duration_trajectory = context.ball_trajectories.duration_line_trajectory(
+                *self.value
+            )
+            trajectory = context.ball_trajectories.to_stamped_trajectory(
+                duration_trajectory
+            )
             return trajectory
         # ball behavior is a specified pre-recorded trajectory
         if self.type == self.INDEX:
@@ -241,7 +248,9 @@ def _get_extra_balls(setid, hysr_config):
     #  one ball 'corresponds' to one dof)
     frontend = handle.frontends[extra_balls_segment_id]
 
-    ball_status = [context.BallStatus(hysr_config.target_position) for _ in range(nb_balls)]
+    ball_status = [
+        context.BallStatus(hysr_config.target_position) for _ in range(nb_balls)
+    ]
 
     balls = [
         _ExtraBall(handle, frontend, ball_status, segment_id)
@@ -307,7 +316,9 @@ class HysrOneBall:
         self._mujoco_ids = []
 
         # pam muscles configuration
-        self._pam_config = pam_interface.JsonConfiguration(str(hysr_config.pam_config_file))
+        self._pam_config = pam_interface.JsonConfiguration(
+            str(hysr_config.pam_config_file)
+        )
 
         # to control pseudo-real robot (pressure control)
         if not hysr_config.real_robot:
@@ -356,7 +367,7 @@ class HysrOneBall:
         # to read all recorded trajectory files
         self._trajectory_reader = context.BallTrajectories(hysr_config.trajectory_group)
         _BallBehavior.read_trajectories(hysr_config.trajectory_group)
-        
+
         # if requested, logging info about the frequencies of the steps and/or the
         # episodes
         if hysr_config.frequency_monitoring_step:
@@ -584,11 +595,8 @@ class HysrOneBall:
         trajectory = self._ball_behavior.get_trajectory()
         iterator = context.ball_trajectories.BallTrajectories.iterate(trajectory)
         # setting the ball to the first trajectory point
-        duration,state = next(iterator)
-        self._ball_communication.set(
-            state.get_position(),
-            [0,0,0]
-        )
+        duration, state = next(iterator)
+        self._ball_communication.set(state.get_position(), [0, 0, 0])
         # shooting the ball
         self._ball_communication.iterate_trajectory(iterator, overwrite=False)
 
@@ -624,7 +632,7 @@ class HysrOneBall:
         ):
             iterator = context.ball_trajectories.BallTrajectories.iterate(trajectory)
             # going to first trajectory point
-            _,state = next(iterator)
+            _, state = next(iterator)
             item3d.set_position(state.get_position())
             item3d.set_velocity(state.get_velocity())
             ball.frontend.add_command(index_ball, item3d, o80.Mode.OVERWRITE)
@@ -632,7 +640,12 @@ class HysrOneBall:
             for duration, state in iterator:
                 item3d.set_position(state.get_position())
                 item3d.set_velocity(state.get_velocity())
-                ball.frontend.add_command(index_ball, item3d, o80.Duration_us.microseconds(duration), o80.Mode.QUEUE)
+                ball.frontend.add_command(
+                    index_ball,
+                    item3d,
+                    o80.Duration_us.microseconds(duration),
+                    o80.Mode.QUEUE,
+                )
         for frontend in _ExtraBall.frontends.values():
             frontend.pulse()
 

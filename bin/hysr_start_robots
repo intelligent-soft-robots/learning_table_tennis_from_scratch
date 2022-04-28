@@ -15,7 +15,7 @@
 #         started in the current terminal, or in separated terminals
 #
 # Typically, hysr_start_robots will be started in a folder,
-# then a "hysr executable" (e.g. hysr_one_ball_ppo) will be started
+# then a "hysr executable" (e.g. hysr_one_ball_rl) will be started
 # from the same folder, so both use the same config files.
 
 # exit if there is any error (e.g. if the config file is invalid)

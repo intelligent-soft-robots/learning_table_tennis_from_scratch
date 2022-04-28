@@ -39,17 +39,17 @@
     "num_best_jobs_whose_data_is_kept": 10,
     "optimized_params": [
         {
-            "param": "config.ppo_config.num_layers",
+            "param": "config.rl_config.num_layers",
             "distribution": "Discrete",
             "options": [1, 2]
         },
         {
-            "param": "config.ppo_config.num_hidden",
+            "param": "config.rl_config.num_hidden",
             "distribution": "IntLogNormal",
             "bounds": [32, 8192]
         },
         {
-            "param": "config.ppo_config.learning_rate",
+            "param": "config.rl_config.learning_rate",
             "distribution": "TruncatedLogNormal",
             "bounds": [1e-5, 1e-1]
         },

@@ -12,12 +12,12 @@ def _execute(
     nb_episodes,
     reward_config_file,
     hysr_config_file,
-    ppo_config_file,
-    ppo_common_config_file,
+    rl_config_file,
+    rl_common_config_file,
 ):
 
     replay_openai_baselines(
-        model_path, nb_episodes, reward_config_file, hysr_config_file, ppo_config_file
+        model_path, nb_episodes, reward_config_file, hysr_config_file, rl_config_file
     )
 
 
@@ -27,12 +27,12 @@ def _configure():
         expected_keys=[
             "reward_config",
             "hysr_config",
-            "ppo_config",
-            "ppo_common_config",
+            "rl_config",
+            "rl_common_config",
         ]
     )
 
-    config = BrightArgs("PPO2 replay")
+    config = BrightArgs("RL replay")
 
     config.add_option(
         "model_file_path",
@@ -71,6 +71,6 @@ if __name__ == "__main__":
             nb_episodes,
             files["reward_config"],
             files["hysr_config"],
-            files["ppo_config"],
-            files["ppo_common_config"],
+            files["rl_config"],
+            files["rl_common_config"],
         )
