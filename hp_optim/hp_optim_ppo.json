@@ -21,7 +21,7 @@
     "fixed_params": {
         "learning_runs_per_job": 3,
         "max_attempts": 2,
-        "config.config_templates": "./hp_optim/config_templates_rl.json",
+        "config.config_templates": "./hp_optim/config_templates_ppo.json",
         "singularity.image": "~/learning_table_tennis_from_scratch.sif",
         "singularity.script": "./hp_optim/run_learning.py"
     },
