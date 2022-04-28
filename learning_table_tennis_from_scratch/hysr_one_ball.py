@@ -1,3 +1,4 @@
+import math
 import pathlib
 import json
 import os
@@ -716,12 +717,15 @@ class HysrOneBall:
         # synchronization with the simulated robot(s).
 
         # configuration for the controller
-        KP = [0.8, -3.0, 1.2, -1.0]
-        KI = [0.015, -0.25, 0.02, -0.05]
-        KD = [0.04, -0.09, 0.09, -0.09]
-        NDP = [-0.3, -0.5, -0.34, -0.48]
-        TIME_STEP = 0.01  # seconds
-        QD_DESIRED = [0.7, 0.7, 0.7, 0.7]  # radian per seconds
+        KP = [0.05,0.5,0.3,0.01]
+        KI = [0.015,0.035,0.025,0.01]
+        KD = [0.0,0.0,0.0,0.0]
+        NDP = [0.5,0.5,0.5,0.5]
+        TIME_STEP = 0.05  # seconds
+        QD_DESIRED = [0.6, 0.6, 0.6, 0.6]  # radian per seconds
+        EXTRA_STEPS = 50
+        pi4 = math.pi/4.0
+        target_position = [0,+pi4,0,0]
         _, _, Q_CURRENT, _ = self._pressure_commands.read()
 
         # configuration for HYSR
@@ -735,43 +739,36 @@ class HysrOneBall:
         if not self._accelerated_time:
             frequency_manager = o80.FrequencyManager(1.0 / TIME_STEP)
 
-        # applying the controller twice yields better results
-        for _ in range(2):
 
-            _, _, q_current, _ = self._pressure_commands.read()
+        _, _, q_current, _ = self._pressure_commands.read()
 
-            # the position controller
-            controller = o80_pam.PositionController(
-                q_current,
-                position,
-                QD_DESIRED,
-                self._pam_config,
-                KP,
-                KD,
-                KI,
-                NDP,
-                TIME_STEP,
-            )
-
-            # rolling the controller
-            while controller.has_next():
-                # current position and velocity of the real robot
-                _, _, q, qd = self._pressure_commands.read()
-                # mirroing the simulated robot(s)
-                for mirroring_ in self._mirrorings:
-                    mirroring_.set(q, qd)
-                self._parallel_burst.burst(NB_SIM_BURSTS)
-                # applying the controller to get the pressure to set
-                pressures = controller.next(q, qd)
-                # setting the pressures to real robot
-                if self._accelerated_time:
-                    # if accelerated times, running the pseudo real robot iterations
-                    # (note : o80_pam expected to have started in bursting mode)
-                    self._pressure_commands.set(pressures, burst=NB_ROBOT_BURSTS)
-                else:
-                    # Should start acting now in the background if not accelerated time
-                    self._pressure_commands.set(pressures, burst=False)
-                    frequency_manager.wait()
+        # the position controller
+        position_controller_factory = o80_pam.position_control.PositionControllerFactory(
+            QD_DESIRED,
+            self._pam_config,
+            KP,KD,KI,NDP,
+            TIME_STEP,EXTRA_STEPS
+        )
+        controller = position_controller_factory.get(q_current,target_position)
+        # rolling the controller
+        while controller.has_next():
+            # current position and velocity of the real robot
+            _, _, q, qd = self._pressure_commands.read()
+            # mirroing the simulated robot(s)
+            for mirroring_ in self._mirrorings:
+                mirroring_.set(q, qd)
+            self._parallel_burst.burst(NB_SIM_BURSTS)
+            # applying the controller to get the pressure to set
+            pressures = controller.next(q, qd)
+            # setting the pressures to real robot
+            if self._accelerated_time:
+                # if accelerated times, running the pseudo real robot iterations
+                # (note : o80_pam expected to have started in bursting mode)
+                self._pressure_commands.set(pressures, burst=NB_ROBOT_BURSTS)
+            else:
+                # Should start acting now in the background if not accelerated time
+                self._pressure_commands.set(pressures, burst=False)
+                frequency_manager.wait()
 
     def reset(self):
 
