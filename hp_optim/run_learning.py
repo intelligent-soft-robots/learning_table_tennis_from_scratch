@@ -181,7 +181,7 @@ def setup_config(working_dir: pathlib.Path, params: dict) -> pathlib.Path:
             "reward_config": "./config/reward_config.json",
             "hysr_config": "./config/hysr_config.json",
             "pam_config": "./config/pam_config.json",
-            "rl_config": "./config/ppo_config.json",
+            "rl_config": "./config/rl_config.json",
             "rl_common_config": "./config/rl_common_config.json",
         }
         with open(main_config_file, "w") as f:
