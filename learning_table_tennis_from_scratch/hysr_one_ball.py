@@ -800,7 +800,7 @@ class HysrOneBall:
 
         # configuration for the controller
         KP = [0.05,0.5,0.3,0.01]
-        KI = [0.015,0.035,0.025,0.01]
+        KI = [0.015,0.045,0.025,0.03]
         KD = [0.0,0.0,0.0,0.0]
         NDP = [0.5,0.5,0.5,0.5]
         TIME_STEP = 0.05  # seconds
