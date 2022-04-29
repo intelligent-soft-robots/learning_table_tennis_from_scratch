@@ -1,18 +1,18 @@
 {
     "gamma": 0.9999,
-    "n_steps": 4096,
-    "ent_coef": 0.001,
-    "learning_rate": 1e-3,
-    "vf_coef": 0.66023,   
-    "max_grad_norm": 0.05,
-    "gae_lambda": 0.98438,
-    "batch_size": 512,
-    "n_epochs": 32,
+    "n_steps": 5000,
+    "ent_coef": 7e-06,
+    "learning_rate": 0.00015,
+    "vf_coef": 0.56,   
+    "max_grad_norm": 0.1,
+    "gae_lambda": 1.0,
+    "batch_size": 310,
+    "n_epochs": 34,
     "clip_range": 0.4,
-    "clip_range_vf": 0.4,
+    "clip_range_vf": 0.3,
     "log_path": "/tmp/training_log",
     "num_timesteps": 500000,
     "save_path": "/tmp/model",
     "num_layers": 1,
-    "num_hidden": 100
+    "num_hidden": 380
 }
