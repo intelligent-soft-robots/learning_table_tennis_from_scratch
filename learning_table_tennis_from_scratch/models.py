@@ -61,7 +61,7 @@ def run_stable_baselines(
     model.set_logger(tensorboard_logger)
 
     if rl_config.load_path:
-        model = model_type[algorithm].load(rl_config.load_path, env)
+        model_type[algorithm].load(rl_config.load_path, env)
         print("load model from:", rl_config.load_path)
 
     model.learn(total_timesteps=rl_config.num_timesteps, callback=checkpoint_callback)
