@@ -129,6 +129,24 @@ for "rl_config" in the template file (see above), the name would be
     config.rl_config.num_hidden
 
 
+#### Non-scalar parameters
+
+`cluster_utils` can only handle scalar values.  For parameters that expect a list of
+values, run_learning.py has some special handling.  For this add ``:<index>`` at the end
+of the parameter name.  Example:
+
+    "optimized_params": [
+        {
+            "param": "config.hysr_config.robot_position:0",
+            "distribution": "TruncatedNormal",
+            "bounds": [-0.35, 0.35]
+        }
+    ]
+
+This will sample a value for index 0 of parameter ``robot_position`` in the hysr
+configuration.
+
+
 ### Configuring number of reruns and retries
 
 Independent of the `with_restarts` option of cluster utils, the
