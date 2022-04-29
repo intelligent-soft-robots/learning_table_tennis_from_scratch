@@ -76,7 +76,7 @@ def run_stable_baselines(
 
     
     if rl_config.load_path:
-        model = model_type[algorithm].load(rl_config.load_path, env)
+        model_type[algorithm].load(rl_config.load_path, env)
         print("load model from:", rl_config.load_path)
 
         model.learn(
