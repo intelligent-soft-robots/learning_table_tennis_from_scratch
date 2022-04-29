@@ -1,5 +1,5 @@
 {
-    "optimization_procedure_name": "hyper_param_optim_lttfs_ppo_100_10",
+    "optimization_procedure_name": "lttfs_robot_position",
     "results_dir": "/home/felixwidmaier/tmp",
     "run_in_working_dir": false,
     "git_params": {
@@ -15,8 +15,8 @@
         "request_cpus": 2,
         "request_gpus": 0,
         "cuda_requirement": null,
-        "memory_in_mb": 10000,
-        "bid": 10
+        "memory_in_mb": 15000,
+        "bid": 100
     },
     "fixed_params": {
         "learning_runs_per_job": 3,
@@ -39,25 +39,14 @@
     "num_best_jobs_whose_data_is_kept": 10,
     "optimized_params": [
         {
-            "param": "config.rl_config.num_layers",
-            "distribution": "Discrete",
-            "options": [1, 2]
+            "param": "config.hysr_config.robot_position:0",
+            "distribution": "TruncatedNormal",
+            "bounds": [-0.35, 0.35]
         },
         {
-            "param": "config.rl_config.num_hidden",
-            "distribution": "IntLogNormal",
-            "bounds": [32, 8192]
-        },
-        {
-            "param": "config.rl_config.learning_rate",
-            "distribution": "TruncatedLogNormal",
-            "bounds": [1e-5, 1e-1]
-        },
-        {
-            "param": "config.hysr_config.pressure_change_range",
-            "distribution": "IntLogNormal",
-            "bounds": [180, 18000]
+            "param": "config.hysr_config.robot_position:1",
+            "distribution": "TruncatedNormal",
+            "bounds": [-0.35, 0.35]
         }
-
     ]
 }
