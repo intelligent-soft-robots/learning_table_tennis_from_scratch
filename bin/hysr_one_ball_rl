@@ -4,7 +4,6 @@ import argparse
 import json
 import os
 import pathlib
-import random
 import time
 
 from learning_table_tennis_from_scratch.models import run_stable_baselines
@@ -55,7 +54,6 @@ def _execute(
         seed = int((time.time() % 1) * 1e9)
     print("Use random seed %d" % seed)
 
-    random.seed(seed)
     if common_conf["use_openai_baselines"]:
         run_openai_baselines(
             reward_config_file,
@@ -71,6 +69,7 @@ def _execute(
             rl_config_file,
             common_conf["algorithm"],
             common_conf["log_episodes"],
+            seed=seed,
         )
 
 
