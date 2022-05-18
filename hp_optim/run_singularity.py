@@ -87,12 +87,19 @@ def main():
         *sys.argv[1:],
     ]
 
+    # DBG_NAN_SNAPSHOT_DIR
+    nan_snapshot_dir = working_dir / "nan_snapshots"
+    nan_snapshot_dir.mkdir(exist_ok=True)
+    env = dict(os.environ)
+    env["SINGULARITYENV_DBG_NAN_SNAPSHOT_DIR"] = os.fspath(nan_snapshot_dir)
+    env["APPTAINERENV_DBG_NAN_SNAPSHOT_DIR"] = os.fspath(nan_snapshot_dir)
+
     # explicitly redirect output to file, so it is stored also when running
     # locally
     stdout_file = working_dir / "stdout.txt"
     stderr_file = working_dir / "stderr.txt"
     with open(stdout_file, "ab") as f_out, open(stderr_file, "ab") as f_err:
-        result = subprocess.run(cmd, stdout=f_out, stderr=f_err)
+        result = subprocess.run(cmd, stdout=f_out, stderr=f_err, env=env)
 
     # forward the return code
     return result.returncode
