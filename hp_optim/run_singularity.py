@@ -90,7 +90,8 @@ def main():
     # DBG_NAN_SNAPSHOT_DIR
     nan_snapshot_dir = working_dir / "nan_snapshots"
     nan_snapshot_dir.mkdir(exist_ok=True)
-    env = {"DBG_NAN_SNAPSHOT_DIR": os.fspath(nan_snapshot_dir)}
+    env = dict(os.environ)
+    env["SINGULARITYENV_DBG_NAN_SNAPSHOT_DIR"] = os.fspath(nan_snapshot_dir)
 
     # explicitly redirect output to file, so it is stored also when running
     # locally
