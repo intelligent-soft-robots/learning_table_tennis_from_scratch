@@ -4,11 +4,12 @@
     "run_in_working_dir": false,
     "git_params": {
         "url": "https://github.com/intelligent-soft-robots/learning_table_tennis_from_scratch.git",
-        "branch": "master",
+        "branch": "fwidmaier/hp_optim_sac_save_nan",
         "commit": null
     },
     "script_relative_path": "./hp_optim/run_singularity.py",
     "remove_jobs_dir": false,
+    "remove_working_dirs": false,
     "environment_setup": {
     },
     "cluster_requirements": {
@@ -39,14 +40,59 @@
     "num_best_jobs_whose_data_is_kept": 10,
     "optimized_params": [
         {
-            "param": "config.hysr_config.robot_position:0",
-            "distribution": "TruncatedNormal",
-            "bounds": [-0.35, 0.35]
+            "param": "config.lr_config.gamma",
+            "distribution": "Discrete",
+            "options": [0.9, 0.95, 0.98, 0.99, 0.999, 0.9999, 0.99999]
         },
         {
-            "param": "config.hysr_config.robot_position:1",
-            "distribution": "TruncatedNormal",
-            "bounds": [-0.35, 0.35]
+            "param": "config.lr_config.ent_coef",
+            "distribution": "TruncatedLogNormal",
+            "bounds": [1e-9, 1e-4]
+        },
+        {
+            "param": "config.ppo_config.num_layers",
+            "distribution": "Discrete",
+            "options": [1]
+        },
+        {
+            "param": "config.ppo_config.num_hidden",
+            "distribution": "IntLogNormal",
+            "bounds": [32, 128]
+        },
+        {
+            "param": "config.ppo_config.learning_rate",
+            "distribution": "TruncatedLogNormal",
+            "bounds": [1e-5, 0.001]
+        },
+        {
+            "param": "config.ppo_config.batch_size",
+            "distribution": "IntLogNormal",
+            "bounds": [64, 1024]
+        },
+        {
+            "param": "config.ppo_config.gradient_steps",
+            "distribution": "IntLogNormal",
+            "bounds": [1, 5]
+        },
+        {
+            "param": "config.ppo_config.train_freq",
+            "distribution": "IntLogNormal",
+            "bounds": [1,5]
+        },
+        {
+            "param": "config.ppo_config.buffer_size",
+            "distribution": "IntLogNormal",
+            "bounds": [80000, 150000]
+        },
+        {
+            "param": "config.ppo_config.learning_starts",
+            "distribution": "IntLogNormal",
+            "bounds": [3000, 40000]
+        },
+        {
+            "param": "config.hysr_config.pressure_change_range",
+            "distribution": "IntLogNormal",
+            "bounds": [360, 1800]
         }
     ]
 }
