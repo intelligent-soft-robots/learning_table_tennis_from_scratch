@@ -438,7 +438,7 @@ def main() -> int:
             f"Exit for restart [{run_id}].\n"
             "==========================================\n\n"
         )
-        logger.warn(
+        logger.warning(
             f"Exit for restart [{run_id}].\n"
             "==========================================\n\n",
         )
