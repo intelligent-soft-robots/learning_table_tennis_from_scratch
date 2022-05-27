@@ -92,7 +92,7 @@ def run_stable_baselines(
                 n_sampled_goal = rl_config.n_sampled_goal,
                 goal_selection_strategy = rl_config.goal_selection_strategy,
                 online_sampling = False,
-                max_episode_length = 200 #hysr_config.nb_steps_per_episode
+                max_episode_length = 200
             ),
             **rl_config.get_rl_params(),
         )
@@ -110,10 +110,11 @@ def run_stable_baselines(
                 hindsight_state_selection_strategy = rl_config.hindsight_state_selection_strategy,
                 hindsight_state_selection_strategy_horizon = rl_config.hindsight_state_selection_strategy_horizon,
                 HSM_shape = rl_config.HSM_shape,
+                HSM_n_traj_freq = rl_config.HSM_n_traj_freq,
                 online_sampling = False,
                 apply_HSM = True,
                 apply_HER = False,
-                max_episode_length = 200 #hysr_config.nb_steps_per_episode
+                max_episode_length = 200
             ),
             **rl_config.get_rl_params(),
         )
