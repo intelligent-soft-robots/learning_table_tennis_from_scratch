@@ -47,6 +47,7 @@ class RLConfig:
         "hindsight_state_selection_strategy",
         "hindsight_state_selection_strategy_horizon",
         "HSM_shape",
+        "HSM_n_traj_freq"
     )
 
 

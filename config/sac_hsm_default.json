@@ -15,5 +15,6 @@
     "n_sampled_hindsight_states": 1,
     "hindsight_state_selection_strategy": "advantage",
     "hindsight_state_selection_strategy_horizon": "episode",
-    "HSM_shape": 3
+    "HSM_shape": 3,
+    "HSM_n_traj_freq" : 100
 }
