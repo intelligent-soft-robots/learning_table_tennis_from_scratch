@@ -37,6 +37,19 @@ class RLConfig:
         "learning_starts",
     )
 
+    _params_her = (
+        "n_sampled_goal",
+        "goal_selection_strategy",
+    )
+
+    _params_hsm = (
+        "n_sampled_hindsight_states",
+        "hindsight_state_selection_strategy",
+        "hindsight_state_selection_strategy_horizon",
+        "HSM_shape",
+    )
+
+
     # Additional parameters
     _additional_params = (
         "num_timesteps",  # 'total_timesteps' passed to RL.learn()
@@ -48,6 +61,9 @@ class RLConfig:
 
     _params_ppo = _algo_params_ppo + _additional_params
     _params_sac = _algo_params_sac + _additional_params
+    _params_sac_her = _algo_params_sac + _params_her + _additional_params
+    _params_sac_hsm = _algo_params_sac + _params_hsm + _additional_params
+
 
     def __init__(self, algorithm):
         if algorithm == "ppo":
@@ -55,6 +71,12 @@ class RLConfig:
             self._algo_params = self._algo_params_ppo
         elif algorithm == "sac":
             self._params = self._params_sac
+            self._algo_params = self._algo_params_sac
+        elif algorithm == "sac_her":
+            self._params = self._params_sac_her
+            self._algo_params = self._algo_params_sac
+        elif algorithm == "sac_hsm":
+            self._params = self._params_sac_hsm
             self._algo_params = self._algo_params_sac
         for s in self._params:
             setattr(self, s, None)

@@ -63,7 +63,7 @@ def configure_extra_set(setid, hysr_config):
     for index, ball_segment_id in enumerate(ball_segment_ids):
         ball = pam_mujoco.MujocoItem(
             ball_segment_id,
-            control=pam_mujoco.MujocoItem.CONSTANT_CONTROL,
+            control=pam_mujoco.MujocoItem.COMMAND_ACTIVE_CONTROL,
             contact_type=pam_mujoco.ContactTypes.racket1,
         )
         balls.add_ball(ball)

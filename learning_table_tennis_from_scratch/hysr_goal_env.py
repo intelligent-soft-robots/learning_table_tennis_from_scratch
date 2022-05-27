@@ -1,6 +1,7 @@
 import json
 import math
 import time
+from typing import Dict, Union
 from collections import OrderedDict
 
 import gym
@@ -11,6 +12,9 @@ import pam_interface
 from .hysr_one_ball import HysrOneBall, HysrOneBallConfig
 from .rewards import JsonReward
 
+
+def distance(p1, p2):
+    return math.sqrt(sum([(a - b) ** 2 for a, b in zip(p1, p2)]))
 
 class _ObservationSpace:
 
@@ -43,6 +47,7 @@ class _ObservationSpace:
         size = sum([b.size for b in self._obs_boxes.values()])
         return gym.spaces.Box(low=0.0, high=1.0, shape=(size,), dtype=np.float32)
 
+
     def set_values(self, name, values):
         normalize = self._obs_boxes[name].normalize
         values_ = np.array(list(map(normalize, values)), dtype=np.float32)
@@ -68,7 +73,7 @@ class _ObservationSpace:
         return r
 
 
-class HysrOneBallEnv(gym.Env):
+class HysrGoalEnv(gym.GoalEnv):
     def __init__(
         self,
         reward_config_file=None,
@@ -101,6 +106,7 @@ class HysrOneBallEnv(gym.Env):
         )
 
         self._obs_boxes = _ObservationSpace()
+        self._goal_boxes = _ObservationSpace()
 
         self._obs_boxes.add_box("robot_position", -math.pi, +math.pi, self._nb_dofs)
         self._obs_boxes.add_box("robot_velocity", 0.0, 10.0, self._nb_dofs)
@@ -111,15 +117,29 @@ class HysrOneBallEnv(gym.Env):
             self._nb_dofs * 2,
         )
 
-        self._obs_boxes.add_box(
+        self._obs_boxes.add_box("ball_velocity", -10.0, +10.0, 3)
+
+        self._goal_boxes.add_box(
             "ball_position",
             min(hysr_one_ball_config.world_boundaries["min"]),
             max(hysr_one_ball_config.world_boundaries["max"]),
             3,
         )
-        self._obs_boxes.add_box("ball_velocity", -10.0, +10.0, 3)
 
-        self.observation_space = self._obs_boxes.get_gym_box()
+        self._goal_boxes.add_box(
+            "reward_info",
+            min(hysr_one_ball_config.world_boundaries["min"]),
+            max(hysr_one_ball_config.world_boundaries["max"]),
+            3,
+        )
+
+        self.observation_space = gym.spaces.Dict(
+            {
+            "observation": self._obs_boxes.get_gym_box(),
+            "achieved_goal": self._goal_boxes.get_gym_box(),
+            "desired_goal": self._goal_boxes.get_gym_box(),
+            }
+        )
 
         if not self._accelerated_time:
             self._frequency_manager = o80.FrequencyManager(
@@ -203,9 +223,79 @@ class HysrOneBallEnv(gym.Env):
         self._obs_boxes.set_values_pressures(
             "robot_pressure", observation.pressures, self
         )
-        self._obs_boxes.set_values_non_norm("ball_position", observation.ball_position)
         self._obs_boxes.set_values_non_norm("ball_velocity", observation.ball_velocity)
+
         return self._obs_boxes.get_normalized_values()
+
+    def _convert_achieved_goal(self, observation, done):
+        self._goal_boxes.set_values_non_norm(
+            "ball_position", observation.ball_position
+        )
+        min_distance_ball_target = min(self._hysr._ball_status.min_distance_ball_target, 4.0)
+        min_distance_ball_racket = min(self._hysr._ball_status.min_distance_ball_racket, 4.0)
+        self._goal_boxes.set_values_non_norm(
+            "reward_info", [min_distance_ball_target, min_distance_ball_racket, done*1.0]
+        )
+        return self._goal_boxes.get_normalized_values()
+
+    
+    def _convert_desired_goal(self):
+        
+        self._goal_boxes.set_values_non_norm(
+            "ball_position", self._hysr._ball_status.target_position
+        )
+        min_distance_ball_target = 0
+        min_distance_ball_racket = 0
+        self._goal_boxes.set_values_non_norm(
+            "reward_info", [min_distance_ball_target, min_distance_ball_racket, 1.0]
+        )
+        return self._goal_boxes.get_normalized_values()
+
+    
+
+    def _get_obs(self, observation, done) -> Dict[str, Union[int, np.ndarray]]:
+        """
+        Helper to create the observation.
+        :return: The current observation.
+        """
+        return OrderedDict(
+            [
+                ("observation", self._convert_observation(observation)),
+                ("achieved_goal", self._convert_achieved_goal(observation, done)),
+                ("desired_goal", self._convert_desired_goal()),
+            ]
+        )
+
+
+    def compute_reward(self, achieved_goal, desired_goal, info):
+        if len(achieved_goal)>1:
+            rewards = [0] * len(achieved_goal)
+            idx = 0
+            for achieved_goal, desired_goal in zip(achieved_goal, desired_goal):
+                rewards[idx] = self.compute_single_reward(achieved_goal, desired_goal)
+                idx += 1
+            return rewards
+        else:
+            reward = self.compute_single_reward(achieved_goal, desired_goal)
+            return reward
+
+    def compute_single_reward(self, achieved_goal, desired_goal):
+        pos_x, pos_y, pos_z, min_distance_ball_racket, min_distance_ball_target, done = achieved_goal
+        pos_x_des, pos_y_des, pos_z_des, min_distance_ball_racket_des, min_distance_ball_target_des, done_des = desired_goal
+        if done:
+            min_distance_ball_racket_rew = distance([min_distance_ball_racket], [min_distance_ball_racket_des])
+            min_distance_ball_target_final_pos = distance((pos_x, pos_y, pos_z), (pos_x_des, pos_y_des, pos_z_des))
+            min_distance_ball_target_rew = distance([min_distance_ball_target_final_pos], [min_distance_ball_racket_des])
+            #NOT implemented
+            max_ball_velocity_rew = 0
+            reward = self._hysr._reward_function(
+                    min_distance_ball_racket_rew,
+                    min_distance_ball_target_rew,
+                    max_ball_velocity_rew,
+                )
+        else:
+            reward = 0
+        return reward
 
     def step(self, action):
 
@@ -244,9 +334,6 @@ class HysrOneBallEnv(gym.Env):
         # performing a step
         observation, reward, episode_over, *extrainfo = self._hysr.step(list(action))
 
-        # formatting observation in a format suitable for gym
-        observation = self._convert_observation(observation)
-
         # imposing frequency to learning agent
         if not self._accelerated_time:
             self._frequency_manager.wait()
@@ -258,9 +345,10 @@ class HysrOneBallEnv(gym.Env):
         # logging
         self.n_steps += 1
         if self._log_episodes:
+            observation_log = self._convert_observation(observation)
             self.data_buffer.append(
                 (
-                    observation.copy(),
+                    observation_log.copy(),
                     action_orig,
                     action_casted,
                     action.copy(),
@@ -276,18 +364,17 @@ class HysrOneBallEnv(gym.Env):
                 self._logger.record("eprew", reward)
                 self._logger.dump()
 
-        if episode_over:
-            print(observation[-6:-3])
-
-        return observation, reward, episode_over, {}
+        # formatting observation in a format suitable for gym goal env
+        obs = self._get_obs(observation, episode_over)
+        return obs, reward, episode_over, {}
 
     def reset(self):
         self.init_episode()
         observation, *extrainfo = self._hysr.reset()
-        observation = self._convert_observation(observation)
         if not self._accelerated_time:
             self._frequency_manager = None
-        return observation
+        obs = self._get_obs(observation, False)
+        return obs
 
     def dump_data(self, data_buffer):
         filename = "/tmp/ep_" + time.strftime("%Y%m%d-%H%M%S")
