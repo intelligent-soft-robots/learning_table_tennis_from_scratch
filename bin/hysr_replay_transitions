@@ -1,0 +1,314 @@
+#!/usr/bin/env python3
+
+import sys
+import time
+import threading
+import pam_mujoco
+import o80_pam
+import o80
+from typing import Tuple, List, cast, Optional
+from pathlib import Path
+from pynput import keyboard
+
+SHORT_SLEEP: float = 1.0
+LONG_SLEEP: float = 3.0
+ALGO_TIME_STEP_MS: int = 10
+MUJOCO_ID: str = "transitions"
+
+
+Joints = Tuple[float, float, float, float]
+Point3D = Tuple[float, float, float]
+Pressures = Tuple[
+    float,
+    float,
+    float,
+    float,
+    float,
+    float,
+    float,
+    float,
+]
+
+
+class Observation:
+    def __init__(
+        self,
+        robot_position: Joints,
+        robot_velocity: Joints,
+        ball_position: Point3D,
+        ball_velocity: Point3D,
+        pressures: Pressures,
+    ) -> None:
+        self.robot_position = robot_position
+        self.robot_velocity = robot_velocity
+        self.ball_position = ball_position
+        self.ball_velocity = ball_velocity
+        self.pressures = pressures
+
+    def __str__(self) -> str:
+        attrs = (
+            "robot_position",
+            "robot_velocity",
+            "ball_position",
+            "ball_velicity",
+            "pressures",
+        )
+
+        def _str(attr: str) -> str:
+            values = cast(Tuple[float, ...], getattr(self, attr))
+            values_str: str = (
+                attr + ": " + ",".join(["{0:0.2f}".format(v) for v in values])
+            )
+            return values_str
+
+        return " | ".join(list(map(_str, attrs)))
+
+
+class Transition:
+    def __init__(self, observation1: Observation, observation2: Observation) -> None:
+        self.observation1 = observation1
+        self.observation2 = observation2
+
+    def __str__(self) -> str:
+        return str(
+            "observation 1: "
+            + str(self.observation1)
+            + "\n"
+            + "observation 2: "
+            + str(self.observation2)
+        )
+
+    @classmethod
+    def from_file(cls, path: Path) -> List[Transition]:
+
+        if not path.is_file():
+            raise FileNotFoundError("failed to find {}".format(path))
+
+        def _get_observation(observation: Tuple[float, ...]) -> Observation:
+            robot_position = observation[0:4]
+            robot_velocity = observation[4:8]
+            ball_position = observation[16:19]
+            ball_velocity = observation[19:22]
+            pressures = observation[8:16]
+            return Observation(
+                robot_position, robot_velocity, ball_position, ball_velocity, pressures
+            )
+
+        transitions: List[Transition] = []
+
+        with open(path, "r") as f:
+            s = f.read()
+            d = s.split("\n\n")
+            for chunk in d[:-1]:
+                transitions_ = eval(chunk)
+                for criterion, transition, *idx in transitions_:
+                    observation, next_observation, action, _, _, _ = transition
+                    observation = tuple(observation["observation"])
+                    next_observation = tuple(next_observation["observation"])
+                    transitions.append(
+                        Transition(
+                            _get_observation(observation),
+                            _get_observation(next_observation),
+                        )
+                    )
+
+        return transitions
+
+
+def get_frontends(
+    mujoco_id: str,
+) -> Tuple[o80_pam.FrontEnd, o80_pam.BallFrontEnd]:
+
+    robot = pam_mujoco.MujocoRobot(
+        pam_mujoco.RobotType.PAMY2,
+        "robot",
+        control=pam_mujoco.MujocoRobot.JOINT_CONTROL,
+    )
+
+    ball = pam_mujoco.MujocoItem(
+        "ball", control=pam_mujoco.MujocoItem.CONSTANT_CONTROL, color=(1, 0, 0, 1)
+    )
+
+    table = pam_mujoco.MujocoTable("table")
+
+    graphics = True
+    accelerated_time = True
+    handle = pam_mujoco.MujocoHandle(
+        mujoco_id,
+        table=table,
+        robot1=robot,
+        balls=(ball,),
+        graphics=graphics,
+        accelerated_time=accelerated_time,
+    )
+
+    robot_frontend: o80_pam.FrontEnd = handle.frontends["robot"]
+    ball_frontend: o80_pam.BallFrontEnd = handle.frontends["ball"]
+
+    return robot_frontend, ball_frontend
+
+
+class Stopper:
+    def __init__(self) -> None:
+        self.must_stop = False
+
+    def stop(self) -> None:
+        self.must_stop = True
+
+    def reset(self) -> None:
+        self.must_stop = False
+
+
+def play_transition(
+    transition: Transition,
+    robot: o80_pam.FrontEnd,
+    ball: o80_pam.BallFrontEnd,
+    stopper: Stopper,
+    short_sleep,
+    long_sleep,
+    algo_step_ms,
+):
+    print()
+    print(transition)
+    print()
+    robot_positions = (
+        transition.observation1.robot_position,
+        transition.observation2.robot_position,
+    )
+    ball_positions = (
+        transition.observation1.ball_position,
+        transition.observation2.ball_position,
+    )
+    sleeps = (short_sleep, long_sleep)
+    duration = o80.Duration_us.milliseconds(algo_step_ms)
+    index = 0
+    while not stopper.must_stop:
+        robot.add_command(
+            robot_positions[index], [0.0] * 4, duration, o80.Mode.OVERWRITE
+        )
+        ball.add_command(ball_positions[index], [0.0] * 3, duration, o80.Mode.OVERWRITE)
+        robot.pulse()
+        ball.pulse()
+        time.sleep(sleeps[index])
+        index += 1
+        if index == 2:
+            index = 0
+
+
+class TransitionsPlayer:
+    def __init__(
+        self,
+        transitions: List[Transition],
+        robot: o80_pam.FrontEnd,
+        ball: o80_pam.BallFrontEnd,
+        short_sleep: float = 1.0,
+        long_sleep: float = 3.0,
+        algo_ms: int = 10,
+    ):
+        self._transitions = transitions
+        self._robot = robot
+        self._ball = ball
+        self._short_sleep = short_sleep
+        self._long_sleep = long_sleep
+        self._algo_ms = algo_ms
+        self._index = 0
+        self._thread: Optional[threading.Thread] = None
+        self._stopper: Stopper = Stopper()
+
+    @classmethod
+    def from_file(
+        cls,
+        path: Path,
+        mujoco_id: str,
+        short_sleep,
+        long_sleep,
+        algo_ms,
+    ):
+        transitions: List[Transition] = Transition.from_file(path)
+        robot, ball = get_frontends(mujoco_id)
+        return cls(transitions, robot, ball, short_sleep, long_sleep, algo_ms)
+
+    def size(self) -> int:
+        return len(self._transitions)
+
+    def _play_transition(self, index: int) -> None:
+        if self._thread:
+            self._stopper.stop()
+            self._thread.join()
+            self._stopper.reset()
+        self._thread = threading.Thread(
+            target=play_transition,
+            args=(
+                self._transitions[index],
+                self._robot,
+                self._ball,
+                self._stopper,
+                self._short_sleep,
+                self._long_sleep,
+                self._algo_ms,
+            ),
+        )
+
+    def play_next(self) -> int:
+        self._index += 1
+        if self._index >= len(self._transitions):
+            self._index = 0
+        self._play_transition(self._index)
+        return self._index
+
+    def previous(self) -> int:
+        self._index -= 1
+        if self._index <= 0:
+            self._index = len(self._transitions) - 1
+        self._play_transition(self._index)
+        return self._index
+
+
+def run(
+    path: Path, mujoco_id: str, short_sleep: float, long_sleep: float, algo_ms: int
+):
+
+    player = TransitionsPlayer.from_file(
+        path, mujoco_id, short_sleep, long_sleep, algo_ms
+    )
+
+    print()
+    print("Loaded {} transitions".format(player.size()))
+    print()
+    print("Open and select your web browser, then press ")
+    print("left and right arrows to play previous/next transition")
+    print()
+    print("Esc to terminate")
+    print()
+
+    def on_press(key):
+        pass
+
+    def on_release(key):
+        if key == keyboard.Key.esc:
+            return False
+        if key == keyboard.Key.right:
+            player.next()
+        if key == keyboard.Key.left:
+            player.previous()
+
+
+if __name__ == "__main__":
+
+    args = sys.argv
+
+    if len(args) == 1:
+        print()
+        print("USAGE: ")
+        print()
+        print("in a first terminal:")
+        print("pam_mujoco {}".format(MUJOCO_ID))
+        print()
+        print("then in another terminal:")
+        print("hysr_replay_transitions /path/to/transition/file")
+        print()
+        exit()
+
+    path = Path(args[1])
+
+    run(path, MUJOCO_ID, SHORT_SLEEP, LONG_SLEEP, ALGO_TIME_STEP_MS)
