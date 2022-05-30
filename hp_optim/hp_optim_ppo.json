@@ -50,42 +50,42 @@
             "bounds": [1e-9, 1e-4]
         },
         {
-            "param": "config.ppo_config.num_layers",
+            "param": "config.lr_config.num_layers",
             "distribution": "Discrete",
             "options": [1]
         },
         {
-            "param": "config.ppo_config.num_hidden",
+            "param": "config.lr_config.num_hidden",
             "distribution": "IntLogNormal",
             "bounds": [32, 128]
         },
         {
-            "param": "config.ppo_config.learning_rate",
+            "param": "config.lr_config.learning_rate",
             "distribution": "TruncatedLogNormal",
             "bounds": [1e-5, 0.001]
         },
         {
-            "param": "config.ppo_config.batch_size",
+            "param": "config.lr_config.batch_size",
             "distribution": "IntLogNormal",
             "bounds": [64, 1024]
         },
         {
-            "param": "config.ppo_config.gradient_steps",
+            "param": "config.lr_config.gradient_steps",
             "distribution": "IntLogNormal",
             "bounds": [1, 5]
         },
         {
-            "param": "config.ppo_config.train_freq",
+            "param": "config.lr_config.train_freq",
             "distribution": "IntLogNormal",
             "bounds": [1,5]
         },
         {
-            "param": "config.ppo_config.buffer_size",
+            "param": "config.lr_config.buffer_size",
             "distribution": "IntLogNormal",
             "bounds": [80000, 150000]
         },
         {
-            "param": "config.ppo_config.learning_starts",
+            "param": "config.lr_config.learning_starts",
             "distribution": "IntLogNormal",
             "bounds": [3000, 40000]
         },
