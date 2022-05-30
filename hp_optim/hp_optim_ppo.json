@@ -40,52 +40,52 @@
     "num_best_jobs_whose_data_is_kept": 10,
     "optimized_params": [
         {
-            "param": "config.lr_config.gamma",
+            "param": "config.rl_config.gamma",
             "distribution": "Discrete",
             "options": [0.9, 0.95, 0.98, 0.99, 0.999, 0.9999, 0.99999]
         },
         {
-            "param": "config.lr_config.ent_coef",
+            "param": "config.rl_config.ent_coef",
             "distribution": "TruncatedLogNormal",
             "bounds": [1e-9, 1e-4]
         },
         {
-            "param": "config.lr_config.num_layers",
+            "param": "config.rl_config.num_layers",
             "distribution": "Discrete",
             "options": [1]
         },
         {
-            "param": "config.lr_config.num_hidden",
+            "param": "config.rl_config.num_hidden",
             "distribution": "IntLogNormal",
             "bounds": [32, 128]
         },
         {
-            "param": "config.lr_config.learning_rate",
+            "param": "config.rl_config.learning_rate",
             "distribution": "TruncatedLogNormal",
             "bounds": [1e-5, 0.001]
         },
         {
-            "param": "config.lr_config.batch_size",
+            "param": "config.rl_config.batch_size",
             "distribution": "IntLogNormal",
             "bounds": [64, 1024]
         },
         {
-            "param": "config.lr_config.gradient_steps",
+            "param": "config.rl_config.gradient_steps",
             "distribution": "IntLogNormal",
             "bounds": [1, 5]
         },
         {
-            "param": "config.lr_config.train_freq",
+            "param": "config.rl_config.train_freq",
             "distribution": "IntLogNormal",
             "bounds": [1,5]
         },
         {
-            "param": "config.lr_config.buffer_size",
+            "param": "config.rl_config.buffer_size",
             "distribution": "IntLogNormal",
             "bounds": [80000, 150000]
         },
         {
-            "param": "config.lr_config.learning_starts",
+            "param": "config.rl_config.learning_starts",
             "distribution": "IntLogNormal",
             "bounds": [3000, 40000]
         },
