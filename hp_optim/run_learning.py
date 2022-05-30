@@ -197,6 +197,20 @@ def setup_config(working_dir: pathlib.Path, params: dict) -> pathlib.Path:
     """
     logger = get_logger()
 
+    base_config = {
+        "reward_config": "./config/reward_config.json",
+        "hysr_config": "./config/hysr_config.json",
+        "pam_config": "./config/pam_config.json",
+        "rl_config": "./config/rl_config.json",
+        "rl_common_config": "./config/rl_common_config.json",
+    }
+
+    # raise error if there is any unexpected value in the config
+    valid_param_keys = list(base_config.keys()) + ["config_templates"]
+    for key in params.keys():
+        if key not in valid_param_keys:
+            raise KeyError("Unexpected key '{}' in params".format(key))
+
     main_config_file = working_dir / "config.json"
     # if config is already there, skip creation (this is the case when
     # restarting after a failure)
@@ -209,13 +223,6 @@ def setup_config(working_dir: pathlib.Path, params: dict) -> pathlib.Path:
         config_dir = working_dir / "config"
         config_dir.mkdir(exist_ok=True, parents=True)
 
-        base_config = {
-            "reward_config": "./config/reward_config.json",
-            "hysr_config": "./config/hysr_config.json",
-            "pam_config": "./config/pam_config.json",
-            "rl_config": "./config/rl_config.json",
-            "rl_common_config": "./config/rl_common_config.json",
-        }
         with open(main_config_file, "w") as f:
             json.dump(base_config, f)
 
