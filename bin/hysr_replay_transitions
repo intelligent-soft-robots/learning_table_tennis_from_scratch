@@ -10,14 +10,31 @@ from typing import Tuple, List, cast, Optional
 from pathlib import Path
 from pynput import keyboard
 
-SHORT_SLEEP: float = 1.0
-LONG_SLEEP: float = 3.0
+# not used directly in this code,
+# but for evaluating things in the transition file
+from collections import OrderedDict
+from numpy import array, float32
+
+
+SHORT_SLEEP: float = 0.25
+"""duration of pause when playing a transition """
+
+LONG_SLEEP: float = 1.0
+""" duration of pause between two plays of a transition"""
+
 ALGO_TIME_STEP_MS: int = 10
+""" time step between the capture of two observations, when running the learning algorithm """
+
 MUJOCO_ID: str = "transitions"
+""" mujoco_id of the pam_mujoco instance that should be started before this script is executed"""
 
 
 Joints = Tuple[float, float, float, float]
+"""for 4 dofs robot joints positions and velocities"""
+
 Point3D = Tuple[float, float, float]
+"""for the ball 3d position and 3d velocity"""
+
 Pressures = Tuple[
     float,
     float,
@@ -28,9 +45,16 @@ Pressures = Tuple[
     float,
     float,
 ]
+"""for the set of pressures applied to the robot"""
 
 
 class Observation:
+    """
+    All the attribute of an observation (i.e. robot joints
+    positions and velocities, ball position and velocity,
+    pressures of the muscles.
+    """
+
     def __init__(
         self,
         robot_position: Joints,
@@ -50,7 +74,7 @@ class Observation:
             "robot_position",
             "robot_velocity",
             "ball_position",
-            "ball_velicity",
+            "ball_velocity",
             "pressures",
         )
 
@@ -65,6 +89,10 @@ class Observation:
 
 
 class Transition:
+    """
+    Encapsulate two successive observations
+    """
+
     def __init__(self, observation1: Observation, observation2: Observation) -> None:
         self.observation1 = observation1
         self.observation2 = observation2
@@ -79,7 +107,11 @@ class Transition:
         )
 
     @classmethod
-    def from_file(cls, path: Path) -> List[Transition]:
+    def from_file(cls, path: Path) -> List[object]:
+        """
+        Parse the file and returns the corresponding list
+        of instances of Transition.
+        """
 
         if not path.is_file():
             raise FileNotFoundError("failed to find {}".format(path))
@@ -118,6 +150,10 @@ class Transition:
 def get_frontends(
     mujoco_id: str,
 ) -> Tuple[o80_pam.FrontEnd, o80_pam.BallFrontEnd]:
+    """
+    Returns o80's frontend for the control of the ball and of
+    the robot of the pam_mujoco running instance.
+    """
 
     robot = pam_mujoco.MujocoRobot(
         pam_mujoco.RobotType.PAMY2,
@@ -149,6 +185,11 @@ def get_frontends(
 
 
 class Stopper:
+    """
+    Encapsulate a boolean, useful for sending
+    stop signal to a thread.
+    """
+
     def __init__(self) -> None:
         self.must_stop = False
 
@@ -160,6 +201,7 @@ class Stopper:
 
 
 def play_transition(
+    info: str,
     transition: Transition,
     robot: o80_pam.FrontEnd,
     ball: o80_pam.BallFrontEnd,
@@ -168,7 +210,35 @@ def play_transition(
     long_sleep,
     algo_step_ms,
 ):
+    """
+    Play the transition in the pam_mujoco instance.
+    The transition will be played over and over until
+    the stop method of the stopper has been called (this
+    function is expected to be called in a thread).
+
+    Parameters
+    ----------
+    info:
+      will be printed in the terminal
+    transition:
+      the transition to be played
+    robot:
+      o80 frontend to the robot
+    ball:
+      o80 frontend to the ball
+    stopper:
+      should be used to stop the thread
+      running this function
+    short_sleep:
+      pause time when playing the transition
+    long_sleep:
+      pause time between two plays of the transition
+    algo_step_ms:
+      time step between two collections of observation
+      by the learning algorithm
+    """
     print()
+    print("transition:", info)
     print(transition)
     print()
     robot_positions = (
@@ -196,6 +266,27 @@ def play_transition(
 
 
 class TransitionsPlayer:
+    """
+    For playing transitions in the pam_mujoco instances.
+
+    Parameters
+    ----------
+    transitions:
+      the transitions to be played
+    robot:
+      o80 frontend to the robot
+    ball:
+      o80 frontend to the ball
+    short_sleep:
+      pause time when playing the transition
+    long_sleep:
+      pause time between two plays of the transition
+    algo_step_ms:
+      time step between two collections of observation
+      by the learning algorithm
+
+    """
+
     def __init__(
         self,
         transitions: List[Transition],
@@ -223,15 +314,26 @@ class TransitionsPlayer:
         short_sleep,
         long_sleep,
         algo_ms,
-    ):
+    ) -> object:
+        """
+        Parse the file and returns the corresponding instance
+        of TransitionsPlayer.
+        """
         transitions: List[Transition] = Transition.from_file(path)
         robot, ball = get_frontends(mujoco_id)
         return cls(transitions, robot, ball, short_sleep, long_sleep, algo_ms)
 
     def size(self) -> int:
+        """
+        The number of transition that have been parsed.
+        """
         return len(self._transitions)
 
     def _play_transition(self, index: int) -> None:
+        """
+        Spawns a thread that will play the transition
+        found at the given index over and over.
+        """
         if self._thread:
             self._stopper.stop()
             self._thread.join()
@@ -239,6 +341,7 @@ class TransitionsPlayer:
         self._thread = threading.Thread(
             target=play_transition,
             args=(
+                str(index),
                 self._transitions[index],
                 self._robot,
                 self._ball,
@@ -248,25 +351,50 @@ class TransitionsPlayer:
                 self._algo_ms,
             ),
         )
+        self._thread.start()
 
     def play_next(self) -> int:
+        """
+        Start playing the next transition
+        (i.e. index increased by one)
+        """
+        self._play_transition(self._index)
+        played_index = self._index
         self._index += 1
         if self._index >= len(self._transitions):
             self._index = 0
-        self._play_transition(self._index)
-        return self._index
+        return played_index
 
-    def previous(self) -> int:
+    def play_previous(self) -> int:
+        """
+        Start playing the previous transition
+        (i.e. index decreased by one)
+        """
+        self._play_transition(self._index)
+        played_index = self._index
         self._index -= 1
         if self._index <= 0:
             self._index = len(self._transitions) - 1
-        self._play_transition(self._index)
-        return self._index
+        return played_index
 
 
 def run(
     path: Path, mujoco_id: str, short_sleep: float, long_sleep: float, algo_ms: int
 ):
+    """
+    Parse the file and starts playing the related transition in the pam_mujoco instance
+    that should have been started previously to the call of this function.
+
+    Parameters
+    ----------
+    short_sleep:
+      pause time when playing the transition
+    long_sleep:
+      pause time between two plays of the transition
+    algo_step_ms:
+      time step between two collections of observation
+      by the learning algorithm
+    """
 
     player = TransitionsPlayer.from_file(
         path, mujoco_id, short_sleep, long_sleep, algo_ms
@@ -275,7 +403,7 @@ def run(
     print()
     print("Loaded {} transitions".format(player.size()))
     print()
-    print("Open and select your web browser, then press ")
+    print("Select the mujoco window, then press ")
     print("left and right arrows to play previous/next transition")
     print()
     print("Esc to terminate")
@@ -288,9 +416,12 @@ def run(
         if key == keyboard.Key.esc:
             return False
         if key == keyboard.Key.right:
-            player.next()
+            player.play_next()
         if key == keyboard.Key.left:
-            player.previous()
+            player.play_previous()
+
+    with keyboard.Listener(on_press=on_press, on_release=on_release) as listener:
+        listener.join()
 
 
 if __name__ == "__main__":
