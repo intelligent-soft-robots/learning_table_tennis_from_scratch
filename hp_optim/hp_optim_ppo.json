@@ -4,7 +4,7 @@
     "run_in_working_dir": false,
     "git_params": {
         "url": "https://github.com/intelligent-soft-robots/learning_table_tennis_from_scratch.git",
-        "branch": "fwidmaier/hp_optim_sac_run2",
+        "branch": "fwidmaier/hp_optim_sac_verify",
         "commit": null
     },
     "script_relative_path": "./hp_optim/run_singularity.py",
@@ -17,10 +17,10 @@
         "request_gpus": 0,
         "cuda_requirement": null,
         "memory_in_mb": 15000,
-        "bid": 100
+        "bid": 10
     },
     "fixed_params": {
-        "learning_runs_per_job": 3,
+        "learning_runs_per_job": 1,
         "max_attempts": 2,
         "config.config_templates": "./hp_optim/config_templates_ppo.json",
         "singularity.image": "~/learning_table_tennis_from_scratch.sif",
@@ -34,20 +34,20 @@
     "optimization_setting": {
         "metric_to_optimize": "mean_eprewmean",
         "minimize": false,
-        "number_of_samples": 50,
-        "n_jobs_per_iteration": 10
+        "number_of_samples": 10,
+        "n_jobs_per_iteration": 5
     },
     "num_best_jobs_whose_data_is_kept": 10,
     "optimized_params": [
         {
             "param": "config.rl_config.gamma",
             "distribution": "Discrete",
-            "options": [0.99, 0.999, 0.9999, 0.99999]
+            "options": [0.9999]
         },
         {
             "param": "config.rl_config.ent_coef",
-            "distribution": "TruncatedLogNormal",
-            "bounds": [1e-9, 1e-5]
+            "distribution": "Discrete",
+            "bounds": [0]
         },
         {
             "param": "config.rl_config.num_layers",
@@ -56,43 +56,38 @@
         },
         {
             "param": "config.rl_config.num_hidden",
-            "distribution": "IntLogNormal",
-            "bounds": [100, 250]
+            "distribution": "Discrete",
+            "bounds": [200]
         },
         {
             "param": "config.rl_config.learning_rate",
-            "distribution": "TruncatedLogNormal",
-            "bounds": [0.0001, 0.001]
+            "distribution": "Discrete",
+            "bounds": [0.0003]
         },
         {
             "param": "config.rl_config.batch_size",
-            "distribution": "IntLogNormal",
-            "bounds": [128, 512]
+            "distribution": "Discrete",
+            "bounds": [256]
         },
         {
             "param": "config.rl_config.gradient_steps",
             "distribution": "Discrete",
-            "bounds": [1, 2, 3]
+            "bounds": [1]
         },
         {
             "param": "config.rl_config.train_freq",
             "distribution": "Discrete",
-            "bounds": [1,2,3]
+            "bounds": [1]
         },
         {
             "param": "config.rl_config.buffer_size",
-            "distribution": "IntLogNormal",
-            "bounds": [700000, 1300000]
+            "distribution": "Discrete",
+            "bounds": [1000000]
         },
         {
             "param": "config.rl_config.learning_starts",
-            "distribution": "IntLogNormal",
-            "bounds": [5000, 15000]
-        },
-        {
-            "param": "config.hysr_config.pressure_change_range",
             "distribution": "Discrete",
-            "bounds": [770]
+            "bounds": [10000]
         }
     ]
 }
