@@ -69,9 +69,13 @@ class Observation:
         self.ball_velocity = ball_velocity
         self.pressures = pressures
 
-    def same_robot_position(self, other) -> bool:
+    def same_robot_position(self, other, tolerance:float) -> bool:
+        """
+        Returns True if the other instance of observation has a robot position
+        attribute equals to the one of this instance (up to the specified tolerance)
+        """
         diff = [abs(a - b) for a, b in zip(self.robot_position, other.robot_position)]
-        same = all([d < 0.01 for d in diff])
+        same = all([d < tolerance for d in diff])
         return same
 
     def __str__(self) -> str:
@@ -100,38 +104,56 @@ class Transition:
 
     def __init__(
         self,
-        timestep: int,
         episode_id: int,
+        timestep: int,
         observation1: Observation,
         observation2: Observation,
     ) -> None:
-        self.id: Tuple[int, int] = (timestep, episode_id)
+        self.id: Tuple[int, int] = (episode_id, timestep)
         self.timestep = timestep
         self.episode_id = episode_id
         self.observation1 = observation1
         self.observation2 = observation2
 
     def get_id(self) -> Tuple[int, int]:
+        """
+        Returns the episode id and the timestep
+        associated with this transition
+        """
         return self.id
 
-    def same_robot_positions(self, other) -> bool:
-        if not self.observation1.same_robot_position(other.observation1):
+    def same_robot_positions(self, other, tolerance: float=0.001) -> bool:
+        """
+        Returns True if the other instance encapsulate observations which
+        refers to the same robot position as the observations encapsulated by
+        this instance (up to the provided tolerance)
+        """
+        if not self.observation1.same_robot_position(other.observation1,tolerance):
             return False
-        if not self.observation2.same_robot_position(other.observation2):
+        if not self.observation2.same_robot_position(other.observation2,tolerance):
             return False
         return True
 
     def __eq__(self, other) -> bool:
-        if self.timestep != other.timestep:
-            return False
+        """
+        Two instances are equals if of the same episode id and
+        same timestep.
+        """
         if self.episode_id != other.episode_id:
+            return False
+        if self.timestep != other.timestep:
             return False
         return True
 
     def __le__(self, other) -> bool:
-        if self.timestep > other.timestep:
-            return False
+        """
+        An instance is smaller compared to another if
+        its episode id is smaller. If the episode id are
+        equals: if its timestep is smaller.
+        """
         if self.episode_id > other.episode_id:
+            return False
+        if self.timestep > other.timestep:
             return False
         return True
 
@@ -171,14 +193,14 @@ class Transition:
             d = s.split("\n\n")
             for chunk in d[:-1]:
                 transitions_ = eval(chunk)
-                for criterion, transition, timestep, _, episode_id in transitions_:
+                for criterion, transition, timestep, episode_id, _ in transitions_:
                     observation, next_observation, action, _, _, _ = transition
                     observation = tuple(observation["observation"])
                     next_observation = tuple(next_observation["observation"])
                     transitions.append(
                         Transition(
-                            timestep,
                             episode_id,
+                            timestep,
                             _get_observation(observation),
                             _get_observation(next_observation),
                         )
@@ -204,12 +226,76 @@ def group_transitions(
     return grouped
 
 
+def check_group(
+        episode_id: int, timestep: int, transitions: Sequence[Transition],
+        tolerance: float=0.001
+) -> List[str]:
+    """
+    All transitions are supposed to correspond to the same episode and to the 
+    same timestep, so their related robot's position should be the same. 
+    Checking this is the case. If not, for each successive transition for which this
+    is not the case, an error message is created (the list of error messages is 
+    returned)
+    """
+    
+    if len(transitions) < 1:
+        return
+
+    errors: List[str] = []
+
+    for t1, t2 in zip(transitions, transitions[1:]):
+        assert t1.get_id() == t2.get_id()
+        assert t1.get_id()[0] == episode_id
+        assert t1.get_id()[1] == timestep
+        obs1 = t1.observation1, t1.observation2
+        obs2 = t2.observation1, t2.observation2
+        for (o1, o2) in zip(obs1, obs2):
+            if not o1.same_robot_position(o2,tolerance):
+                p1 = o1.robot_position
+                p2 = o2.robot_position
+                diff = [abs(a - b) for a, b in zip(p1, p2)]
+                errors.append("{}\t{}\tdiff: {}".format(p1, p2, diff))
+
+    return errors
+
+
+def check_groups(
+    transitions: Sequence[Tuple[Tuple[int, int], List[Transition]]]
+) -> None:
+    """
+    Transitions are grouped based on the same episode and to the 
+    same timestep, so the robot's position related to all transitions
+    of the same group should be the same. 
+    Checking this is the case. If not, raising a ValueError which message lists
+    all the times this rule has not be observed.
+    """
+    errors: Dict[Tuple[int, int], List[str]] = {}
+
+    for id_, transitions_ in transitions:
+        error = check_group(id_[0], id_[1], transitions_)
+        if error:
+            errors[id_] = error
+
+    if errors:
+        err_list = "\n".format(
+            [
+                "episode {} , timestep {}: {}".format(id_[0], id_[1], error)
+                for id_, error in errors.items()
+            ]
+        )
+        raise ValueError(
+            "Some transitions corresponding to the same episode and the same "
+            "timestep do not have observations with the same robot position:\n"
+            "{}".format(err_list)
+        )
+
+
 def get_frontends(
     mujoco_id: str,
     nb_balls: int,
 ) -> Tuple[o80_pam.FrontEnd, List[o80_pam.BallFrontEnd]]:
     """
-    Returns o80's frontend for the control of the ball and of
+    Returns o80's frontends for the control of the balls and of
     the robot of the pam_mujoco running instance.
     """
 
@@ -220,13 +306,20 @@ def get_frontends(
     )
 
     ball_segment_ids = ["ball_{}".format(index) for index in range(nb_balls)]
+
+    colors_step = 1.0 / nb_balls
+    colors = [
+        (1.0 - index * colors_step, 0, index * colors_step, 1.0)
+        for index in range(nb_balls)
+    ]
+
     balls = [
         pam_mujoco.MujocoItem(
             segment_id,
             control=pam_mujoco.MujocoItem.CONSTANT_CONTROL,
-            color=(1, 0, 0, 1),
+            color=color,
         )
-        for segment_id in ball_segment_ids
+        for segment_id, color in zip(ball_segment_ids, colors)
     ]
 
     table = pam_mujoco.MujocoTable("table")
@@ -278,8 +371,8 @@ def play_transitions(
     out_of_sight: Tuple[float, float, float] = (-10.0, -10.0, -10),
 ):
     """
-    Play the transition in the pam_mujoco instance.
-    The transition will be played over and over until
+    Play the transitions in the pam_mujoco instance.
+    The transitions will be played over and over until
     the stop method of the stopper has been called (this
     function is expected to be called in a thread).
 
@@ -291,7 +384,6 @@ def play_transitions(
       the transitions to be played. They are supposed to
       correspond to the same episode id/ timestep, i.e. to
       have similar observations in regard to the robot positions.
-      A ValueError is throw if it is not the case.
     robot:
       o80 frontend to the robot
     balls:
@@ -324,7 +416,7 @@ def play_transitions(
         ball.add_command(
             out_of_sight, [0.0] * 3, o80.Duration_us.milliseconds(5), o80.Mode.OVERWRITE
         )
-    ball.pulse()
+        ball.pulse()
 
     robot_positions = (
         transitions[0].observation1.robot_position,
@@ -337,6 +429,15 @@ def play_transitions(
         )
         for transition in transitions
     ]
+
+    print()
+    print("transitions:", info)
+    print("robot position:", robot_positions[0], "\t", robot_positions[1])
+    print("ball positions")
+    for p1, p2 in ball_positions:
+        print("\t", p1, "\t", p2)
+    print()
+
     sleeps = (short_sleep, long_sleep)
     duration = o80.Duration_us.milliseconds(algo_step_ms)
     index = 0
@@ -349,7 +450,8 @@ def play_transitions(
                 ball_position[index], [0.0] * 3, duration, o80.Mode.OVERWRITE
             )
         robot.pulse()
-        ball.pulse()
+        for ball in balls:
+            ball.pulse()
         time.sleep(sleeps[index])
         index += 1
         if index == 2:
@@ -430,40 +532,8 @@ class TransitionsPlayer:
             (id_, transitions_[id_]) for id_ in sorted(transitions_.keys())
         ]
 
-        # checking all grouped transitions have the same robot position, if not, exiting
-        for id_, transitions in transitions__:
-            if len(transitions) > 1:
-                for t1, t2 in zip(transitions, transitions[1:]):
-                    if not t1.same_robot_positions(t2):
-                        error = str(
-                            "transitions corresponding episode {} and timestep {} do not all "
-                            "have the same robot position. For example:\n"
-                            "\tobs1: {}\tobs2: {}\n"
-                            "\tobs1: {}\tobs2: {}\n"
-                            "\tdiff: {}\tdiff: {}".format(
-                                id_[0],
-                                id_[1],
-                                t1.observation1.robot_position,
-                                t1.observation2.robot_position,
-                                t2.observation1.robot_position,
-                                t2.observation2.robot_position,
-                                [
-                                    abs(a - b)
-                                    for a, b in zip(
-                                        t1.observation1.robot_position,
-                                        t2.observation1.robot_position,
-                                    )
-                                ],
-                                [
-                                    abs(a - b)
-                                    for a, b in zip(
-                                        t1.observation1.robot_position,
-                                        t2.observation1.robot_position,
-                                    )
-                                ],
-                            )
-                        )
-                        raise ValueError(error)
+        # checking all grouped transitions have the same robot position
+        check_groups(transitions__)
 
         max_nb_transitions = max([len(t) for _, t in transitions__])
         robot, balls = get_frontends(mujoco_id, max_nb_transitions)
@@ -487,8 +557,10 @@ class TransitionsPlayer:
         self._thread = threading.Thread(
             target=play_transitions,
             args=(
-                "episode: {}, timestep: {}".format(
-                    self._transitions[index][0][0], self._transitions[index][0][1]
+                "episode: {}, timestep: {} ({} transitions)".format(
+                    self._transitions[index][0][0],
+                    self._transitions[index][0][1],
+                    len(self._transitions[index][1]),
                 ),
                 self._transitions[index][1],
                 self._robot,
