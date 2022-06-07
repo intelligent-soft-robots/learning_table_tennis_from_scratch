@@ -6,13 +6,19 @@ import json
 import site
 
 
-def _no_hit_reward(min_distance_ball_racket):
-    return -min_distance_ball_racket
+def _no_hit_reward(min_distance_ball_racket, binary=False, sparse=False):
+    if binary or sparse:
+        return 0
+    else:
+        return -min_distance_ball_racket
 
 
-def _return_task_reward(min_distance_ball_target, c, rtt_cap):
-    reward = 1.0 - ((min_distance_ball_target / c) ** 0.75)
-    reward = max(reward, rtt_cap)
+def _return_task_reward(min_distance_ball_target, c, rtt_cap, binary=False, sparse=False, bin_spa_radius = 0.685):
+    if binary or sparse:
+        return float(sparse) + float(min_distance_ball_target < bin_spa_radius)
+    else:
+        reward = 1.0 - ((min_distance_ball_target / c) ** 0.75)
+        reward = max(reward, rtt_cap)
     return reward
 
 
@@ -30,13 +36,16 @@ def _compute_reward(
     max_ball_velocity,
     c,
     rtt_cap,
+    binary=False,
+    sparse=False,
+    bin_spa_radius=0.685
 ):
 
     # i.e. the ball did not hit the racket,
     # so computing a reward based on the minimum
     # distance between the racket and the ball
     if min_distance_ball_racket is not None:
-        return _no_hit_reward(min_distance_ball_racket)
+        return _no_hit_reward(min_distance_ball_racket, binary, sparse)
 
     # the ball did hit the racket, so computing
     # a reward based on the ball / target
@@ -47,11 +56,18 @@ def _compute_reward(
         )
 
     else:
-        return _return_task_reward(min_distance_ball_target, c, rtt_cap)
+        return _return_task_reward(min_distance_ball_target, c, rtt_cap, binary, sparse, bin_spa_radius)
 
 
 def _reward(
-    min_distance_ball_racket, min_distance_ball_target, max_ball_velocity, c, rtt_cap
+    min_distance_ball_racket,
+    min_distance_ball_target,
+    max_ball_velocity,
+    c,
+    rtt_cap,
+    binary=False,
+    sparse=False,
+    bin_spa_radius=0.685
 ):
     return _compute_reward(
         False,
@@ -60,6 +76,9 @@ def _reward(
         max_ball_velocity,
         c,
         rtt_cap,
+        binary,
+        sparse,
+        bin_spa_radius
     )
 
 
@@ -77,9 +96,12 @@ def _smash_reward(
 
 
 class RewardConfig:
-    def __init__(self, normalization_constant=3.0, rtt_cap=-0.2):
+    def __init__(self, normalization_constant=3.0, rtt_cap=-0.2, binary=False, sparse=False, bin_spa_radius=0.685):
         self.normalization_constant = normalization_constant
         self.rtt_cap = rtt_cap
+        self.binary = binary
+        self.sparse = sparse
+        self.bin_spa_radius = bin_spa_radius
 
 
 class Reward:
@@ -95,6 +117,9 @@ class Reward:
             max_ball_velocity,
             self.config.normalization_constant,
             self.config.rtt_cap,
+            self.config.binary,
+            self.config.sparse,
+            self.config.bin_spa_radius
         )
 
 
@@ -130,7 +155,7 @@ class JsonReward:
                     jsonpath, e
                 )
             )
-        for attr in ("smash", "normalization_constant", "rtt_cap"):
+        for attr in ("smash", "normalization_constant", "rtt_cap", "sparse", "binary", "bin_spa_radius"):
             if attr not in conf:
                 raise ValueError(
                     "failed to find the attribute {} "
@@ -140,7 +165,10 @@ class JsonReward:
         smash = conf["smash"]
         normalization_constant = conf["normalization_constant"]
         rtt_cap = conf["rtt_cap"]
-        config = RewardConfig(normalization_constant, rtt_cap)
+        sparse = conf["sparse"]
+        binary = conf["binary"]
+        bin_spa_radius = conf["bin_spa_radius"]
+        config = RewardConfig(normalization_constant, rtt_cap, binary, sparse, bin_spa_radius)
         if smash:
             return SmashReward(config)
         return Reward(config)

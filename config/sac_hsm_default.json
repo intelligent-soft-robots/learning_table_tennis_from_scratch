@@ -13,8 +13,9 @@
     "buffer_size": 120000,
     "learning_starts": 10000,
     "n_sampled_hindsight_states": 1,
-    "hindsight_state_selection_strategy": "advantage",
-    "hindsight_state_selection_strategy_horizon": "episode",
+    "hindsight_state_selection_strategy": "reward",
+    "hindsight_state_selection_strategy_horizon": "future",
     "HSM_shape": 3,
-    "HSM_n_traj_freq" : 100
+    "HSM_n_traj_freq" : 5,
+    "HSM_min_criterion" : 0.99
 }

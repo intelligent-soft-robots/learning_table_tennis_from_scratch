@@ -95,6 +95,7 @@ class HerReplayBuffer(DictReplayBuffer):
         HSM_shape: int = -1,
         HSM_gamma = 0.99,
         HSM_n_traj_freq = 5,
+        HSM_min_criterion = 0,
         HSM_critic = None,
         HSM_critic_target = None,
         HSM_actor = None
@@ -176,6 +177,7 @@ class HerReplayBuffer(DictReplayBuffer):
         self.HSM_actor = HSM_actor
         self.HSM_gamma = HSM_gamma
         self.HSM_n_traj_freq = HSM_n_traj_freq
+        self.HSM_min_criterion = HSM_min_criterion
 
         self.hsm_traj_buffer = []
 

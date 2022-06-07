@@ -226,11 +226,9 @@ class HysrOneBallEnv(gym.Env):
 
         # put pressure in range as defined in parameters file
         for dof in range(self._nb_dofs):
-            p_plus = 0
-            p_minus = 0
-            action[2 * dof] = self._scale_pressure(dof, True, action[2 * dof]) + p_plus
+            action[2 * dof] = self._scale_pressure(dof, True, action[2 * dof])
             action[2 * dof + 1] = (
-                self._scale_pressure(dof, False, action[2 * dof + 1]) + p_minus
+                self._scale_pressure(dof, False, action[2 * dof + 1])
             )
 
         # final target pressure (make sure that it is within bounds)

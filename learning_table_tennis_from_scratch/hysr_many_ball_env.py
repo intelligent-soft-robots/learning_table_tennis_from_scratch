@@ -113,7 +113,7 @@ class HysrManyBallEnv(gym.Env):
         self._hs_boxes = _ObservationSpace()
 
         self._obs_boxes.add_box("robot_position", -math.pi, +math.pi, self._nb_dofs)
-        self._obs_boxes.add_box("robot_velocity", 0.0, 10.0, self._nb_dofs)
+        self._obs_boxes.add_box("robot_velocity", -10.0, 10.0, self._nb_dofs)
         self._obs_boxes.add_box(
             "robot_pressure",
             self._config.min_pressure(),
@@ -272,6 +272,8 @@ class HysrManyBallEnv(gym.Env):
                     break
             idx += 1
 
+        assert len(self.extra_data_buffer) == len(all_trans)
+
         trans = all_trans[-1]     # main ball
         extra_trans = all_trans[:-1]    # extra balls
 
@@ -297,11 +299,9 @@ class HysrManyBallEnv(gym.Env):
 
         # put pressure in range as defined in parameters file
         for dof in range(self._nb_dofs):
-            p_plus = 0
-            p_minus = 0
-            action[2 * dof] = self._scale_pressure(dof, True, action[2 * dof]) + p_plus
+            action[2 * dof] = self._scale_pressure(dof, True, action[2 * dof])
             action[2 * dof + 1] = (
-                self._scale_pressure(dof, False, action[2 * dof + 1]) + p_minus
+                self._scale_pressure(dof, False, action[2 * dof + 1])
             )
 
         # final target pressure (make sure that it is within bounds)
