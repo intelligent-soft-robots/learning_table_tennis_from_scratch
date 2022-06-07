@@ -111,6 +111,7 @@ def run_stable_baselines(
                 hindsight_state_selection_strategy_horizon = rl_config.hindsight_state_selection_strategy_horizon,
                 HSM_shape = rl_config.HSM_shape,
                 HSM_n_traj_freq = rl_config.HSM_n_traj_freq,
+                HSM_min_criterion = rl_config.HSM_min_criterion,
                 online_sampling = False,
                 apply_HSM = True,
                 apply_HER = False,
