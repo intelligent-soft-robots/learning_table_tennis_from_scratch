@@ -9,8 +9,8 @@
     "save_path": "/tmp/model",
     "num_layers": 1,
     "num_hidden": 60,
-    "gradient_steps": 4,
-    "train_freq": 2,
-    "buffer_size": 120000,
+    "gradient_steps": 1,
+    "train_freq": 1,
+    "buffer_size": 500000,
     "learning_starts": 10000
 }
