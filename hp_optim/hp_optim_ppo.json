@@ -34,20 +34,20 @@
     "optimization_setting": {
         "metric_to_optimize": "mean_eprewmean",
         "minimize": false,
-        "number_of_samples": 10,
-        "n_jobs_per_iteration": 5
+        "number_of_samples": 20,
+        "n_jobs_per_iteration": 10
     },
     "num_best_jobs_whose_data_is_kept": 10,
     "optimized_params": [
         {
             "param": "config.rl_config.gamma",
             "distribution": "Discrete",
-            "options": [0.9999]
+            "options": [0.99]
         },
         {
             "param": "config.rl_config.ent_coef",
             "distribution": "Discrete",
-            "bounds": [0]
+            "bounds": [2e-8]
         },
         {
             "param": "config.rl_config.num_layers",
@@ -57,22 +57,22 @@
         {
             "param": "config.rl_config.num_hidden",
             "distribution": "Discrete",
-            "bounds": [200]
+            "bounds": [147]
         },
         {
             "param": "config.rl_config.learning_rate",
             "distribution": "Discrete",
-            "bounds": [0.0003]
+            "bounds": [0.0006]
         },
         {
             "param": "config.rl_config.batch_size",
             "distribution": "Discrete",
-            "bounds": [256]
+            "bounds": [260]
         },
         {
             "param": "config.rl_config.gradient_steps",
             "distribution": "Discrete",
-            "bounds": [1]
+            "bounds": [3]
         },
         {
             "param": "config.rl_config.train_freq",
@@ -87,7 +87,7 @@
         {
             "param": "config.rl_config.learning_starts",
             "distribution": "Discrete",
-            "bounds": [10000]
+            "bounds": [13000]
         }
     ]
 }
