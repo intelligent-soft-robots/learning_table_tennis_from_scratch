@@ -274,9 +274,6 @@ class HysrOneBallEnv(gym.Env):
                 self._logger.record("eprew", reward)
                 self._logger.dump()
 
-        if episode_over:
-            print(observation[-6:-3])
-
         return observation, reward, episode_over, {}
 
     def reset(self):

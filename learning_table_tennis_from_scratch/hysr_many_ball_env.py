@@ -259,9 +259,8 @@ class HysrManyBallEnv(gym.Env):
             for obs, action, reward, episode_over, previous_obs, min_distance_ball_racket in data_buffer:
                 if not episode_over and min_distance_ball_racket:   # normal transition
                     all_trans[idx].append((previous_obs, obs, action, reward, episode_over, [{}]))
-                    obs_after_racket_hit = obs
                 elif not episode_over and not self._hysr._ball_status.min_distance_ball_racket:   # ball hit racket, but didn't cross table plane (episode_over is FALSE) -> do not add
-                    if not obs_after_racket_hit:
+                    if not obs_before_racket_hit:
                         obs_before_racket_hit = previous_obs
                         action_before_racket_hit = action
                 elif episode_over and obs_before_racket_hit:  # episode over and ball hit

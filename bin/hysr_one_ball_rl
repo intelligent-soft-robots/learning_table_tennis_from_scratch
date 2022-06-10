@@ -79,6 +79,7 @@ def _execute(
             env_type[common_conf["environment"]],
             common_conf["algorithm"],
             common_conf["log_episodes"],
+            seed=seed
         )
 
 

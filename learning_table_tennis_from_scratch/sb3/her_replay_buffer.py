@@ -93,15 +93,15 @@ class HerReplayBuffer(DictReplayBuffer):
         apply_HSM: bool = False,
         apply_HER: bool = True,
         HSM_shape: int = -1,
-        HSM_gamma = 0.99,
-        HSM_n_traj_freq = 5,
-        HSM_min_criterion = 0,
+        HSM_gamma = 0.999,
+        HSM_n_traj_freq = 100,
         HSM_critic = None,
         HSM_critic_target = None,
-        HSM_actor = None
+        HSM_actor = None,
+        HSM_min_criterion = -1000
     ):
         if apply_HSM:
-            print("hsm params:", hindsight_state_selection_strategy, hindsight_state_selection_strategy_horizon, "shape", HSM_shape, "gamma", HSM_gamma, "freq", HSM_n_traj_freq)
+            print("hsm params:", hindsight_state_selection_strategy, hindsight_state_selection_strategy_horizon, "shape", HSM_shape, "gamma", HSM_gamma, "freq", HSM_n_traj_freq, "min_criterion:", HSM_min_criterion)
 
         super(HerReplayBuffer, self).__init__(buffer_size, env.observation_space, env.action_space, device, env.num_envs)
 
@@ -179,7 +179,10 @@ class HerReplayBuffer(DictReplayBuffer):
         self.HSM_n_traj_freq = HSM_n_traj_freq
         self.HSM_min_criterion = HSM_min_criterion
 
+        self.HSM_logging = False
+
         self.hsm_traj_buffer = []
+        self.idx_eps_hsm = 0
 
         # buffer with episodes
         # number of episodes which can be stored until buffer size is reached
@@ -354,13 +357,16 @@ class HerReplayBuffer(DictReplayBuffer):
             ):
 
         # store hsm trajectories in buffer
+        idx_env = 0
         for hsm_trajectory in hsm_trajectories:
-            self.hsm_traj_buffer.append(hsm_trajectory)
+            self.hsm_traj_buffer.append((hsm_trajectory, idx_env, self.idx_eps_hsm))
+            idx_env += 1
+        self.idx_eps_hsm += 1
 
         # calculate criterion for every transition in hsm trajectories buffer
         if len(self.hsm_traj_buffer)>=self.HSM_n_traj_freq:
             hsm_transitions = []
-            for hsm_trajectory in self.hsm_traj_buffer:
+            for hsm_trajectory, idx_env, idx_eps in self.hsm_traj_buffer:
                 for idx_trans in range(len(hsm_trajectory)):
                     transition = hsm_trajectory[idx_trans]
                     if self.hindsight_state_selection_strategy == HindsightStateSelectionStrategy.RANDOM:
@@ -394,30 +400,47 @@ class HerReplayBuffer(DictReplayBuffer):
                         ob_norm_1 = {key: self.to_torch([ob_norm_1[key]]) for key in self._observation_keys}
                         if self.hindsight_state_selection_strategy_horizon == HindsightStateSelectionStrategyHorizon.STEP:
                             ob_norm_2 = self._normalize_obs(ob_2)
-                            ob_norm_2 = {key: self.to_torch([ob_2[key]]) for key in self._observation_keys}
+                            ob_norm_2 = {key: self.to_torch([ob_norm_2[key]]) for key in self._observation_keys}
                             action_pi_2, _ = self.HSM_actor.action_log_prob(ob_norm_2)
-                            q_value_pi_2 = th.cat(self.HSM_critic_target(ob_norm_2, action_pi_2), dim=1)
+                            q_value_pi_2 = th.cat(self.HSM_critic(ob_norm_2, action_pi_2), dim=1)
                             min_qf_pi_2, _ = th.min(q_value_pi_2, dim=1, keepdim=True)
                             min_qf_pi_2 = min_qf_pi_2[0][0].item()
                         else:
                             min_qf_pi_2 = 0
-                        q_value = self.HSM_critic(ob_norm_1, action)
-                        q_value = (q_value[0]+q_value[1])[0][0].item()*0.5
-                        advantage = reward_sum + self.HSM_gamma * min_qf_pi_2 -  q_value
+                        q_value = th.cat(self.HSM_critic(ob_norm_1, action), dim=1)
+                        min_q_value, _ = th.min(q_value, dim=1, keepdim=True)
+                        min_q_value = min_q_value[0][0].item()
+                        advantage = reward_sum + self.HSM_gamma * min_qf_pi_2 -  min_q_value
                         criterion = -advantage
                     else:
                         raise ValueError(f"Strategy {self.hindsight_state_selection_strategy} - {self.hindsight_state_selection_strategy_horizon} for sampling hindsight states is not supported!")
 
-                    hsm_transitions.append((criterion, transition))
+
+                    hsm_transitions.append((criterion, transition, idx_trans, idx_eps, idx_env))
+
+            #store in log file
+            if self.HSM_logging:
+                with open ("/tmp/log_all.txt", "a+") as f:
+                    f.write(repr(hsm_transitions) + "\n\n")
+                    print("------log------")
+
         
             # sort by criterion and add to replay buffer
             n_to_select = int(len(hsm_transitions) * self.n_sampled_hindsight_states / self.HSM_shape)
             random.shuffle(hsm_transitions)
             hsm_criteria = np.array([t[0] for t in hsm_transitions])
             indices = np.argpartition(hsm_criteria, n_to_select)[:n_to_select]
+
+            hsm_transitions_selected = []
             for idx in indices:
-                _, transition = hsm_transitions[idx]
-                self.replay_buffer.add(*transition)
+                criterion, transition, _, _, _ = hsm_transitions[idx]
+                if -1.0*criterion>=self.HSM_min_criterion:
+                    self.replay_buffer.add(*transition)
+                    hsm_transitions_selected.append(hsm_transitions[idx])
+
+            if self.HSM_logging:
+                with open ("/tmp/log_select.txt", "a+") as f:
+                    f.write(repr(hsm_transitions_selected) + "\n\n")
                 
             self.hsm_traj_buffer = []
 
