@@ -98,7 +98,10 @@ class HerReplayBuffer(DictReplayBuffer):
         HSM_critic = None,
         HSM_critic_target = None,
         HSM_actor = None,
-        HSM_min_criterion = -1000
+        HSM_min_criterion = -1000,
+        n_sampled_hindsight_states_change_per_step = 0,
+        HSM_criterion_change_per_step = 0,
+        prioritized_replay_baseline = False
     ):
         if apply_HSM:
             print("hsm params:", hindsight_state_selection_strategy, hindsight_state_selection_strategy_horizon, "shape", HSM_shape, "gamma", HSM_gamma, "freq", HSM_n_traj_freq, "min_criterion:", HSM_min_criterion)
@@ -178,6 +181,12 @@ class HerReplayBuffer(DictReplayBuffer):
         self.HSM_gamma = HSM_gamma
         self.HSM_n_traj_freq = HSM_n_traj_freq
         self.HSM_min_criterion = HSM_min_criterion
+
+        self.n_total_steps = 0
+        self.n_sampled_hindsight_states_change_per_step = n_sampled_hindsight_states_change_per_step
+        self.HSM_criterion_change_per_step = HSM_criterion_change_per_step
+
+        self.prioritized_replay_baseline = prioritized_replay_baseline
 
         self.HSM_logging = False
 
@@ -357,10 +366,16 @@ class HerReplayBuffer(DictReplayBuffer):
             ):
 
         # store hsm trajectories in buffer
-        idx_env = 0
-        for hsm_trajectory in hsm_trajectories:
-            self.hsm_traj_buffer.append((hsm_trajectory, idx_env, self.idx_eps_hsm))
-            idx_env += 1
+        if self.prioritized_replay_baseline:
+            # use 'normal' trajectories
+            for hsm_trajectory in hsm_trajectories:
+                self.hsm_traj_buffer.append((trajectory, 0, self.idx_eps_hsm))
+        else:
+            # use extra trajectories
+            idx_env = 0
+            for hsm_trajectory in hsm_trajectories:
+                self.hsm_traj_buffer.append((hsm_trajectory, idx_env, self.idx_eps_hsm))
+                idx_env += 1
         self.idx_eps_hsm += 1
 
         # calculate criterion for every transition in hsm trajectories buffer
@@ -426,7 +441,14 @@ class HerReplayBuffer(DictReplayBuffer):
 
         
             # sort by criterion and add to replay buffer
-            n_to_select = int(len(hsm_transitions) * self.n_sampled_hindsight_states / self.HSM_shape)
+
+            n_sampled_hindsight_states_eff = max([0, self.n_sampled_hindsight_states + self.n_sampled_hindsight_states_change_per_step * self.n_total_steps])
+            HSM_min_criterion_eff = self.HSM_min_criterion + self.HSM_criterion_change_per_step * self.n_total_steps
+
+            print("initial:", self.n_sampled_hindsight_states, "current:", n_sampled_hindsight_states_eff, "final:", max([0, self.n_sampled_hindsight_states + self.n_sampled_hindsight_states_change_per_step * 1000000]))
+            print("initial:", self.HSM_min_criterion, "current:", HSM_min_criterion_eff, "final:", self.HSM_min_criterion + self.HSM_criterion_change_per_step * 1000000)
+
+            n_to_select = int(len(hsm_transitions) * n_sampled_hindsight_states_eff / self.HSM_shape)
             random.shuffle(hsm_transitions)
             hsm_criteria = np.array([t[0] for t in hsm_transitions])
             indices = np.argpartition(hsm_criteria, n_to_select)[:n_to_select]
@@ -434,7 +456,7 @@ class HerReplayBuffer(DictReplayBuffer):
             hsm_transitions_selected = []
             for idx in indices:
                 criterion, transition, _, _, _ = hsm_transitions[idx]
-                if -1.0*criterion>=self.HSM_min_criterion:
+                if -1.0*criterion>=HSM_min_criterion_eff:
                     self.replay_buffer.add(*transition)
                     hsm_transitions_selected.append(hsm_transitions[idx])
 
@@ -445,10 +467,12 @@ class HerReplayBuffer(DictReplayBuffer):
             self.hsm_traj_buffer = []
 
         # add all 'normally' collected transitions
-        idx=0
+        # ball_hit = trajectory[-1][3]>0.01
+
         for transition in trajectory:
-            self.replay_buffer.add(*transition)  
-            idx += 1
+            self.replay_buffer.add(*transition)
+            self.n_total_steps += 1
+
 
         return
 
