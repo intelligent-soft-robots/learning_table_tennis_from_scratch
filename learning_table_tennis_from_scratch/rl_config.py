@@ -48,7 +48,10 @@ class RLConfig:
         "hindsight_state_selection_strategy_horizon",
         "HSM_shape",
         "HSM_n_traj_freq",
-        "HSM_min_criterion"
+        "HSM_min_criterion",
+        "n_sampled_hindsight_states_change_rel",
+        "HSM_criterion_change",
+        "prioritized_replay_baseline",
     )
 
 
