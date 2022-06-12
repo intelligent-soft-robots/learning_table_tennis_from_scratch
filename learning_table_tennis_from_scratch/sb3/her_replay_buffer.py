@@ -426,7 +426,7 @@ class HerReplayBuffer(DictReplayBuffer):
                         min_q_value, _ = th.min(q_value, dim=1, keepdim=True)
                         min_q_value = min_q_value[0][0].item()
                         advantage = reward_sum + self.HSM_gamma * min_qf_pi_2 *(1 - done) -  min_q_value
-                        criterion = -advantage
+                        criterion = -abs(advantage)
                     else:
                         raise ValueError(f"Strategy {self.hindsight_state_selection_strategy} - {self.hindsight_state_selection_strategy_horizon} for sampling hindsight states is not supported!")
 
