@@ -392,7 +392,7 @@ class HerReplayBuffer(DictReplayBuffer):
                         elif self.hindsight_state_selection_strategy_horizon == HindsightStateSelectionStrategyHorizon.FUTURE:
                             criterion = -sum([hsm_trajectory[idx][3]*self.HSM_gamma**(idx-idx_trans) for idx in range(idx_trans, len(hsm_trajectory))])
                         elif self.hindsight_state_selection_strategy_horizon == HindsightStateSelectionStrategyHorizon.EPISODE:
-                            criterion = -sum([hsm_trajectory[idx][3]*self.HSM_gamma**idx for idx in range(0, len(hsm_trajectory))])
+                            criterion = -sum([hsm_trajectory[idx][3]*1.0**idx for idx in range(0, len(hsm_trajectory))])
                         else:
                             raise ValueError(f"Strategy {self.hindsight_state_selection_strategy} - {self.hindsight_state_selection_strategy_horizon} for sampling hindsight states is not supported!")
                     elif self.hindsight_state_selection_strategy == HindsightStateSelectionStrategy.ADVANTAGE:
