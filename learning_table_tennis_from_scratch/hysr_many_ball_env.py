@@ -374,7 +374,13 @@ class HysrManyBallEnv(gym.Env):
                 self.dump_data(self.data_buffer)
             if self._logger:
                 self._logger.record("eprew", reward)
-                self._logger.dump()
+                self._logger.record("min_discante_ball_racket", self._hysr._ball_status.min_distance_ball_racket or 0)
+                self._logger.record("min_distance_ball_target_capped",
+                    min(
+                        self._hysr._ball_status.min_distance_ball_target or self._hysr._reward_function.config.normalization_constant,
+                        self._hysr._reward_function.config.normalization_constant))
+                self._logger.record("max_ball_velocity", self._hysr._ball_status.max_ball_velocity)
+                # self._logger.dump()
             self.n_eps += 1
 
         # use different ball for observation if main ball not active anymore
