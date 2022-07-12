@@ -59,6 +59,7 @@ class RLConfig:
     _additional_params = (
         "num_timesteps",  # 'total_timesteps' passed to RL.learn()
         "save_path",  # If set the model is saved to the given path.
+        "load_path", #If set a pretrained model is loaded from the given path.
         "num_layers",  # Number of layers in the network
         "num_hidden",  # Size of each layer (all layers have same size)
         "log_path",  # Destination for checkpoints and log files

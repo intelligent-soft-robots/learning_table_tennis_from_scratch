@@ -23,6 +23,7 @@ def run_stable_baselines(
     from stable_baselines3.common import logger
     from stable_baselines3.common.env_util import make_vec_env
     from stable_baselines3.common.callbacks import CheckpointCallback
+    from stable_baselines3.common.evaluation import evaluate_policy
 
     rl_config = RLConfig.from_json(rl_config_file, algorithm)
     hysr_config = HysrOneBallConfig.from_json(hysr_one_ball_config_file)
@@ -113,7 +114,12 @@ def run_stable_baselines(
     # set custom logger, so we also get CSV output
     model.set_logger(tensorboard_logger)
 
-    model.learn(total_timesteps=rl_config.num_timesteps, callback=checkpoint_callback)
+    if rl_config.load_path:
+        del model
+        model = model_type[algorithm].load(rl_config.load_path, env)
+        model.learn(total_timesteps=rl_config.num_timesteps, callback=checkpoint_callback)
+    else:
+        model.learn(total_timesteps=rl_config.num_timesteps, callback=checkpoint_callback)
 
     if rl_config.save_path:
         model.save(rl_config.save_path)
