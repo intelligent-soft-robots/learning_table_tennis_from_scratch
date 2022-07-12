@@ -24,6 +24,7 @@ def run_stable_baselines(
     from stable_baselines3.common.env_util import make_vec_env
     from stable_baselines3.common.utils import set_random_seed
     from stable_baselines3.common.callbacks import CheckpointCallback
+    from stable_baselines3.common.evaluation import evaluate_policy
 
     if seed is not None:
         set_random_seed(seed)
@@ -130,14 +131,15 @@ def run_stable_baselines(
 
     
     if rl_config.load_path:
-        model_type[algorithm].load(rl_config.load_path, env)
+        del model
+        model = model_type[algorithm].load(rl_config.load_path, env)
         print("load model from:", rl_config.load_path)
 
-        model.learn(
-            total_timesteps=rl_config.num_timesteps,
-            callback=checkpoint_callback,
-            reset_num_timesteps=not continue_training,
-        )
+    model.learn(
+        total_timesteps=rl_config.num_timesteps,
+        callback=checkpoint_callback,
+        reset_num_timesteps=not continue_training,
+    )
 
     if rl_config.save_path:
         model.save(rl_config.save_path)
