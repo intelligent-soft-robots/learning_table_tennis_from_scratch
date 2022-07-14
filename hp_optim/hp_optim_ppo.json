@@ -40,26 +40,6 @@
     "num_best_jobs_whose_data_is_kept": 10,
     "optimized_params": [
         {
-            "param": "config.rl_config.gamma",
-            "distribution": "Discrete",
-            "options": [0.9, 0.95, 0.98, 0.99, 0.999, 0.9999, 0.99999]
-        },
-        {
-            "param": "config.rl_config.ent_coef",
-            "distribution": "TruncatedLogNormal",
-            "bounds": [1e-9, 1e-4]
-        },
-        {
-            "param": "config.rl_config.num_layers",
-            "distribution": "Discrete",
-            "options": [1]
-        },
-        {
-            "param": "config.rl_config.num_hidden",
-            "distribution": "IntLogNormal",
-            "bounds": [32, 128]
-        },
-        {
             "param": "config.rl_config.learning_rate",
             "distribution": "TruncatedLogNormal",
             "bounds": [1e-5, 0.001]
@@ -73,26 +53,6 @@
             "param": "config.rl_config.gradient_steps",
             "distribution": "IntLogNormal",
             "bounds": [1, 5]
-        },
-        {
-            "param": "config.rl_config.train_freq",
-            "distribution": "IntLogNormal",
-            "bounds": [1,5]
-        },
-        {
-            "param": "config.rl_config.buffer_size",
-            "distribution": "IntLogNormal",
-            "bounds": [80000, 150000]
-        },
-        {
-            "param": "config.rl_config.learning_starts",
-            "distribution": "IntLogNormal",
-            "bounds": [3000, 40000]
-        },
-        {
-            "param": "config.hysr_config.pressure_change_range",
-            "distribution": "IntLogNormal",
-            "bounds": [360, 1800]
         }
     ]
 }
