@@ -97,14 +97,15 @@ class HerReplayBuffer(DictReplayBuffer):
         HSM_n_traj_freq = 100,
         HSM_critic = None,
         HSM_critic_target = None,
-        HSM_actor = None,
+        HSM_policy = None,
         HSM_min_criterion = -1000,
         n_sampled_hindsight_states_change_per_step = 0,
         HSM_criterion_change_per_step = 0,
-        prioritized_replay_baseline = False
+        HSM_importance_sampling = False,
+        prioritized_replay_baseline = False,
     ):
-        if apply_HSM:
-            print("hsm params:", hindsight_state_selection_strategy, hindsight_state_selection_strategy_horizon, "shape", HSM_shape, "gamma", HSM_gamma, "freq", HSM_n_traj_freq, "min_criterion:", HSM_min_criterion)
+    #    if apply_HSM:
+    #        print("hsm params:", hindsight_state_selection_strategy, hindsight_state_selection_strategy_horizon, "shape", HSM_shape, "gamma", HSM_gamma, "freq", HSM_n_traj_freq, "min_criterion:", HSM_min_criterion)
 
         super(HerReplayBuffer, self).__init__(buffer_size, env.observation_space, env.action_space, device, env.num_envs)
 
@@ -177,7 +178,7 @@ class HerReplayBuffer(DictReplayBuffer):
         self.HSM_shape = HSM_shape
         self.HSM_critic = HSM_critic
         self.HSM_critic_target = HSM_critic_target
-        self.HSM_actor = HSM_actor
+        self.HSM_policy = HSM_policy
         self.HSM_gamma = HSM_gamma
         self.HSM_n_traj_freq = HSM_n_traj_freq
         self.HSM_min_criterion = HSM_min_criterion
@@ -185,6 +186,7 @@ class HerReplayBuffer(DictReplayBuffer):
         self.n_total_steps = 0
         self.n_sampled_hindsight_states_change_per_step = n_sampled_hindsight_states_change_per_step
         self.HSM_criterion_change_per_step = HSM_criterion_change_per_step
+        self.HSM_importance_sampling = HSM_importance_sampling
 
         self.prioritized_replay_baseline = prioritized_replay_baseline
 
@@ -369,19 +371,19 @@ class HerReplayBuffer(DictReplayBuffer):
         if self.prioritized_replay_baseline:
             # use 'normal' trajectories
             for hsm_trajectory in hsm_trajectories:
-                self.hsm_traj_buffer.append((trajectory, 0, self.idx_eps_hsm))
+                self.hsm_traj_buffer.append((trajectory, trajectory, 0, self.idx_eps_hsm))
         else:
             # use extra trajectories
             idx_env = 0
             for hsm_trajectory in hsm_trajectories:
-                self.hsm_traj_buffer.append((hsm_trajectory, idx_env, self.idx_eps_hsm))
+                self.hsm_traj_buffer.append((hsm_trajectory, trajectory, idx_env, self.idx_eps_hsm))
                 idx_env += 1
         self.idx_eps_hsm += 1
 
         # calculate criterion for every transition in hsm trajectories buffer
         if len(self.hsm_traj_buffer)>=self.HSM_n_traj_freq:
             hsm_transitions = []
-            for hsm_trajectory, idx_env, idx_eps in self.hsm_traj_buffer:
+            for hsm_trajectory, trajectory, idx_env, idx_eps in self.hsm_traj_buffer:
                 for idx_trans in range(len(hsm_trajectory)):
                     transition = hsm_trajectory[idx_trans]
                     if self.hindsight_state_selection_strategy == HindsightStateSelectionStrategy.RANDOM:
@@ -416,7 +418,7 @@ class HerReplayBuffer(DictReplayBuffer):
                         if self.hindsight_state_selection_strategy_horizon == HindsightStateSelectionStrategyHorizon.STEP:
                             ob_norm_2 = self._normalize_obs(ob_2)
                             ob_norm_2 = {key: self.to_torch([ob_norm_2[key]]) for key in self._observation_keys}
-                            action_pi_2, _ = self.HSM_actor.action_log_prob(ob_norm_2)
+                            action_pi_2, _ = self.HSM_policy.actor.action_log_prob(ob_norm_2)
                             q_value_pi_2 = th.cat(self.HSM_critic(ob_norm_2, action_pi_2), dim=1)
                             min_qf_pi_2, _ = th.min(q_value_pi_2, dim=1, keepdim=True)
                             min_qf_pi_2 = min_qf_pi_2[0][0].item()
@@ -430,8 +432,36 @@ class HerReplayBuffer(DictReplayBuffer):
                     else:
                         raise ValueError(f"Strategy {self.hindsight_state_selection_strategy} - {self.hindsight_state_selection_strategy_horizon} for sampling hindsight states is not supported!")
 
+                    if self.HSM_importance_sampling and idx_trans<len(trajectory):
+                        ob_norm = self._normalize_obs(ob)
+                        ob_norm = {key: self.to_torch([ob_norm[key]]) for key in self._observation_keys}
+                        mean_actions, log_std, _ = self.HSM_policy.actor.get_action_dist_params(ob_norm)
+                        self.HSM_policy.actor.action_dist.proba_distribution(mean_actions, log_std)
+                        log_likelihood = self.HSM_policy.actor.action_dist.log_prob(action)
 
-                    hsm_transitions.append((criterion, transition, idx_trans, idx_eps, idx_env))
+                        ob_real = trajectory[idx_trans][0]
+                        ob_real_norm = self._normalize_obs(ob_real)
+                        ob_real_norm = {key: self.to_torch([ob_real_norm[key]]) for key in self._observation_keys}
+                        mean_actions, log_std, _ = self.HSM_policy.actor.get_action_dist_params(ob_real_norm)
+                        self.HSM_policy.actor.action_dist.proba_distribution(mean_actions, log_std)
+                        log_likelihood_real = self.HSM_policy.actor.action_dist.log_prob(action)
+                        
+                        log_likelihood = log_likelihood[0].item()
+                        log_likelihood_real = log_likelihood_real[0].item()
+                        
+                        is_factor = np.exp(log_likelihood - log_likelihood_real)
+                        is_factor = min(np.e, is_factor)
+                        is_factor = max(is_factor, 1/np.e)
+
+                        criterion_new = is_factor * criterion
+                        criterion = criterion_new
+
+                    use_transition = True
+                    if self.HSM_importance_sampling and not idx_trans<len(trajectory):
+                        use_transition = False
+
+                    if use_transition:
+                        hsm_transitions.append((criterion, transition, idx_trans, idx_eps, idx_env))
 
             #store in log file
             if self.HSM_logging:
