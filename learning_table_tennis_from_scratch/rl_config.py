@@ -51,6 +51,7 @@ class RLConfig:
         "HSM_min_criterion",
         "n_sampled_hindsight_states_change_rel",
         "HSM_criterion_change",
+        "HSM_importance_sampling",
         "prioritized_replay_baseline",
     )
 

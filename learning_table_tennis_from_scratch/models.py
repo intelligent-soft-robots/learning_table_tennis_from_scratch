@@ -100,6 +100,7 @@ def run_stable_baselines(
                 HSM_min_criterion = rl_config.HSM_min_criterion,
                 n_sampled_hindsight_states_change_per_step = rl_config.n_sampled_hindsight_states_change_rel / rl_config.num_timesteps * rl_config.n_sampled_hindsight_states,
                 HSM_criterion_change_per_step = rl_config.HSM_criterion_change / rl_config.num_timesteps,
+                HSM_importance_sampling = rl_config.HSM_importance_sampling,
                 prioritized_replay_baseline = rl_config.prioritized_replay_baseline,
                 online_sampling = False,
                 apply_HSM = True,
