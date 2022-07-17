@@ -190,7 +190,7 @@ class SAC(OffPolicyAlgorithm):
         if self.replay_buffer_class == HerReplayBuffer:
             if self.replay_buffer.apply_HSM:
                 self.replay_buffer.HSM_critic = self.critic
-                self.replay_buffer.HSM_actor = self.actor
+                self.replay_buffer.HSM_policy = self.policy
                 self.replay_buffer.HSM_critic_target = self.critic_target
 
     def train(self, gradient_steps: int, batch_size: int = 64) -> None:
