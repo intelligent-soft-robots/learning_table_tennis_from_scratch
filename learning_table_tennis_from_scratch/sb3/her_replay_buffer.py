@@ -432,7 +432,10 @@ class HerReplayBuffer(DictReplayBuffer):
                     else:
                         raise ValueError(f"Strategy {self.hindsight_state_selection_strategy} - {self.hindsight_state_selection_strategy_horizon} for sampling hindsight states is not supported!")
 
+                    print(idx_trans, len(trajectory))
                     if self.HSM_importance_sampling and idx_trans<len(trajectory):
+                        
+
                         ob_norm = self._normalize_obs(ob)
                         ob_norm = {key: self.to_torch([ob_norm[key]]) for key in self._observation_keys}
                         mean_actions, log_std, _ = self.HSM_policy.actor.get_action_dist_params(ob_norm)
@@ -453,15 +456,19 @@ class HerReplayBuffer(DictReplayBuffer):
                         is_factor = min(np.e, is_factor)
                         is_factor = max(is_factor, 1/np.e)
 
+                        if idx_trans==0:
+                            is_factor_running_avg = is_factor
+                        else:
+                            is_factor_running_avg = is_factor_running_avg* 0.9 + is_factor*0.1
+
                         criterion_new = is_factor * criterion
                         criterion = criterion_new
 
-                    use_transition = True
-                    if self.HSM_importance_sampling and not idx_trans<len(trajectory):
-                        use_transition = False
+                    elif self.HSM_importance_sampling and (not idx_trans<len(trajectory)):
+                        criterion_new = criterion * is_factor_running_avg
+                        criterion = criterion_new
 
-                    if use_transition:
-                        hsm_transitions.append((criterion, transition, idx_trans, idx_eps, idx_env))
+                    hsm_transitions.append((criterion, transition, idx_trans, idx_eps, idx_env))
 
             #store in log file
             if self.HSM_logging:
