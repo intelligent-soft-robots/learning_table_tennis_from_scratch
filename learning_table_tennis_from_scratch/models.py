@@ -17,7 +17,11 @@ def run_stable_baselines(
     from stable_baselines3 import SAC
     from stable_baselines3.common import logger
     from stable_baselines3.common.env_util import make_vec_env
+    from stable_baselines3.common.utils import set_random_seed
     from stable_baselines3.common.callbacks import CheckpointCallback
+
+    if seed is not None:
+        set_random_seed(seed)
 
     rl_config = RLConfig.from_json(rl_config_file, algorithm)
 
@@ -29,7 +33,8 @@ def run_stable_baselines(
         )
         tensorboard_logger.set_level(logger.INFO)
 
-        # Save a checkpoint every n_steps steps, or every 10000 steps if n_steps does not exist (e.g. SAC)
+        # Save a checkpoint every n_steps steps, or every 10000 steps if n_steps does
+        # not exist (e.g. SAC)
         save_freq = getattr(rl_config, "n_steps", 10000)
 
         checkpoint_callback = CheckpointCallback(
@@ -43,7 +48,7 @@ def run_stable_baselines(
         "log_episodes": log_episodes,
         "logger": tensorboard_logger,
     }
-    env = make_vec_env(HysrOneBallEnv, env_kwargs=env_config)
+    env = make_vec_env(HysrOneBallEnv, env_kwargs=env_config, seed=seed)
 
     model_type = {"ppo": PPO, "sac": SAC}
 

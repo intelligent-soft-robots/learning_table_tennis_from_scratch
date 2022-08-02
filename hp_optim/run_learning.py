@@ -12,6 +12,7 @@ import json
 import logging
 import os
 import pathlib
+import re
 import subprocess
 import sys
 import time
@@ -94,8 +95,11 @@ def prepare_config_file(
     """Create config file based on the given template and parameter updates.
 
     The given template is expected to be a valid config file in JSON format.
-    The *paramter_updates* dict can be used to overwrite some of the default
+    The *parameter_updates* dict can be used to overwrite some of the default
     values with custom ones.
+
+    If a parameter name is suffixed with ``:#`` (where # is a number), it will assume
+    that the value of this parameter is a list and will overwrite the value at index #.
 
     The resulting config will be written to "destination_directory/name.json".
 
@@ -107,11 +111,28 @@ def prepare_config_file(
         destination_directory:  Directory to which the resulting configuration
             file is written.
     """
+    logger = get_logger()
+
     with open(template_file, "r") as f:
         config = json.load(f)
 
+    list_parameters = []
+
     # check if all provided parameter updates correspond to existing parameters
     for param in parameter_updates:
+
+        # if parameter name ends with ":#", this indicates the #-th index of a parameter
+        # whose value is a list
+        m = re.match(r"(.*):([0-9])+$", param)
+        if m is not None:
+            param_name = m.group(1)
+            index = int(m.group(2))
+            logger.info("Process list parameter %s[%d]" % (param_name, index))
+            list_parameters.append((param_name, index, parameter_updates[param]))
+
+            # overwrite for following check
+            param = param_name
+
         if param not in config:
             raise KeyError(
                 (
@@ -121,6 +142,17 @@ def prepare_config_file(
             )
 
     config.update(parameter_updates)
+
+    for param, index, value in list_parameters:
+        try:
+            config[param][index] = value
+        except IndexError:
+            raise IndexError(
+                (
+                    "Provided update for parameter '{param}[{index}]' in {config_name}"
+                    " [{file}], but index is out of bounds."
+                ).format(config_name=name, file=template_file, param=param, index=index)
+            )
 
     destination_file = destination_directory / "{}.json".format(name)
     with open(destination_file, "w") as f:
@@ -165,6 +197,20 @@ def setup_config(working_dir: pathlib.Path, params: dict) -> pathlib.Path:
     """
     logger = get_logger()
 
+    base_config = {
+        "reward_config": "./config/reward_config.json",
+        "hysr_config": "./config/hysr_config.json",
+        "pam_config": "./config/pam_config.json",
+        "rl_config": "./config/rl_config.json",
+        "rl_common_config": "./config/rl_common_config.json",
+    }
+
+    # raise error if there is any unexpected value in the config
+    valid_param_keys = list(base_config.keys()) + ["config_templates"]
+    for key in params.keys():
+        if key not in valid_param_keys:
+            raise KeyError("Unexpected key '{}' in params".format(key))
+
     main_config_file = working_dir / "config.json"
     # if config is already there, skip creation (this is the case when
     # restarting after a failure)
@@ -177,13 +223,6 @@ def setup_config(working_dir: pathlib.Path, params: dict) -> pathlib.Path:
         config_dir = working_dir / "config"
         config_dir.mkdir(exist_ok=True, parents=True)
 
-        base_config = {
-            "reward_config": "./config/reward_config.json",
-            "hysr_config": "./config/hysr_config.json",
-            "pam_config": "./config/pam_config.json",
-            "rl_config": "./config/ppo_config.json",
-            "rl_common_config": "./config/rl_common_config.json",
-        }
         with open(main_config_file, "w") as f:
             json.dump(base_config, f)
 
@@ -406,7 +445,7 @@ def main() -> int:
             f"Exit for restart [{run_id}].\n"
             "==========================================\n\n"
         )
-        logger.warn(
+        logger.warning(
             f"Exit for restart [{run_id}].\n"
             "==========================================\n\n",
         )
