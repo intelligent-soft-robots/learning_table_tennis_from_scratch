@@ -5,6 +5,7 @@ import os
 import site
 import sys
 import time
+import numpy as np
 
 import o80
 import o80_pam
@@ -717,13 +718,13 @@ class HysrOneBall:
         # synchronization with the simulated robot(s).
 
         # configuration for the controller
-        KP = [0.05,0.5,0.3,0.01]
-        KI = [0.015,0.045,0.025,0.03]
-        KD = [0.0,0.0,0.0,0.0]
-        NDP = [0.5,0.5,0.5,0.5]
+        KP = [0.4309, 1.212, 0.55, .05]
+        KI = [0.05629, 0.08202, .11, .1]
+        KD = [0.04978, 0.1712, 0.0, 0.0]
+        NDP = [.9]*4
         TIME_STEP = 0.05  # seconds
-        QD_DESIRED = [0.6, 0.6, 0.6, 0.6]  # radian per seconds
-        EXTRA_STEPS = 50
+        QD_DESIRED = [math.pi*.75]*4  # radian per seconds
+        EXTRA_STEPS = 15
         pi4 = math.pi/4.0
         target_position = [0,+pi4,0,0]
         _, _, Q_CURRENT, _ = self._pressure_commands.read()
@@ -739,36 +740,56 @@ class HysrOneBall:
         if not self._accelerated_time:
             frequency_manager = o80.FrequencyManager(1.0 / TIME_STEP)
 
-
-        _, _, q_current, _ = self._pressure_commands.read()
-
         # the position controller
-        position_controller_factory = o80_pam.position_control.PositionControllerFactory(
-            QD_DESIRED,
-            self._pam_config,
-            KP,KD,KI,NDP,
-            TIME_STEP,EXTRA_STEPS
-        )
-        controller = position_controller_factory.get(q_current,target_position)
-        # rolling the controller
-        while controller.has_next():
-            # current position and velocity of the real robot
-            _, _, q, qd = self._pressure_commands.read()
-            # mirroing the simulated robot(s)
-            for mirroring_ in self._mirrorings:
-                mirroring_.set(q, qd)
-            self._parallel_burst.burst(NB_SIM_BURSTS)
-            # applying the controller to get the pressure to set
-            pressures = controller.next(q, qd)
-            # setting the pressures to real robot
-            if self._accelerated_time:
-                # if accelerated times, running the pseudo real robot iterations
-                # (note : o80_pam expected to have started in bursting mode)
-                self._pressure_commands.set(pressures, burst=NB_ROBOT_BURSTS)
+            position_controller_factory = o80_pam.position_control.PositionControllerFactory(
+                QD_DESIRED,
+                self._pam_config,
+                KP,KD,KI,NDP,
+                TIME_STEP,EXTRA_STEPS
+            )
+
+        def control():
+
+            # starting position
+            _, _, q_current, _ = self._pressure_commands.read()
+
+            controller = position_controller_factory.get(q_current,target_position)
+            # rolling the controller
+            while controller.has_next():
+                # current position and velocity of the real robot
+                _, _, q, qd = self._pressure_commands.read()
+                # mirroing the simulated robot(s)
+                for mirroring_ in self._mirrorings:
+                    mirroring_.set(q, qd)
+                self._parallel_burst.burst(NB_SIM_BURSTS)
+                # applying the controller to get the pressure to set
+                pressures = controller.next(q, qd)
+                # setting the pressures to real robot
+                if self._accelerated_time:
+                    # if accelerated times, running the pseudo real robot iterations
+                    # (note : o80_pam expected to have started in bursting mode)
+                    self._pressure_commands.set(pressures, burst=NB_ROBOT_BURSTS)
+                else:
+                    # Should start acting now in the background if not accelerated time
+                    self._pressure_commands.set(pressures, burst=False)
+                    frequency_manager.wait()
+
+            _, _, q_current, _ = self._pressure_commands.read()
+
+            error = [abs(p-t) for p,t in zip(q_current,target_position)]
+
+            return error
+        
+        error = control()
+        its=0
+        while  max([abs(i/math.pi*180) for i in error]) > 10 :
+            if its<10:
+                time.sleep(2)
+                error = control()
+                its +=1
             else:
-                # Should start acting now in the background if not accelerated time
-                self._pressure_commands.set(pressures, burst=False)
-                frequency_manager.wait()
+                input("_move_to_position: STOPPING!!! Could not move to target pos with sufficient accuracy! Press key...")
+                break
 
     def reset(self):
 
