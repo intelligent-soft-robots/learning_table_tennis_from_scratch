@@ -804,7 +804,7 @@ class HysrOneBall:
         KI = [0.05629, 0.08202, .11, .1]
         KD = [0.04978, 0.1712, 0.0, 0.0]
         NDP = [.9]*4
-        TIME_STEP = 0.05  # seconds
+        TIME_STEP = 0.01  # seconds
         QD_DESIRED = [math.pi*.75]*4  # radian per seconds
         EXTRA_STEPS = 15
         pi4 = math.pi/4.0
@@ -816,26 +816,26 @@ class HysrOneBall:
 
         # configuration for accelerated time
         if self._accelerated_time:
-            NB_ROBOT_BURSTS = int((TIME_STEP / hysr_config.o80_pam_time_step) + 0.5)
-
-        # configuration for real time
-        if not self._accelerated_time:
-            frequency_manager = o80.FrequencyManager(1.0 / TIME_STEP)
+            NB_ROBOT_BURSTS = int((TIME_STEP / self._hysr_config.o80_pam_time_step) + 0.5)
 
         # applying the controller twice yields better results
         for _ in range(2):
 
             _, _, q_current, _ = self._pressure_commands.read()
         # the position controller
-            position_controller_factory = o80_pam.position_control.PositionControllerFactory(
-                QD_DESIRED,
-                self._pam_config,
-                KP,KD,KI,NDP,
-                TIME_STEP,EXTRA_STEPS
-            )
+        position_controller_factory = o80_pam.position_control.PositionControllerFactory(
+            QD_DESIRED,
+            self._pam_config,
+            KP,KD,KI,NDP,
+            TIME_STEP,EXTRA_STEPS
+        )
 
         def control():
 
+            # configuration for real time
+            if not self._accelerated_time:
+                frequency_manager = o80.FrequencyManager(1.0 / TIME_STEP)
+            
             # starting position
             _, _, q_current, _ = self._pressure_commands.read()
 
@@ -854,6 +854,7 @@ class HysrOneBall:
                 if self._accelerated_time:
                     # if accelerated times, running the pseudo real robot iterations
                     # (note : o80_pam expected to have started in bursting mode)
+                    pressures,_,_,_ = self._pressure_commands.read()
                     self._pressure_commands.set(pressures, burst=NB_ROBOT_BURSTS)
                 else:
                     # Should start acting now in the background if not accelerated time
@@ -865,12 +866,26 @@ class HysrOneBall:
             error = [abs(p-t) for p,t in zip(q_current,target_position)]
 
             return error
-        
+
+        def _mirror_sleep(duration):
+            nb_steps = int((duration / TIME_STEP)+0.5)
+            if not self._accelerated_time:
+                frequency_manager = o80.FrequencyManager(1.0 / TIME_STEP)
+            for step in range(nb_steps):
+                _, _, q, qd = self._pressure_commands.read()
+                for mirroring_ in self._mirrorings:
+                    mirroring_.set(q, qd)
+                self._parallel_burst.burst(NB_SIM_BURSTS)
+                if not self._accelerated_time:
+                    frequency_manager.wait()
+                else:
+                    self._pressure_commands.set(pressures, burst=NB_ROBOT_BURSTS)
+            
         error = control()
         its=0
         while  max([abs(i/math.pi*180) for i in error]) > 10 :
             if its<10:
-                time.sleep(2)
+                _mirror_sleep(2.)
                 error = control()
                 its +=1
             else:
