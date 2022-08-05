@@ -6,6 +6,7 @@
     "log_path": "/tmp/test_hsm_adv_step_t01",
     "num_timesteps": 1000000,
     "save_path": "/tmp/test_hsm_adv_step_t01",
+    "load_path": "",
     "num_layers": 1,
     "num_hidden": 60,
     "gradient_steps": 1,
@@ -18,7 +19,9 @@
     "HSM_shape": 3,
     "HSM_n_traj_freq" : 5,
     "HSM_min_criterion" : 0.1,
-    "n_sampled_hindsight_states_change_rel": -0.5,
-    "HSM_criterion_change": 2,
+    "n_sampled_hindsight_states_change_rel": 0,
+    "HSM_criterion_change": 0,
+    "HSM_use_likelihood_ratio": true,
+    "HSM_likelihood_ratio_cutoff": 0.368,
     "prioritized_replay_baseline": true
 }
