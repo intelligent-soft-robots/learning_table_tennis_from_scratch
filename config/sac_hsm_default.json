@@ -23,5 +23,5 @@
     "HSM_criterion_change": 0,
     "HSM_use_likelihood_ratio": true,
     "HSM_likelihood_ratio_cutoff": 0.368,
-    "prioritized_replay_baseline": true
+    "prioritized_replay_baseline": false
 }
