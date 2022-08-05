@@ -1,5 +1,6 @@
 {
     "normalization_constant":3.0,
+    "distance_exponent": 0.75,
     "rtt_cap":-0.2,
     "smash":false,
     "binary":false,

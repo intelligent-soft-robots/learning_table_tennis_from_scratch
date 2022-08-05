@@ -101,7 +101,8 @@ class HerReplayBuffer(DictReplayBuffer):
         HSM_min_criterion = -1000,
         n_sampled_hindsight_states_change_per_step = 0,
         HSM_criterion_change_per_step = 0,
-        HSM_importance_sampling = False,
+        HSM_use_likelihood_ratio = False,
+        HSM_likelihood_ratio_cutoff = 1/np.e,
         prioritized_replay_baseline = False,
     ):
     #    if apply_HSM:
@@ -186,7 +187,8 @@ class HerReplayBuffer(DictReplayBuffer):
         self.n_total_steps = 0
         self.n_sampled_hindsight_states_change_per_step = n_sampled_hindsight_states_change_per_step
         self.HSM_criterion_change_per_step = HSM_criterion_change_per_step
-        self.HSM_importance_sampling = HSM_importance_sampling
+        self.HSM_use_likelihood_ratio = HSM_use_likelihood_ratio
+        self.HSM_likelihood_ratio_cutoff = HSM_likelihood_ratio_cutoff
 
         self.prioritized_replay_baseline = prioritized_replay_baseline
 
@@ -432,8 +434,7 @@ class HerReplayBuffer(DictReplayBuffer):
                     else:
                         raise ValueError(f"Strategy {self.hindsight_state_selection_strategy} - {self.hindsight_state_selection_strategy_horizon} for sampling hindsight states is not supported!")
 
-                    print(idx_trans, len(trajectory))
-                    if self.HSM_importance_sampling and idx_trans<len(trajectory):
+                    if self.HSM_use_likelihood_ratio and idx_trans<len(trajectory):
                         
 
                         ob_norm = self._normalize_obs(ob)
@@ -453,8 +454,8 @@ class HerReplayBuffer(DictReplayBuffer):
                         log_likelihood_real = log_likelihood_real[0].item()
                         
                         is_factor = np.exp(log_likelihood - log_likelihood_real)
-                        is_factor = min(np.e, is_factor)
-                        is_factor = max(is_factor, 1/np.e)
+                        is_factor = min(self.HSM_likelihood_ratio_cutoff, is_factor)
+                        is_factor = max(is_factor, self.HSM_likelihood_ratio_cutoff)
 
                         if idx_trans==0:
                             is_factor_running_avg = is_factor
@@ -464,7 +465,7 @@ class HerReplayBuffer(DictReplayBuffer):
                         criterion_new = is_factor * criterion
                         criterion = criterion_new
 
-                    elif self.HSM_importance_sampling and (not idx_trans<len(trajectory)):
+                    elif self.HSM_use_likelihood_ratio and (not idx_trans<len(trajectory)):
                         criterion_new = criterion * is_factor_running_avg
                         criterion = criterion_new
 
