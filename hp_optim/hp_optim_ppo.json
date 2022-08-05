@@ -16,7 +16,7 @@
         "request_cpus": 2,
         "request_gpus": 0,
         "cuda_requirement": null,
-        "memory_in_mb": 15000,
+        "memory_in_mb": 30000,
         "bid": 100
     },
     "fixed_params": {
@@ -34,8 +34,8 @@
     "optimization_setting": {
         "metric_to_optimize": "mean_eprewmean",
         "minimize": false,
-        "number_of_samples": 100,
-        "n_jobs_per_iteration": 10
+        "number_of_samples": 5,
+        "n_jobs_per_iteration": 5
     },
     "num_best_jobs_whose_data_is_kept": 10,
     "optimized_params": [
