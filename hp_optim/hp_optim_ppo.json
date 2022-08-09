@@ -13,7 +13,7 @@
     "environment_setup": {
     },
     "cluster_requirements": {
-        "request_cpus": 2,
+        "request_cpus": 6,
         "request_gpus": 0,
         "cuda_requirement": null,
         "memory_in_mb": 30000,
