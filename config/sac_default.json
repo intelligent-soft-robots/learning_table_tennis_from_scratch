@@ -6,6 +6,7 @@
     "log_path": "/tmp/test_sac_01",
     "num_timesteps": 500000,
     "save_path": "/tmp/test_sac_01",
+    "load_path": "",
     "num_layers": 1,
     "num_hidden": 60,
     "gradient_steps": 1,

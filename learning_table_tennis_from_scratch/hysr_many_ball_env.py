@@ -14,6 +14,10 @@ from .hysr_one_ball import HysrOneBall, HysrOneBallConfig
 from .rewards import JsonReward
 
 
+def sat(x,lmin,lmax):
+        y=min(max(x, lmin), lmax)
+        return y
+
 class _ObservationSpace:
 
     # the model does not support gym Dict or Tuple spaces
@@ -105,9 +109,19 @@ class HysrManyBallEnv(gym.Env):
 
         self._hysr = HysrOneBall(hysr_one_ball_config, reward_function)
 
-        self.action_space = gym.spaces.Box(
-            low=-1.0, high=+1.0, shape=(self._nb_dofs * 2,), dtype=np.float32
-        )
+        self.delta_p = hysr_one_ball_config.delta_p
+        self.delta_p_p0_is_action = hysr_one_ball_config.delta_p_p0_is_action
+        self.delta_p_p0_value = hysr_one_ball_config.delta_p_p0_value
+        self.delta_u_init = hysr_one_ball_config.delta_u_init
+
+        if self.delta_p and not self.delta_p_p0_is_action:
+            self.action_space = gym.spaces.Box(
+                low=-1.0, high=+1.0, shape=(self._nb_dofs,), dtype=np.float32
+            )
+        else:
+            self.action_space = gym.spaces.Box(
+                low=-1.0, high=+1.0, shape=(self._nb_dofs * 2,), dtype=np.float32
+            )
 
         self._obs_boxes = _ObservationSpace()
         self._hs_boxes = _ObservationSpace()
@@ -152,12 +166,19 @@ class HysrManyBallEnv(gym.Env):
         self.last_action = np.zeros(self._nb_dofs * 2, dtype=np.float32)
         starting_pressures = self._hysr.get_starting_pressures()
         for dof in range(self._nb_dofs):
-            self.last_action[2 * dof] = self._reverse_scale_pressure(
-                dof, True, starting_pressures[dof][0]
-            )
-            self.last_action[2 * dof + 1] = self._reverse_scale_pressure(
-                dof, False, starting_pressures[dof][1]
-            )
+            if self.delta_p:
+                if self.delta_p_p0_is_action:
+                    self.last_action[2 * dof] = self.delta_u_init[dof] #+ self.n_eps/1000 * (dof == 1)
+                else:
+                    self.last_action[dof] = self.delta_u_init[dof] #+ self.n_eps/1000 * (dof == 1)
+
+            else:
+                self.last_action[2 * dof] = self._reverse_scale_pressure(
+                    dof, True, starting_pressures[dof][0]
+                )
+                self.last_action[2 * dof + 1] = self._reverse_scale_pressure(
+                    dof, False, starting_pressures[dof][1]
+                )
 
     def _bound_pressure(self, dof, ago, value):
         if ago:
@@ -206,6 +227,26 @@ class HysrManyBallEnv(gym.Env):
                 self._config.max_pressures_antago[dof]
                 - self._config.min_pressures_antago[dof]
             )
+
+    def _scale_pressure_delta_p(self, dof, ago, u, p0):
+        incorr = True
+        if ago:
+            pmin = self._config.min_pressures_ago[dof]
+            pmax = self._config.max_pressures_ago[dof]
+        else:
+            pmin = self._config.min_pressures_antago[dof]
+            pmax = self._config.max_pressures_antago[dof]
+        m=pmax-pmin
+        if incorr:
+            ddp=.5-sat(abs(p0-.5),0,.5)
+        else:
+            ddp=0
+        if ago:
+            p=sat(m*(p0+(1-ddp)*sat(u,-1,1))+pmin,pmin,pmax)
+        else:
+            p=sat(m*(p0-(1-ddp)*sat(u,-1,1))+pmin,pmin,pmax)
+        return p
+
 
     def _convert_observation(self, observation):
         self._obs_boxes.set_values_non_norm(
@@ -284,6 +325,11 @@ class HysrManyBallEnv(gym.Env):
         if not self._accelerated_time and self._frequency_manager is None:
             self._frequency_manager = o80.FrequencyManager(1.0 / self._algo_time_step)
 
+        # pad action with zeros in case of delta_p approach to keep dimension of action
+        if self.delta_p and not self.delta_p_p0_is_action:
+            action_orig_delta_p = action
+            action = np.concatenate([action, np.zeros(np.shape(action))])
+
         action_orig = action.copy()
 
         # casting similar to old code
@@ -297,11 +343,22 @@ class HysrManyBallEnv(gym.Env):
         action_casted = action.copy()
 
         # put pressure in range as defined in parameters file
-        for dof in range(self._nb_dofs):
-            action[2 * dof] = self._scale_pressure(dof, True, action[2 * dof])
-            action[2 * dof + 1] = (
-                self._scale_pressure(dof, False, action[2 * dof + 1])
-            )
+        if not self.delta_p:
+            for dof in range(self._nb_dofs):
+                action[2 * dof] = self._scale_pressure(dof, True, action_casted[2 * dof])
+                action[2 * dof + 1] = (
+                    self._scale_pressure(dof, False, action_casted[2 * dof + 1])
+                )
+        else:
+            for dof in range(self._nb_dofs):
+                if self.delta_p_p0_is_action:
+                    p0 = action_casted[2*dof+1]
+                    value = action_casted[2*dof] * 2 - 1
+                else:
+                    p0 = self.delta_p_p0_value[dof]
+                    value = action_casted[dof] * 2 - 1
+                action[2 * dof] = self._scale_pressure_delta_p(dof, True, value, p0)
+                action[2 * dof+1] = self._scale_pressure_delta_p(dof, False, value, p0)
 
         # final target pressure (make sure that it is within bounds)
         for dof in range(self._nb_dofs):
@@ -329,7 +386,11 @@ class HysrManyBallEnv(gym.Env):
                 idx += 1
             
             if idx_ball_still_active == -1: # non of the balls still can be hit anymore 
-                return self.step(action_orig)
+                if not episode_over and not self._hysr._ball_status.min_distance_ball_racket:
+                    if self.delta_p and not self.delta_p_p0_is_action:
+                        return self.step(action_orig_delta_p)
+                    else:
+                        return self.step(action_orig)
 
         obs = self._get_obs(observation)
         extra_obs = self._get_extra_obs(extra_observations)
@@ -339,7 +400,7 @@ class HysrManyBallEnv(gym.Env):
         self.data_buffer.append(
             (
                 obs,
-                action_orig,
+                action_orig_delta_p if self.delta_p and not self.delta_p_p0_is_action else action_orig,
                 reward,
                 episode_over,
                 self.previous_obs,
@@ -353,14 +414,13 @@ class HysrManyBallEnv(gym.Env):
             zip(extra_obs, extra_rewards, extra_dones, self.previous_extra_obs, self._hysr.extra_min_distance_ball_racket):
             self.extra_data_buffer[idx].append(
                 (extra_ob,
-                action_orig,
+                action_orig_delta_p if self.delta_p and not self.delta_p_p0_is_action else action_orig,
                 extra_reward,
                 extra_episode_over,
                 extra_previous_obs,
                 extra_min_distance_ball_racket)
             )
             idx += 1
-
         infos = {}
 
         self.previous_extra_obs = extra_obs

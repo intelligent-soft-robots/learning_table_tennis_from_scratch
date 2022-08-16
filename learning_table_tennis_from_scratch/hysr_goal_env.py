@@ -5,6 +5,7 @@ from typing import Dict, Union
 from collections import OrderedDict
 
 import gym
+import gym_robotics
 import numpy as np
 import o80
 import pam_interface
@@ -73,7 +74,7 @@ class _ObservationSpace:
         return r
 
 
-class HysrGoalEnv(gym.GoalEnv):
+class HysrGoalEnv(gym_robotics.GoalEnv):
     def __init__(
         self,
         reward_config_file=None,
