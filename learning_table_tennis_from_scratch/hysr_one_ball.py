@@ -800,15 +800,16 @@ class HysrOneBall:
         # synchronization with the simulated robot(s).
 
         # configuration for the controller
-        KP = [0.4309, 1.212, 0.55, .05]
-        KI = [0.05629, 0.08202, .11, .1]
+        KP = [0.4309, 1.212, 0.5, .05]
+        KI = [0.05629, 0.08202, .1, .1]
         KD = [0.04978, 0.1712, 0.0, 0.0]
         NDP = [.9]*4
-        TIME_STEP = 0.01  # seconds
+        TIME_STEP = 0.05  # seconds
         QD_DESIRED = [math.pi*.75]*4  # radian per seconds
-        EXTRA_STEPS = 15
+        EXTRA_STEPS = 20
         pi4 = math.pi/4.0
-        target_position = [0,+pi4,0,0]
+        g80 = 80/180*math.pi
+        target_position = [0,+g80,0,0]
         _, _, Q_CURRENT, _ = self._pressure_commands.read()
 
         # configuration for HYSR
@@ -885,8 +886,11 @@ class HysrOneBall:
         its=0
         while  max([abs(i/math.pi*180) for i in error]) > 10 :
             if its<10:
-                _mirror_sleep(2.)
+                _mirror_sleep(2)
+                print("_move_to_position: err before ",[e/math.pi*180 for e in error])
                 error = control()
+                print("_move_to_position: after before ",[e/math.pi*180 for e in error])
+                # input("_move_to_position: Press key ... ")
                 its +=1
             else:
                 input("_move_to_position: STOPPING!!! Could not move to target pos with sufficient accuracy! Press key...")
