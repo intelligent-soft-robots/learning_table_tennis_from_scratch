@@ -1,9 +1,11 @@
+import math
 import pathlib
 import json
 import os
 import site
 import sys
 import time
+import numpy as np
 
 import o80
 import o80_pam
@@ -716,12 +718,16 @@ class HysrOneBall:
         # synchronization with the simulated robot(s).
 
         # configuration for the controller
-        KP = [0.8, -3.0, 1.2, -1.0]
-        KI = [0.015, -0.25, 0.02, -0.05]
-        KD = [0.04, -0.09, 0.09, -0.09]
-        NDP = [-0.3, -0.5, -0.34, -0.48]
-        TIME_STEP = 0.01  # seconds
-        QD_DESIRED = [0.7, 0.7, 0.7, 0.7]  # radian per seconds
+        KP = [0.4309, 1.212, 0.5, .05]
+        KI = [0.05629, 0.08202, .1, .1]
+        KD = [0.04978, 0.1712, 0.0, 0.0]
+        NDP = [.9]*4
+        TIME_STEP = 0.05  # seconds
+        QD_DESIRED = [math.pi*.75]*4  # radian per seconds
+        EXTRA_STEPS = 20
+        pi4 = math.pi/4.0
+        g80 = 80/180*math.pi
+        target_position = [0,+g80,0,0]
         _, _, Q_CURRENT, _ = self._pressure_commands.read()
 
         # configuration for HYSR
@@ -729,30 +735,26 @@ class HysrOneBall:
 
         # configuration for accelerated time
         if self._accelerated_time:
-            NB_ROBOT_BURSTS = int((TIME_STEP / hysr_config.o80_pam_time_step) + 0.5)
+            NB_ROBOT_BURSTS = int((TIME_STEP / self._hysr_config.o80_pam_time_step) + 0.5)
 
-        # configuration for real time
-        if not self._accelerated_time:
-            frequency_manager = o80.FrequencyManager(1.0 / TIME_STEP)
+        # the position controller
+        position_controller_factory = o80_pam.position_control.PositionControllerFactory(
+            QD_DESIRED,
+            self._pam_config,
+            KP,KD,KI,NDP,
+            TIME_STEP,EXTRA_STEPS
+        )
 
-        # applying the controller twice yields better results
-        for _ in range(2):
+        def control():
 
+            # configuration for real time
+            if not self._accelerated_time:
+                frequency_manager = o80.FrequencyManager(1.0 / TIME_STEP)
+            
+            # starting position
             _, _, q_current, _ = self._pressure_commands.read()
 
-            # the position controller
-            controller = o80_pam.PositionController(
-                q_current,
-                position,
-                QD_DESIRED,
-                self._pam_config,
-                KP,
-                KD,
-                KI,
-                NDP,
-                TIME_STEP,
-            )
-
+            controller = position_controller_factory.get(q_current,target_position)
             # rolling the controller
             while controller.has_next():
                 # current position and velocity of the real robot
@@ -767,11 +769,46 @@ class HysrOneBall:
                 if self._accelerated_time:
                     # if accelerated times, running the pseudo real robot iterations
                     # (note : o80_pam expected to have started in bursting mode)
+                    pressures,_,_,_ = self._pressure_commands.read()
                     self._pressure_commands.set(pressures, burst=NB_ROBOT_BURSTS)
                 else:
                     # Should start acting now in the background if not accelerated time
                     self._pressure_commands.set(pressures, burst=False)
                     frequency_manager.wait()
+
+            _, _, q_current, _ = self._pressure_commands.read()
+
+            error = [abs(p-t) for p,t in zip(q_current,target_position)]
+
+            return error
+
+        def _mirror_sleep(duration):
+            nb_steps = int((duration / TIME_STEP)+0.5)
+            if not self._accelerated_time:
+                frequency_manager = o80.FrequencyManager(1.0 / TIME_STEP)
+            for step in range(nb_steps):
+                _, _, q, qd = self._pressure_commands.read()
+                for mirroring_ in self._mirrorings:
+                    mirroring_.set(q, qd)
+                self._parallel_burst.burst(NB_SIM_BURSTS)
+                if not self._accelerated_time:
+                    frequency_manager.wait()
+                else:
+                    self._pressure_commands.set(pressures, burst=NB_ROBOT_BURSTS)
+            
+        error = control()
+        its=0
+        while  max([abs(i/math.pi*180) for i in error]) > 10 :
+            if its<10:
+                _mirror_sleep(2)
+                print("_move_to_position: err before ",[e/math.pi*180 for e in error])
+                error = control()
+                print("_move_to_position: after before ",[e/math.pi*180 for e in error])
+                # input("_move_to_position: Press key ... ")
+                its +=1
+            else:
+                input("_move_to_position: STOPPING!!! Could not move to target pos with sufficient accuracy! Press key...")
+                break
 
     def reset(self):
 
