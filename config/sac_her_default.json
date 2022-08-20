@@ -1,0 +1,17 @@
+{
+    "gamma": 0.9999,
+    "ent_coef":0,
+    "learning_rate":0.00026,
+    "batch_size": 90,
+    "log_path": "/tmp/training_log",
+    "num_timesteps": 500000,
+    "save_path": "/tmp/model",
+    "num_layers": 1,
+    "num_hidden": 60,
+    "gradient_steps": 4,
+    "train_freq": 2,
+    "buffer_size": 120000,
+    "learning_starts": 10000,
+    "n_sampled_goal": 3,
+    "goal_selection_strategy": "final"
+}

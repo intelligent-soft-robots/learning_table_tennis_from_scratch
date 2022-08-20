@@ -6,6 +6,8 @@ import site
 import sys
 import time
 import numpy as np
+import math
+import random
 
 import o80
 import o80_pam
@@ -38,6 +40,25 @@ def _to_robot_type(robot_type: str) -> pam_mujoco.RobotType:
         ).format(robot_type)
         raise ValueError(error)
 
+def velocity_norm(velocity):
+    return math.sqrt(sum([v ** 2 for v in velocity]))
+
+def distance(p1, p2):
+    return math.sqrt(sum([(a - b) ** 2 for a, b in zip(p1, p2)]))
+
+def min_distance(traj1, traj2):
+    return min([distance(p1, p2) for p1, p2 in zip(traj1, traj2)])
+
+def sample_point_circle(center, radius):
+    x = 1
+    y = 1
+    while x**2 + y**2>1:
+        x = random.random() * 2 - 1
+        y = random.random() * 2 - 1
+    return  [center[0] + radius * x,
+        center[1] + radius * y,
+        center[2]]
+
 
 class HysrOneBallConfig:
 
@@ -53,10 +74,15 @@ class HysrOneBallConfig:
         "table_position",
         "table_orientation",
         "target_position",
+        "target_position_sampling_radius",
         "reference_posture",
         "starting_pressures",
         "world_boundaries",
         "pressure_change_range",
+        "delta_p",
+        "delta_p_p0_is_action",
+        "delta_p_p0_value",
+        "delta_u_init",
         "trajectory",
         "accelerated_time",
         "graphics_pseudo_real",
@@ -364,6 +390,7 @@ class HysrOneBall:
 
         # where we want to shoot the ball
         self._target_position = hysr_config.target_position
+        self._target_position_sampling_radius = hysr_config.target_position_sampling_radius
         self._goal = self._simulated_robot_handle.interfaces[SEGMENT_ID_GOAL]
 
         # to read all recorded trajectory files
@@ -872,10 +899,21 @@ class HysrOneBall:
 
         time.sleep(0.1)
 
-        # resetting ball info, e.g. min distance ball/racket, etc
+        # resetting ball info, e.g. min distance ball/racket, target_position etc
+        if self._target_position_sampling_radius>0:
+            self._ball_status.target_position = sample_point_circle(self._target_position, self._target_position_sampling_radius)
         self._ball_status.reset()
         for ball in self._extra_balls:
+            if self._target_position_sampling_radius>0:
+                ball.ball_status.target_position = sample_point_circle(self._target_position, self._target_position_sampling_radius)
             ball.ball_status.reset()
+
+        # resetting extra balls
+        self.extra_contacts = [False]*self._hysr_config.extra_balls_per_set
+        self.extra_min_distance_ball_racket = [None]*self._hysr_config.extra_balls_per_set
+        self.extra_min_distance_ball_target = [None]*self._hysr_config.extra_balls_per_set
+        self.extra_max_ball_velocity = [0]*self._hysr_config.extra_balls_per_set
+        self.extra_dones_before = [False]*self._hysr_config.extra_balls_per_set
 
         # checking the position of the robot, to see if it drifts
         # as episode increase (or if it not what is expected at all).
@@ -896,7 +934,29 @@ class HysrOneBall:
         self._share_episode_number(self._episode_number)
 
         # returning an observation
-        return self._create_observation()
+        observation = self._create_observation()
+
+        if self._extra_balls_frontend is not None:
+            nb_balls = self._hysr_config.extra_balls_per_set
+
+            observation_extra = self._extra_balls_frontend.latest()
+            states = observation_extra.get_observed_states()
+            extra_ball_positions = [states.get(index).get_position() for index in range(nb_balls)]
+            extra_ball_velocities = [states.get(index).get_velocity() for index in range(nb_balls)]
+            extra_observations = [ _Observation(
+                                observation.joint_positions,
+                                observation.joint_velocities,
+                                observation.pressures,
+                                extra_ball_positions[index],
+                                extra_ball_velocities[index],)
+                                for index in range(nb_balls)]
+
+            #returning with extra transitions
+            return observation, extra_observations
+        
+        return observation, []
+
+
 
     def _episode_over(self):
 
@@ -915,7 +975,7 @@ class HysrOneBall:
         # note : all prerecorded trajectories are added a last ball position
         # with z = -10.0, to insure this always occurs.
         # see: function reset
-        if self._ball_status.ball_position[2] < 0.8:
+        if self._ball_status.ball_position[2] < 0.75 or self._ball_status.ball_position[1] < -0.5:
             return True
         # in case the user called the method
         # force_episode_over
@@ -943,27 +1003,47 @@ class HysrOneBall:
         # getting information about simulated ball
         ball_position, ball_velocity = self._ball_communication.get()
 
-        # getting information about simulated balls
-        def commented():
-            if self._extra_balls_frontend is not None:
-                observation = self._extra_balls_frontend.latest()
-                # robot racket cartesian position
-                robot_cartesian_position = (
-                    observation.get_extended_state().robot_position
-                )
-                # list: for each ball, if a contact occured during this episode so far
-                # (not necessarily during previous step)
-                contacts = observation.get_extended_state().contacts
-                # ball position and velocity
-                state = observation.get_observed_states()
-                ball_0_position = state.get(0).get_position()
-                ball_0_velocity = state.get(0).get_velocity()
-                print(
-                    robot_cartesian_position,
-                    contacts[0],
-                    ball_0_position,
-                    ball_0_velocity,
-                )
+        # getting information about extra simulated balls
+        if self._extra_balls_frontend is not None:
+
+            nb_balls = self._hysr_config.extra_balls_per_set
+
+            observation = self._extra_balls_frontend.latest()
+
+            robot_cartesian_position = observation.get_extended_state().robot_position
+            states = observation.get_observed_states()
+            contacts = observation.get_extended_state().contacts
+            extra_ball_positions = [states.get(index).get_position() for index in range(nb_balls)]
+            extra_ball_velocities = [states.get(index).get_velocity() for index in range(nb_balls)]
+
+            self.extra_contacts = [self.extra_contacts[index] or contacts[index] for index in range(nb_balls) ]
+            self.extra_min_distance_ball_racket = [None if self.extra_contacts[index]
+                                            else distance(extra_ball_positions[index], robot_cartesian_position) if not self.extra_min_distance_ball_racket[index] 
+                                            else min([distance(extra_ball_positions[index], robot_cartesian_position), self.extra_min_distance_ball_racket[index]])
+                                            for index in range(nb_balls)]
+
+            self.extra_min_distance_ball_target = [None if not self.extra_contacts[index]
+                                            else distance(extra_ball_positions[index], self._target_position) if not self.extra_min_distance_ball_racket[index] 
+                                            else min([distance(extra_ball_positions[index], self._target_position), self.extra_min_distance_ball_racket[index]])
+                                            for index in range(nb_balls)]
+
+            self.extra_max_ball_velocity = [None if not self.extra_contacts[index]
+                                            else velocity_norm(extra_ball_velocities[index]) if not self.extra_max_ball_velocity[index] 
+                                            else max([velocity_norm(extra_ball_velocities[index]), self.extra_max_ball_velocity[index]])
+                                            for index in range(nb_balls)]
+
+
+            extra_dones =   [(self._nb_steps_per_episode>0 and self._step_number>= self._nb_steps_per_episode)
+                        or (self._nb_steps_per_episode<=0 and (states.get(index).get_position()[2] < 0.75 or states.get(index).get_position()[2] < -0.5))
+                        or self.extra_dones_before[index]
+                        for index in range(nb_balls)]
+
+            self.extra_dones_before = extra_dones.copy()
+
+            extra_rewards = [0 if not extra_dones[index]
+                    else self._reward_function(self.extra_min_distance_ball_racket[index], self.extra_min_distance_ball_target[index], self.extra_max_ball_velocity[index])
+                        for index in range(nb_balls)
+                ]
 
         # convert action [ago1,antago1,ago2] to list suitable for
         # o80 ([(ago1,antago1),(),...])
@@ -1039,8 +1119,31 @@ class HysrOneBall:
         # this step is done
         self._step_number += 1
 
+        # setting extra transitions
+        extra_observations = []
+        extra_transitions = []
+
+        if self._extra_balls_frontend is not None:
+            extra_observations = [ _Observation(
+                                joint_positions,
+                                joint_velocities,
+                                _convert_pressures_out(pressures_ago, pressures_antago),
+                                extra_ball_positions[index],
+                                extra_ball_velocities[index],)
+                                for index in range(nb_balls)]
+            extra_transitions = [(extra_observations[index],
+                                extra_rewards[index],
+                                extra_dones[index])
+                                for index in range(nb_balls)]
+
+            #returning with extra transitions
+            return observation, reward, episode_over, extra_observations, extra_rewards, extra_dones
+
         # returning
-        return observation, reward, episode_over
+        if self._extra_balls_frontend is not None:
+            return observation, reward, episode_over, extra_transitions
+        else:
+            return observation, reward, episode_over, []
 
     def close(self):
         if self._robot_integrity is not None:

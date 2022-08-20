@@ -10,6 +10,7 @@
     "table_orientation":"0.0 0.0 0.0",
     "starting_pressures":[[18000,18000],[18000,18000],[18000,18000],[18000,18000]],
     "target_position":[0.0,2.5,0.78],
+    "target_position_sampling_radius":1,
     "reference_posture":[[15000,15000],[15000,15800],[15000,15000],[15000,15000]],
     "world_boundaries":{
         "min":[0.0,-1.0,0.17],

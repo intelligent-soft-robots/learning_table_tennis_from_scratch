@@ -1,7 +1,9 @@
 import json
 import math
 import time
+from typing import Dict, Union
 from collections import OrderedDict
+from typing import Any, Dict, Optional, Union
 
 import gym
 import numpy as np
@@ -10,6 +12,7 @@ import pam_interface
 
 from .hysr_one_ball import HysrOneBall, HysrOneBallConfig
 from .rewards import JsonReward
+
 
 def sat(x,lmin,lmax):
         y=min(max(x, lmin), lmax)
@@ -46,6 +49,10 @@ class _ObservationSpace:
         size = sum([b.size for b in self._obs_boxes.values()])
         return gym.spaces.Box(low=0.0, high=1.0, shape=(size,), dtype=np.float32)
 
+    def get_gym_box_extra_obs(self, nb_extra_balls):
+        size = sum([b.size for b in self._obs_boxes.values()])
+        return gym.spaces.Box(low=0.0, high=1.0, shape=(nb_extra_balls, size), dtype=np.float32)
+
     def set_values(self, name, values):
         normalize = self._obs_boxes[name].normalize
         values_ = np.array(list(map(normalize, values)), dtype=np.float32)
@@ -64,6 +71,9 @@ class _ObservationSpace:
         values_ = np.array(values, dtype=np.float32)
         self._values[name] = values_
 
+    def set_values_non_array(self, name, values):
+        self._values[name] = values
+
     def get_normalized_values(self):
         values = list(self._values.values())
         r = np.concatenate(values)
@@ -71,7 +81,7 @@ class _ObservationSpace:
         return r
 
 
-class HysrOneBallEnv(gym.Env):
+class HysrManyBallEnv(gym.Env):
     def __init__(
         self,
         reward_config_file=None,
@@ -114,9 +124,10 @@ class HysrOneBallEnv(gym.Env):
             )
 
         self._obs_boxes = _ObservationSpace()
+        self._hs_boxes = _ObservationSpace()
 
         self._obs_boxes.add_box("robot_position", -math.pi, +math.pi, self._nb_dofs)
-        self._obs_boxes.add_box("robot_velocity", 0.0, 10.0, self._nb_dofs)
+        self._obs_boxes.add_box("robot_velocity", -10.0, 10.0, self._nb_dofs)
         self._obs_boxes.add_box(
             "robot_pressure",
             self._config.min_pressure(),
@@ -132,7 +143,11 @@ class HysrOneBallEnv(gym.Env):
         )
         self._obs_boxes.add_box("ball_velocity", -10.0, +10.0, 3)
 
-        self.observation_space = self._obs_boxes.get_gym_box()
+        self.observation_space = gym.spaces.Dict(
+            {
+            "observation": self._obs_boxes.get_gym_box(),
+            }
+        )
 
         if not self._accelerated_time:
             self._frequency_manager = o80.FrequencyManager(
@@ -144,8 +159,8 @@ class HysrOneBallEnv(gym.Env):
 
     def init_episode(self):
         self.n_steps = 0
-        if self._log_episodes:
-            self.data_buffer = []
+        self.data_buffer = []
+        self.extra_data_buffer = [[] for _ in range(self._hysr._hysr_config.extra_balls_per_set)]
 
         # initialize initial action (for action diffs)
         self.last_action = np.zeros(self._nb_dofs * 2, dtype=np.float32)
@@ -164,7 +179,6 @@ class HysrOneBallEnv(gym.Env):
                 self.last_action[2 * dof + 1] = self._reverse_scale_pressure(
                     dof, False, starting_pressures[dof][1]
                 )
-        
 
     def _bound_pressure(self, dof, ago, value):
         if ago:
@@ -248,10 +262,65 @@ class HysrOneBallEnv(gym.Env):
         self._obs_boxes.set_values_non_norm("ball_velocity", observation.ball_velocity)
         return self._obs_boxes.get_normalized_values()
 
-    def step(self, action):
+    def _get_obs(self, state) -> Dict[str, Union[int, np.ndarray]]:
+            """
+            Helper to create the observation.
 
-        # for TESTING
-        # action = np.zeros(np.shape(action))
+            :return: The current observation.
+            """
+            return OrderedDict(
+                [
+                    ("observation", self._convert_observation(state)),
+                ]
+            )
+
+    def _get_extra_obs(self, extra_states) -> Dict[str, Union[int, np.ndarray]]:
+            """
+            Helper to create the observation.
+
+            :return: The current observation.
+            """
+            return [OrderedDict(
+                [
+                    ("observation", self._convert_observation(extra_state) ),
+                ]
+            )
+                for extra_state in extra_states
+            ]
+
+
+    # remove transitions between the ball hitting the racket and the ball hitting the table as well as transitions after the end of the episode
+    def get_reduced_episodes(self):
+        self.extra_data_buffer.append(self.data_buffer)     # put main ball in extra ball buffer (to avoid code repetition)
+        all_trans = [[] for _ in range(self._hysr._hysr_config.extra_balls_per_set + 1)]
+        idx = 0
+        for data_buffer in self.extra_data_buffer:
+            obs_before_racket_hit = None
+            action_before_racket_hit = None
+            for obs, action, reward, episode_over, previous_obs, min_distance_ball_racket in data_buffer:
+                if not episode_over and min_distance_ball_racket:   # normal transition
+                    all_trans[idx].append((previous_obs, obs, action, reward, episode_over, [{}]))
+                elif not episode_over and not self._hysr._ball_status.min_distance_ball_racket:   # ball hit racket, but didn't cross table plane (episode_over is FALSE) -> do not add
+                    if not obs_before_racket_hit:
+                        obs_before_racket_hit = previous_obs
+                        action_before_racket_hit = action
+                elif episode_over and obs_before_racket_hit:  # episode over and ball hit
+                    all_trans[idx].append((obs_before_racket_hit, obs, action_before_racket_hit, reward, episode_over, [{}]))
+                    break
+                elif episode_over and not obs_before_racket_hit:  # episode over and ball not hit
+                    all_trans[idx].append((previous_obs, obs, action, reward, episode_over, [{}]))
+                    break
+            idx += 1
+
+        assert len(self.extra_data_buffer) == len(all_trans)
+
+        trans = all_trans[-1]     # main ball
+        extra_trans = all_trans[:-1]    # extra balls
+
+        return trans, extra_trans
+
+
+    def step(self, action):
 
         if not self._accelerated_time and self._frequency_manager is None:
             self._frequency_manager = o80.FrequencyManager(1.0 / self._algo_time_step)
@@ -300,45 +369,69 @@ class HysrOneBallEnv(gym.Env):
         action = [int(a) for a in action]
 
         # performing a step
-        observation, reward, episode_over, *extrainfo = self._hysr.step(list(action))
-        
-        # For TESTING
-        # if not self.position_printed and observation.joint_positions[1]-self.previous_pos[1]<0 and observation.joint_positions[1]>0.5:
-        #     print("pos, pres:", observation.joint_positions, action)
-        #     self.position_printed = True
-        # self.previous_pos = observation.joint_positions
-
-        # formatting observation in a format suitable for gym
-        observation = self._convert_observation(observation)
+        observation, reward, episode_over, extra_observations, extra_rewards, extra_dones = self._hysr.step(list(action))
 
         # imposing frequency to learning agent
         if not self._accelerated_time:
             self._frequency_manager.wait()
 
-        # Ignore steps after hitting the ball
+        # Ignore steps after hitting/missing all balls
+        idx_ball_still_active = -1
         if not episode_over and not self._hysr._ball_status.min_distance_ball_racket:
-            if self.delta_p and not self.delta_p_p0_is_action:
-                return self.step(action_orig_delta_p)
-            else:
-                return self.step(action_orig)
+            idx = 0
+            for episode_over, min_distance_ball_racket in zip(extra_dones, self._hysr.extra_min_distance_ball_racket):
+                if not episode_over and min_distance_ball_racket:
+                    idx_ball_still_active = idx
+                    break
+                idx += 1
+            
+            if idx_ball_still_active == -1: # non of the balls still can be hit anymore 
+                if not episode_over and not self._hysr._ball_status.min_distance_ball_racket:
+                    if self.delta_p and not self.delta_p_p0_is_action:
+                        return self.step(action_orig_delta_p)
+                    else:
+                        return self.step(action_orig)
+
+        obs = self._get_obs(observation)
+        extra_obs = self._get_extra_obs(extra_observations)
 
         # logging
         self.n_steps += 1
-        if self._log_episodes:
-            self.data_buffer.append(
-                (
-                    observation.copy(),
-                    action_orig,
-                    action_casted,
-                    action.copy(),
-                    reward,
-                    episode_over,
-                )
+        self.data_buffer.append(
+            (
+                obs,
+                action_orig_delta_p if self.delta_p and not self.delta_p_p0_is_action else action_orig,
+                reward,
+                episode_over,
+                self.previous_obs,
+                self._hysr._ball_status.min_distance_ball_racket
             )
-        if episode_over:
+        )
+
+        # add extra transitions
+        idx = 0
+        for extra_ob, extra_reward, extra_episode_over, extra_previous_obs, extra_min_distance_ball_racket in \
+            zip(extra_obs, extra_rewards, extra_dones, self.previous_extra_obs, self._hysr.extra_min_distance_ball_racket):
+            self.extra_data_buffer[idx].append(
+                (extra_ob,
+                action_orig_delta_p if self.delta_p and not self.delta_p_p0_is_action else action_orig,
+                extra_reward,
+                extra_episode_over,
+                extra_previous_obs,
+                extra_min_distance_ball_racket)
+            )
+            idx += 1
+        infos = {}
+
+        self.previous_extra_obs = extra_obs
+        self.previous_obs = obs           
+
+        all_episodes_over = episode_over and all(extra_dones)
+
+        if all_episodes_over:
+            infos["trajectory"], infos["hsm_trajectories"] = self.get_reduced_episodes()
             if self._log_episodes:
                 self.dump_data(self.data_buffer)
-            self.n_eps += 1
             if self._logger:
                 self._logger.record("eprew", reward)
                 self._logger.record("min_discante_ball_racket", self._hysr._ball_status.min_distance_ball_racket or 0)
@@ -348,19 +441,28 @@ class HysrOneBallEnv(gym.Env):
                         self._hysr._reward_function.config.normalization_constant))
                 self._logger.record("max_ball_velocity", self._hysr._ball_status.max_ball_velocity)
                 # self._logger.dump()
+            self.n_eps += 1
 
-        return observation, reward, episode_over, {}
+        # use different ball for observation if main ball not active anymore
+        if idx_ball_still_active!=-1:
+            obs = extra_obs[idx_ball_still_active]
+            reward = extra_rewards[idx_ball_still_active]
+
+        if not all_episodes_over:
+            reward = 0
+
+        return obs, reward, all_episodes_over, infos
 
     def reset(self):
         self.init_episode()
-        observation, *extrainfo = self._hysr.reset()
-        # For TESTING
-        # self.previous_pos = observation.joint_positions
-        # self.position_printed = False
-        observation = self._convert_observation(observation)
+        observation, extra_observations = self._hysr.reset()
+        obs = self._get_obs(observation)
+        extra_obs = self._get_extra_obs(extra_observations)
         if not self._accelerated_time:
             self._frequency_manager = None
-        return observation
+        self.previous_extra_obs = extra_obs
+        self.previous_obs = obs
+        return obs
 
     def dump_data(self, data_buffer):
         filename = "/tmp/ep_" + time.strftime("%Y%m%d-%H%M%S")
@@ -368,8 +470,6 @@ class HysrOneBallEnv(gym.Env):
         with open(filename, "w") as json_data:
             dict_data["ob"] = [x[0].tolist() for x in data_buffer]
             dict_data["action_orig"] = [x[1].tolist() for x in data_buffer]
-            dict_data["action_casted"] = [x[2] for x in data_buffer]
-            dict_data["prdes"] = [x[3] for x in data_buffer]
-            dict_data["reward"] = [x[4] for x in data_buffer]
-            dict_data["episode_over"] = [x[5] for x in data_buffer]
+            dict_data["reward"] = [x[2] for x in data_buffer]
+            dict_data["episode_over"] = [x[3] for x in data_buffer]
             json.dump(dict_data, json_data)

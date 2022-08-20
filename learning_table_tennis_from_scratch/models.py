@@ -1,29 +1,37 @@
 import pathlib
 
 from learning_table_tennis_from_scratch.hysr_one_ball_env import HysrOneBallEnv
+from learning_table_tennis_from_scratch.hysr_many_ball_env import HysrManyBallEnv
+from learning_table_tennis_from_scratch.hysr_goal_env import HysrGoalEnv
 from learning_table_tennis_from_scratch.rl_config import RLConfig
 from learning_table_tennis_from_scratch.rl_config import OpenAIRLConfig
+from learning_table_tennis_from_scratch.hysr_one_ball import HysrOneBallConfig
 
 
 def run_stable_baselines(
     reward_config_file,
     hysr_one_ball_config_file,
     rl_config_file,
+    env_type,
     algorithm,
     log_episodes=False,
     seed=None,
 ):
     from stable_baselines3 import PPO
     from stable_baselines3 import SAC
+    from stable_baselines3 import HerReplayBuffer
     from stable_baselines3.common import logger
     from stable_baselines3.common.env_util import make_vec_env
     from stable_baselines3.common.utils import set_random_seed
     from stable_baselines3.common.callbacks import CheckpointCallback
+    from stable_baselines3.common.evaluation import evaluate_policy
 
     if seed is not None:
         set_random_seed(seed)
 
     rl_config = RLConfig.from_json(rl_config_file, algorithm)
+    hysr_config = HysrOneBallConfig.from_json(hysr_one_ball_config_file)
+
 
     tensorboard_logger = None
     checkpoint_callback = None
@@ -48,28 +56,77 @@ def run_stable_baselines(
         "log_episodes": log_episodes,
         "logger": tensorboard_logger,
     }
-    env = make_vec_env(HysrOneBallEnv, env_kwargs=env_config, seed=seed)
+    env = make_vec_env(env_type, env_kwargs=env_config)
 
-    model_type = {"ppo": PPO, "sac": SAC}
+    model_type = {"ppo": PPO, "sac": SAC, "sac_her": SAC, "sac_hsm": SAC}
 
-    model = model_type[algorithm](
-        "MlpPolicy",
-        env,
-        seed=seed,
-        policy_kwargs={
-            "net_arch": [rl_config.num_hidden] * rl_config.num_layers,
-        },
-        **rl_config.get_rl_params(),
-    )
+    if env_type == HysrOneBallEnv:
+        model = model_type[algorithm](
+            "MlpPolicy",
+            env,
+            seed=seed,
+            policy_kwargs={
+                "net_arch": [rl_config.num_hidden] * rl_config.num_layers,
+            },
+            **rl_config.get_rl_params(),
+        )
+    elif env_type == HysrGoalEnv:
+        model = model_type[algorithm](
+            "MultiInputPolicy",
+            env,
+            replay_buffer_class=HerReplayBuffer,
+            seed=seed,
+            policy_kwargs={
+                "net_arch": [rl_config.num_hidden] * rl_config.num_layers,
+            },
+            replay_buffer_kwargs=dict(
+                n_sampled_goal = rl_config.n_sampled_goal,
+                goal_selection_strategy = rl_config.goal_selection_strategy,
+                online_sampling = False,
+                max_episode_length = 200
+            ),
+            **rl_config.get_rl_params(),
+        )
+    elif env_type == HysrManyBallEnv:
+        model = model_type[algorithm](
+            "MultiInputPolicy",
+            env,
+            replay_buffer_class=HerReplayBuffer,
+            seed=seed,
+            policy_kwargs={
+                "net_arch": [rl_config.num_hidden] * rl_config.num_layers,
+            },
+            replay_buffer_kwargs=dict(
+                n_sampled_hindsight_states = rl_config.n_sampled_hindsight_states,
+                hindsight_state_selection_strategy = rl_config.hindsight_state_selection_strategy,
+                hindsight_state_selection_strategy_horizon = rl_config.hindsight_state_selection_strategy_horizon,
+                HSM_shape = rl_config.HSM_shape,
+                HSM_n_traj_freq = rl_config.HSM_n_traj_freq,
+                HSM_min_criterion = rl_config.HSM_min_criterion,
+                n_sampled_hindsight_states_change_per_step = rl_config.n_sampled_hindsight_states_change_rel / rl_config.num_timesteps * rl_config.n_sampled_hindsight_states,
+                HSM_criterion_change_per_step = rl_config.HSM_criterion_change / rl_config.num_timesteps,
+                HSM_use_likelihood_ratio = rl_config.HSM_use_likelihood_ratio,
+                HSM_likelihood_ratio_cutoff = rl_config.HSM_likelihood_ratio_cutoff,
+                prioritized_replay_baseline = rl_config.prioritized_replay_baseline,
+                online_sampling = False,
+                apply_HSM = True,
+                apply_HER = False,
+                max_episode_length = 200
+            ),
+            **rl_config.get_rl_params(),
+        )
+    else:
+        raise ValueError(f"Environment {env_type} not supported!")
 
     # set custom logger, so we also get CSV output
     model.set_logger(tensorboard_logger)
 
     if rl_config.load_path:
-        model_type[algorithm].load(rl_config.load_path, env)
-        print("load model from:", rl_config.load_path)
-
-    model.learn(total_timesteps=rl_config.num_timesteps, callback=checkpoint_callback)
+        del model
+        model = model_type[algorithm].load(rl_config.load_path, env)
+        model.learn(total_timesteps=rl_config.num_timesteps, callback=checkpoint_callback)
+    else:
+        model.learn(total_timesteps=rl_config.num_timesteps, callback=checkpoint_callback)
 
     if rl_config.save_path:
         model.save(rl_config.save_path)
@@ -79,6 +136,7 @@ def run_openai_baselines(
     reward_config_file,
     hysr_one_ball_config_file,
     rl_config_file,
+    env,
     log_episodes=False,
     model_file_path=None,
     seed=None,
@@ -120,7 +178,7 @@ def run_openai_baselines(
         "log_episodes": log_episodes,
         "logger": tensorboard_logger,
     }
-    env = make_vec_env(HysrOneBallEnv, env_kwargs=env_config)
+    env = make_vec_env(env, env_kwargs=env_config)
 
     total_timesteps = rl_config["num_timesteps"]
     del rl_config["num_timesteps"]

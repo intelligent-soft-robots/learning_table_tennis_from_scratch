@@ -1,5 +1,10 @@
 {
     "normalization_constant":3.0,
+    "distance_exponent": 0.75,
     "rtt_cap":-0.2,
-    "smash":false
+    "smash":false,
+    "binary":false,
+    "sparse":true,
+    "sparse_reward_racket_hit": 1.0,
+    "bin_spa_radius":0.685
 }
