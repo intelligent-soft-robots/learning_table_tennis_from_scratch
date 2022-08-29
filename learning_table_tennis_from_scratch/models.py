@@ -134,6 +134,7 @@ def run_stable_baselines(
     
     if rl_config.load_path:
         del model
+        print("loading policy from", rl_config.load_path)
         model = model_type[algorithm].load(rl_config.load_path, env)
         print("load model from:", rl_config.load_path)
 
@@ -141,6 +142,7 @@ def run_stable_baselines(
         total_timesteps=rl_config.num_timesteps,
         callback=checkpoint_callback,
         reset_num_timesteps=not continue_training,
+        log_interval=1,
     )
 
     if rl_config.save_path:
