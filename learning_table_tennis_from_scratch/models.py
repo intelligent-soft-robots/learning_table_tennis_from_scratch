@@ -123,10 +123,11 @@ def run_stable_baselines(
 
     if rl_config.load_path:
         del model
+        print("loading policy from", rl_config.load_path)
         model = model_type[algorithm].load(rl_config.load_path, env)
-        model.learn(total_timesteps=rl_config.num_timesteps, callback=checkpoint_callback)
+        model.learn(total_timesteps=rl_config.num_timesteps, callback=checkpoint_callback, log_interval = 1)
     else:
-        model.learn(total_timesteps=rl_config.num_timesteps, callback=checkpoint_callback)
+        model.learn(total_timesteps=rl_config.num_timesteps, callback=checkpoint_callback, log_interval = 1)
 
     if rl_config.save_path:
         model.save(rl_config.save_path)

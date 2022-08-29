@@ -339,6 +339,7 @@ class HysrOneBallEnv(gym.Env):
             if self._log_episodes:
                 self.dump_data(self.data_buffer)
             self.n_eps += 1
+            print("ep:", self.n_eps, " rew:", reward)
             if self._logger:
                 self._logger.record("eprew", reward)
                 self._logger.record("min_discante_ball_racket", self._hysr._ball_status.min_distance_ball_racket or 0)

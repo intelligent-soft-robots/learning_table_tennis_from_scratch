@@ -155,6 +155,7 @@ class HysrManyBallEnv(gym.Env):
             )
 
         self.n_eps = 0
+        self.n_steps_on_policy = 0
         self.init_episode()
 
     def init_episode(self):
@@ -429,11 +430,13 @@ class HysrManyBallEnv(gym.Env):
         all_episodes_over = episode_over and all(extra_dones)
 
         if all_episodes_over:
+            print("ep:", self.n_eps, " rew:", reward)
             infos["trajectory"], infos["hsm_trajectories"] = self.get_reduced_episodes()
             if self._log_episodes:
                 self.dump_data(self.data_buffer)
             if self._logger:
                 self._logger.record("eprew", reward)
+                self._logger.record("n_steps_on_policy", self.n_steps_on_policy)
                 self._logger.record("min_discante_ball_racket", self._hysr._ball_status.min_distance_ball_racket or 0)
                 self._logger.record("min_distance_ball_target_capped",
                     min(
@@ -447,6 +450,9 @@ class HysrManyBallEnv(gym.Env):
         if idx_ball_still_active!=-1:
             obs = extra_obs[idx_ball_still_active]
             reward = extra_rewards[idx_ball_still_active]
+        else:
+            self.n_steps_on_policy += 1
+
 
         if not all_episodes_over:
             reward = 0
