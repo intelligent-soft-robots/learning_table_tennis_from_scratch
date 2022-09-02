@@ -4,6 +4,27 @@ from learning_table_tennis_from_scratch.hysr_one_ball_env import HysrOneBallEnv
 from learning_table_tennis_from_scratch.rl_config import RLConfig
 from learning_table_tennis_from_scratch.rl_config import OpenAIRLConfig
 
+import json
+import numpy as np
+
+
+class NumpyEncoder(json.JSONEncoder):
+    # From https://stackoverflow.com/a/47626762 (CC BY-SA 4.0)
+    def default(self, obj):
+        if isinstance(obj, np.ndarray):
+            return obj.tolist()
+        return json.JSONEncoder.default(self, obj)
+
+
+class TensorEncoder(json.JSONEncoder):
+    # From https://stackoverflow.com/a/47626762 (CC BY-SA 4.0)
+    def default(self, obj):
+        import torch
+
+        if isinstance(obj, np.ndarray) or isinstance(obj, torch.Tensor):
+            return obj.tolist()
+        return json.JSONEncoder.default(self, obj)
+
 
 def run_stable_baselines(
     reward_config_file,
@@ -69,6 +90,51 @@ def run_stable_baselines(
 
     if rl_config.save_path:
         model.save(rl_config.save_path)
+
+        # DEBUG: load the model again and compare
+        reloaded = model_type[algorithm].load(rl_config.save_path)
+
+        # some random observation to test the models
+        test_obs = [
+            -1.6734542846679688,
+            0.956542432308197,
+            0.3180750608444214,
+            0.00026556311058811843,
+            -2.6460986137390137,
+            -3.60913348197937,
+            -3.1900947093963623,
+            0.003471289062872529,
+            0.5342222452163696,
+            0.28861111402511597,
+            0.6971111297607422,
+            0.6084444522857666,
+            0.7795555591583252,
+            0.4605555534362793,
+            0.19538888335227966,
+            0.5048888921737671,
+            0.5625826716423035,
+            0.5706161260604858,
+            1.131399154663086,
+            0.062083881348371506,
+            -2.2659432888031006,
+            2.0663530826568604,
+        ]
+
+        model_action, _states = model.predict(test_obs, deterministic=True)
+        reloaded_action, _states = reloaded.predict(test_obs, deterministic=True)
+
+        assert np.all(
+            model_action == reloaded_action
+        ), "ERROR: Models return different actions!"
+        print("Models returned the same action.")
+
+        # write parameters to json files for easier comparison
+        with open(rl_config.save_path + "_params.json", "w") as f:
+            print("write file %s" % f.name)
+            json.dump(model.get_parameters(), f, indent=2, cls=TensorEncoder)
+        with open(rl_config.save_path + "_params_reloaded.json", "w") as f:
+            print("write file %s" % f.name)
+            json.dump(reloaded.get_parameters(), f, indent=2, cls=TensorEncoder)
 
 
 def run_openai_baselines(
