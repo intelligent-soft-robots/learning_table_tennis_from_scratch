@@ -4,7 +4,7 @@
     "learning_rate":0.00026,
     "batch_size": 90,
     "log_path": "/tmp/training_log",
-    "num_timesteps": 500000,
+    "num_timesteps": 10000,
     "save_path": "/tmp/model",
     "num_layers": 1,
     "num_hidden": 60,
