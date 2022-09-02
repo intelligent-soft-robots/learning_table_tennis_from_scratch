@@ -276,6 +276,15 @@ class HysrOneBallEnv(gym.Env):
                 self._logger.record("eprew", reward)
                 self._logger.dump()
 
+        # class NumpyEncoder(json.JSONEncoder):
+        #     # From https://stackoverflow.com/a/47626762 (CC BY-SA 4.0)
+        #     def default(self, obj):
+        #         if isinstance(obj, np.ndarray):
+        #             return obj.tolist()
+        #         return json.JSONEncoder.default(self, obj)
+        # with open("/tmp/lttfs_some_observation.json", "w") as f:
+        #     json.dump(observation, f, indent=2, cls=NumpyEncoder)
+
         return observation, reward, episode_over, {}
 
     def reset(self):
