@@ -75,7 +75,9 @@ def run_stable_baselines(
 
     if rl_config.load_path:
         print("loading policy from", rl_config.load_path)
-        model = model_type[algorithm].load(rl_config.load_path, env, device="cpu")
+        model = model_type[algorithm].load(
+            rl_config.load_path, env, device="cpu", seed=seed
+        )
     else:
         model = model_type[algorithm](
             "MlpPolicy",
@@ -181,7 +183,9 @@ def eval_stable_baselines(
     assert rl_config.load_path
 
     print("loading policy from", rl_config.load_path)
-    model = model_type[algorithm].load(rl_config.load_path, env, device="cpu")
+    model = model_type[algorithm].load(
+        rl_config.load_path, env, device="cpu", seed=seed
+    )
 
     # set custom logger, so we also get CSV output
     model.set_logger(tensorboard_logger)
