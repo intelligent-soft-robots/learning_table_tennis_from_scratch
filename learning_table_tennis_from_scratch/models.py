@@ -78,6 +78,7 @@ def run_stable_baselines(
         model = model_type[algorithm].load(
             rl_config.load_path, env, device="cpu", seed=seed
         )
+        continue_training = True
     else:
         model = model_type[algorithm](
             "MlpPolicy",
@@ -88,11 +89,16 @@ def run_stable_baselines(
             },
             **rl_config.get_rl_params(),
         )
+        continue_training = False
 
     # set custom logger, so we also get CSV output
     model.set_logger(tensorboard_logger)
 
-    model.learn(total_timesteps=rl_config.num_timesteps, callback=checkpoint_callback)
+    model.learn(
+        total_timesteps=rl_config.num_timesteps,
+        callback=checkpoint_callback,
+        reset_num_timesteps=not continue_training,
+    )
 
     if rl_config.save_path:
         model.save(rl_config.save_path)
