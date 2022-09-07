@@ -73,15 +73,19 @@ def run_stable_baselines(
 
     model_type = {"ppo": PPO, "sac": SAC}
 
-    model = model_type[algorithm](
-        "MlpPolicy",
-        env,
-        seed=seed,
-        policy_kwargs={
-            "net_arch": [rl_config.num_hidden] * rl_config.num_layers,
-        },
-        **rl_config.get_rl_params(),
-    )
+    if rl_config.load_path:
+        print("loading policy from", rl_config.load_path)
+        model = model_type[algorithm].load(rl_config.load_path, env, device="cpu")
+    else:
+        model = model_type[algorithm](
+            "MlpPolicy",
+            env,
+            seed=seed,
+            policy_kwargs={
+                "net_arch": [rl_config.num_hidden] * rl_config.num_layers,
+            },
+            **rl_config.get_rl_params(),
+        )
 
     # set custom logger, so we also get CSV output
     model.set_logger(tensorboard_logger)
@@ -92,7 +96,7 @@ def run_stable_baselines(
         model.save(rl_config.save_path)
 
         # DEBUG: load the model again and compare
-        reloaded = model_type[algorithm].load(rl_config.save_path)
+        reloaded = model_type[algorithm].load(rl_config.save_path, env)
 
         # some random observation to test the models
         test_obs = [
@@ -122,6 +126,7 @@ def run_stable_baselines(
 
         model_action, _states = model.predict(test_obs, deterministic=True)
         reloaded_action, _states = reloaded.predict(test_obs, deterministic=True)
+        print("model action: {}".format(model_action))
 
         assert np.all(
             model_action == reloaded_action
@@ -129,12 +134,12 @@ def run_stable_baselines(
         print("Models returned the same action.")
 
         # write parameters to json files for easier comparison
-        with open(rl_config.save_path + "_params.json", "w") as f:
-            print("write file %s" % f.name)
-            json.dump(model.get_parameters(), f, indent=2, cls=TensorEncoder)
-        with open(rl_config.save_path + "_params_reloaded.json", "w") as f:
-            print("write file %s" % f.name)
-            json.dump(reloaded.get_parameters(), f, indent=2, cls=TensorEncoder)
+        # with open(rl_config.save_path + "_params.json", "w") as f:
+        #     print("write file %s" % f.name)
+        #     json.dump(model.get_parameters(), f, indent=2, cls=TensorEncoder)
+        # with open(rl_config.save_path + "_params_reloaded.json", "w") as f:
+        #     print("write file %s" % f.name)
+        #     json.dump(reloaded.get_parameters(), f, indent=2, cls=TensorEncoder)
 
 
 def run_openai_baselines(
