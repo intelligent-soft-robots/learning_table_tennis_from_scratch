@@ -1,0 +1,106 @@
+#!/usr/bin/env python3
+
+import argparse
+import json
+import os
+import pathlib
+import time
+
+from learning_table_tennis_from_scratch.models import eval_stable_baselines
+from learning_table_tennis_from_scratch.jsonconfig import get_json_config
+
+
+def _read_rl_common_config(jsonpath):
+
+    if not os.path.isfile(jsonpath):
+        raise FileNotFoundError(
+            "failed to find reward configuration file: {}".format(jsonpath)
+        )
+    try:
+        with open(jsonpath) as f:
+            conf = json.load(f)
+    except Exception as e:
+        raise ValueError(
+            "failed to parse reward json configuration file {}: {}".format(jsonpath, e)
+        )
+
+    expected_keys = (
+        "algorithm",
+        "use_openai_baselines",
+        "log_episodes",
+        "random_seed",
+    )
+
+    for key in expected_keys:
+        if key not in conf.keys():
+            raise KeyError("failed to find key {} in {}".format(key, jsonpath))
+
+    return conf
+
+
+def _execute(
+    reward_config_file, hysr_config_file, rl_config_file, rl_common_config_file
+):
+
+    common_conf = _read_rl_common_config(rl_common_config_file)
+
+    seed = common_conf["random_seed"]
+    if not seed:
+        # If no explicit seed is given, generate one based on the current time.
+        # Take the first 9 positions after the decimal point.  By discarding
+        # the integer part (`x % 1`), it is ensured that the resulting number
+        # does not get too big (limit for the seed is 2**32 - 1).
+        seed = int((time.time() % 1) * 1e9)
+    print("Use random seed %d" % seed)
+
+    assert not common_conf["use_openai_baselines"], "OpenAI baselines is not supported"
+
+    eval_stable_baselines(
+        reward_config_file,
+        hysr_config_file,
+        rl_config_file,
+        common_conf["algorithm"],
+        common_conf["log_episodes"],
+        seed=seed,
+    )
+
+
+def _configure(config_file):
+    files = get_json_config(
+        expected_keys=[
+            "reward_config",
+            "hysr_config",
+            "rl_config",
+            "rl_common_config",
+        ],
+        config_file=config_file,
+    )
+
+    return files
+
+
+def _run():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "config",
+        type=pathlib.Path,
+        nargs="?",  # this is optional
+        help="""Optional path to config JSON file.  If not set, the file is
+            searched for in the current working directory.
+        """,
+    )
+    args = parser.parse_args()
+
+    config = _configure(args.config)
+    if config is None:
+        return
+    _execute(
+        config["reward_config"],
+        config["hysr_config"],
+        config["rl_config"],
+        config["rl_common_config"],
+    )
+
+
+if __name__ == "__main__":
+    _run()

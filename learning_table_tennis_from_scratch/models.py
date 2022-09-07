@@ -142,6 +142,60 @@ def run_stable_baselines(
         #     json.dump(reloaded.get_parameters(), f, indent=2, cls=TensorEncoder)
 
 
+def eval_stable_baselines(
+    reward_config_file,
+    hysr_one_ball_config_file,
+    rl_config_file,
+    algorithm,
+    log_episodes=False,
+    seed=None,
+):
+    from stable_baselines3 import PPO
+    from stable_baselines3 import SAC
+    from stable_baselines3.common import logger
+    from stable_baselines3.common.env_util import make_vec_env
+    from stable_baselines3.common.utils import set_random_seed
+
+    if seed is not None:
+        set_random_seed(seed)
+
+    rl_config = RLConfig.from_json(rl_config_file, algorithm)
+
+    tensorboard_logger = None
+    if rl_config.log_path:
+        tensorboard_logger = logger.configure(
+            rl_config.log_path, ["stdout", "csv", "tensorboard"]
+        )
+        tensorboard_logger.set_level(logger.INFO)
+
+    env_config = {
+        "reward_config_file": reward_config_file,
+        "hysr_one_ball_config_file": hysr_one_ball_config_file,
+        "log_episodes": log_episodes,
+        "logger": tensorboard_logger,
+    }
+    env = make_vec_env(HysrOneBallEnv, env_kwargs=env_config, seed=seed)
+
+    model_type = {"ppo": PPO, "sac": SAC}
+
+    assert rl_config.load_path
+
+    print("loading policy from", rl_config.load_path)
+    model = model_type[algorithm].load(rl_config.load_path, env, device="cpu")
+
+    # set custom logger, so we also get CSV output
+    model.set_logger(tensorboard_logger)
+
+    # model.learn(total_timesteps=rl_config.num_timesteps, callback=checkpoint_callback)
+    obs = env.reset()
+    while True:
+        action, _states = model.predict(obs, deterministic=True)
+        obs, reward, done, info = env.step(action)
+        # env.render()
+        if done:
+            obs = env.reset()
+
+
 def run_openai_baselines(
     reward_config_file,
     hysr_one_ball_config_file,
