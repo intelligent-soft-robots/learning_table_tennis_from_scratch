@@ -33,6 +33,7 @@ class RLConfig:
         "batch_size",
         "gradient_steps",
         "train_freq",
+        "train_freq_unit",
         "buffer_size",
         "learning_starts",
     )
@@ -99,6 +100,10 @@ class RLConfig:
         This includes only the parameters that can be passed as keyword arguments to
         stable_baselines3.RL.
         """
+        # replace value of train_freq with (train_freq, train_freq_unit) and remove train_freq_unit key
+        if "train_freq_unit" in self._algo_params:
+            setattr(self, "train_freq", (getattr(self, "train_freq"), getattr(self, "train_freq_unit")))
+            self._algo_params = [param for param in self._algo_params if param!="train_freq_unit"]
         return {attr: getattr(self, attr) for attr in self._algo_params}
 
     @classmethod
