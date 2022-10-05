@@ -746,7 +746,6 @@ class HysrOneBall:
             # loading full trajectory
             for duration, state in iterator:
                 item3d.set_position(state.get_position())
-                print(index_ball, ":", state.get_position(), state.get_velocity())
                 item3d.set_velocity(state.get_velocity())
                 ball.frontend.add_command(
                     index_ball,
@@ -756,7 +755,6 @@ class HysrOneBall:
                 )
         for frontend in _ExtraBall.frontends.values():
             frontend.pulse()
-        input()
 
     def load_ball(self):
         # loading ball: setting all trajectories points
