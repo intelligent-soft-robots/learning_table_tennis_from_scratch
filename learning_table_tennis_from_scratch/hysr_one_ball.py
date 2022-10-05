@@ -699,7 +699,7 @@ class HysrOneBall:
         # "load" the ball means creating the o80 commands corresponding
         # to the ball behavior (set by the "set_ball_behavior" method)
         trajectory = self._ball_behavior.get_trajectory()
-        iterator = context.ball_trajectories.BallTrajectories.iterate(trajectory)
+        iterator = context.ball_trajectories.BallTrajectories.iterate(trajectory, vel_filter_window_size = self._hysr_config.vel_filter_window_size)
         # setting the ball to the first trajectory point
         self._ball_communication.set(trajectory[1][0], [0, 0, 0])
         # shooting the ball
@@ -737,7 +737,7 @@ class HysrOneBall:
         for index_ball, (ball, trajectory) in enumerate(
             zip(self._extra_balls, trajectories)
         ):
-            iterator = context.ball_trajectories.BallTrajectories.iterate(trajectory)
+            iterator = context.ball_trajectories.BallTrajectories.iterate(trajectory, vel_filter_window_size = self._hysr_config.vel_filter_window_size)
             # going to first trajectory point
             _, state = next(iterator)
             item3d.set_position(state.get_position())
@@ -746,6 +746,7 @@ class HysrOneBall:
             # loading full trajectory
             for duration, state in iterator:
                 item3d.set_position(state.get_position())
+                print(index_ball, ":", state.get_position(), state.get_velocity())
                 item3d.set_velocity(state.get_velocity())
                 ball.frontend.add_command(
                     index_ball,
@@ -755,6 +756,7 @@ class HysrOneBall:
                 )
         for frontend in _ExtraBall.frontends.values():
             frontend.pulse()
+        input()
 
     def load_ball(self):
         # loading ball: setting all trajectories points
