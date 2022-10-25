@@ -48,6 +48,7 @@ class RLConfig:
         "hindsight_state_selection_strategy",
         "hindsight_state_selection_strategy_horizon",
         "HSM_shape",
+        "HSM_goal_env",
         "HSM_n_traj_freq",
         "HSM_min_criterion",
         "n_sampled_hindsight_states_change_rel",

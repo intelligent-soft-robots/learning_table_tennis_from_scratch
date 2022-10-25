@@ -13,7 +13,6 @@ from learning_table_tennis_from_scratch.hysr_one_ball_env import HysrOneBallEnv
 from learning_table_tennis_from_scratch.hysr_many_ball_env import HysrManyBallEnv
 from learning_table_tennis_from_scratch.hysr_goal_env import HysrGoalEnv
 
-
 def _read_rl_common_config(jsonpath):
 
     if not os.path.isfile(jsonpath):
@@ -58,15 +57,20 @@ def _execute(
         seed = int((time.time() % 1) * 1e9)
     print("Use random seed %d" % seed)
 
-    env_type = {"HysrOneBallEnv": HysrOneBallEnv, "HysrManyBallEnv": HysrManyBallEnv, "HysrGoalEnv": HysrGoalEnv}
+    env_name = common_conf["environment"]
+    if env_name in ["HysrOneBallEnv", "HysrManyBallEnv", "HysrGoalEnv"]:
+        env_type = {"HysrOneBallEnv": HysrOneBallEnv, "HysrManyBallEnv": HysrManyBallEnv, "HysrGoalEnv": HysrGoalEnv}
+        env = env_type[env_name]
+    else:
+        env = env_name
 
     random.seed(seed)
     if common_conf["use_openai_baselines"]:
         run_openai_baselines(
             reward_config_file,
             hysr_config_file,
-            rl_config_file,
-            env_type[common_conf["environment"]],
+            rl_config_file, 
+            env,
             common_conf["log_episodes"],
             seed=seed,
         )
@@ -75,7 +79,7 @@ def _execute(
             reward_config_file,
             hysr_config_file,
             rl_config_file,
-            env_type[common_conf["environment"]],
+            env,
             common_conf["algorithm"],
             common_conf["log_episodes"],
             seed=seed,
