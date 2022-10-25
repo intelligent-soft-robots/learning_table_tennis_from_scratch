@@ -7,6 +7,7 @@ from learning_table_tennis_from_scratch.rl_config import RLConfig
 from learning_table_tennis_from_scratch.rl_config import OpenAIRLConfig
 from learning_table_tennis_from_scratch.hysr_one_ball import HysrOneBallConfig
 
+import gym
 
 def run_stable_baselines(
     reward_config_file,
@@ -50,17 +51,24 @@ def run_stable_baselines(
             save_path=pathlib.Path(rl_config.log_path) / "checkpoints",
         )
 
-    env_config = {
+    
+
+    if env_type in [HysrOneBallEnv, HysrGoalEnv, HysrManyBallEnv]:
+        env_config = {
         "reward_config_file": reward_config_file,
         "hysr_one_ball_config_file": hysr_one_ball_config_file,
         "log_episodes": log_episodes,
         "logger": tensorboard_logger,
     }
+    else:
+        env_config = {
+#            "render_mode" : 'human',
+        }
     env = make_vec_env(env_type, env_kwargs=env_config)
 
     model_type = {"ppo": PPO, "sac": SAC, "sac_her": SAC, "sac_hsm": SAC}
 
-    if env_type == HysrOneBallEnv:
+    if algorithm in ["ppo", "sac"]:
         model = model_type[algorithm](
             "MlpPolicy",
             env,
@@ -70,7 +78,7 @@ def run_stable_baselines(
             },
             **rl_config.get_rl_params(),
         )
-    elif env_type == HysrGoalEnv:
+    elif algorithm in ["sac_her"]:
         model = model_type[algorithm](
             "MultiInputPolicy",
             env,
@@ -87,7 +95,7 @@ def run_stable_baselines(
             ),
             **rl_config.get_rl_params(),
         )
-    elif env_type == HysrManyBallEnv:
+    elif algorithm in ["sac_hsm"]:
         model = model_type[algorithm](
             "MultiInputPolicy",
             env,
@@ -101,6 +109,7 @@ def run_stable_baselines(
                 hindsight_state_selection_strategy = rl_config.hindsight_state_selection_strategy,
                 hindsight_state_selection_strategy_horizon = rl_config.hindsight_state_selection_strategy_horizon,
                 HSM_shape = rl_config.HSM_shape,
+                HSM_goal_env = rl_config.HSM_goal_env,
                 HSM_n_traj_freq = rl_config.HSM_n_traj_freq,
                 HSM_min_criterion = rl_config.HSM_min_criterion,
                 n_sampled_hindsight_states_change_per_step = rl_config.n_sampled_hindsight_states_change_rel / rl_config.num_timesteps * rl_config.n_sampled_hindsight_states,
@@ -122,10 +131,22 @@ def run_stable_baselines(
     model.set_logger(tensorboard_logger)
 
     if rl_config.load_path:
-        del model
         print("loading policy from", rl_config.load_path)
         model = model_type[algorithm].load(rl_config.load_path, env)
+
+        #learn
         model.learn(total_timesteps=rl_config.num_timesteps, callback=checkpoint_callback, log_interval = 1)
+
+        # play
+        # obs = env.reset()
+        # print("playing...")
+        # i=0
+        # while True:
+        #     action, _states = model.predict(obs, deterministic=False)
+        #     obs, reward, done, info = env.step(action)
+        #     if done:
+        #         obs = env.reset()
+        #         i+=1
     else:
         model.learn(total_timesteps=rl_config.num_timesteps, callback=checkpoint_callback, log_interval = 1)
 
