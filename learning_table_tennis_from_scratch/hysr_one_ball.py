@@ -99,7 +99,6 @@ class HysrOneBallConfig:
         "extra_balls_sets",
         "extra_balls_per_set",
         "trajectory_group",
-        "vel_filter_window_size",
         "frequency_monitoring_step",
         "frequency_monitoring_episode",
         "robot_integrity_check",
@@ -629,7 +628,7 @@ class HysrOneBall:
         # "load" the ball means creating the o80 commands corresponding
         # to the ball behavior (set by the "set_ball_behavior" method)
         trajectory = self._ball_behavior.get_trajectory()
-        iterator = context.ball_trajectories.BallTrajectories.iterate(trajectory, vel_filter_window_size = self._hysr_config.vel_filter_window_size)
+        iterator = context.ball_trajectories.BallTrajectories.iterate(trajectory)
         # setting the ball to the first trajectory point
         duration, state = next(iterator)
         self._ball_communication.set(state.get_position(), [0, 0, 0])
@@ -666,7 +665,7 @@ class HysrOneBall:
         for index_ball, (ball, trajectory) in enumerate(
             zip(self._extra_balls, trajectories)
         ):
-            iterator = context.ball_trajectories.BallTrajectories.iterate(trajectory, vel_filter_window_size = self._hysr_config.vel_filter_window_size)
+            iterator = context.ball_trajectories.BallTrajectories.iterate(trajectory)
             # going to first trajectory point
             _, state = next(iterator)
             item3d.set_position(state.get_position())
