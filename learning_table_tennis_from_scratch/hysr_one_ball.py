@@ -80,6 +80,7 @@ class HysrOneBallConfig:
         "world_boundaries",
         "pressure_change_range",
         "action_in_state",
+        "action_repeat_counter",
         "delta_p",
         "delta_p_p0_is_action",
         "delta_p_p0_value",

@@ -97,6 +97,7 @@ class HysrOneBallEnv(gym.Env):
         self._pressure_change_range = hysr_one_ball_config.pressure_change_range
         self._accelerated_time = hysr_one_ball_config.accelerated_time
         self._action_in_state = hysr_one_ball_config.action_in_state
+        self._action_repeat_counter = hysr_one_ball_config.action_repeat_counter
         self._pd_control = hysr_one_ball_config.pd_control
         self._pd_control_T = hysr_one_ball_config.pd_control_T
         self._pd_control_K_p = hysr_one_ball_config.pd_control_K_p
@@ -298,11 +299,12 @@ class HysrOneBallEnv(gym.Env):
             else:
                 q_target = q
             u = self._pd_control_K_p * (q - q_target) + self._pd_control_K_d * dq
-            u = np.clip(u, 0, 1)
+            u = np.clip(u, -1, 1)
             action_casted = u
+            action = np.concatenate([np.zeros(np.shape(action)), np.zeros(np.shape(action))])
 
         # put pressure in range as defined in parameters file
-        if not self.delta_p:
+        if not self.delta_p and not self._pd_control:
             for dof in range(self._nb_dofs):
                 action[2 * dof] = self._scale_pressure(dof, True, action_casted[2 * dof])
                 action[2 * dof + 1] = (
@@ -315,7 +317,10 @@ class HysrOneBallEnv(gym.Env):
                     value = action_casted[2*dof] * 2 - 1
                 else:
                     p0 = self.delta_p_p0_value[dof]
-                    value = action_casted[dof] * 2 - 1
+                    if self.delta_p:
+                        value = action_casted[dof] * 2 - 1
+                    else:
+                        value = action_casted[dof]
                 action[2 * dof] = self._scale_pressure_delta_p(dof, True, value, p0)
                 action[2 * dof+1] = self._scale_pressure_delta_p(dof, False, value, p0)
 
@@ -328,7 +333,10 @@ class HysrOneBallEnv(gym.Env):
         action = [int(a) for a in action]
 
         # performing a step
-        observation, reward, episode_over, *extrainfo = self._hysr.step(list(action))
+        for _ in range(self._action_repeat_counter):
+            observation, reward, episode_over, *extrainfo = self._hysr.step(list(action))
+            if episode_over:
+                break
 
         # formatting observation in a format suitable for gym
         observation = self._convert_observation(observation, action_casted)
@@ -361,7 +369,7 @@ class HysrOneBallEnv(gym.Env):
             if self._log_episodes:
                 self.dump_data(self.data_buffer)
             self.n_eps += 1
-            print("ep:", self.n_eps, " rew:", reward)
+            print("ep:", self.n_eps, " steps:", self.n_steps, " rew:", reward)
             if self._logger:
                 self._logger.record("eprew", reward)
                 self._logger.record("min_discante_ball_racket", self._hysr._ball_status.min_distance_ball_racket or 0)
