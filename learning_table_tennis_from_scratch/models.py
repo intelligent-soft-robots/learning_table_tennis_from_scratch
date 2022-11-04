@@ -132,22 +132,29 @@ def run_stable_baselines(
             2.0663530826568604,
         ]
 
+        # compare parameters
+        model_params = json.dumps(model.get_parameters(), indent=2, cls=TensorEncoder)
+        reloaded_params = json.dumps(
+            reloaded.get_parameters(), indent=2, cls=TensorEncoder
+        )
+        if model_params != reloaded_params:
+            print("ERROR: Parameters are not the same!!!  Saving for inspection.")
+            with open(rl_config.save_path + "_params.json", "w") as f:
+                print("write file %s" % f.name)
+                f.write(model_params)
+            with open(rl_config.save_path + "_params_reloaded.json", "w") as f:
+                print("write file %s" % f.name)
+                f.write(reloaded_params)
+
+        # compare returned actions
         model_action, _states = model.predict(test_obs, deterministic=True)
         reloaded_action, _states = reloaded.predict(test_obs, deterministic=True)
         print("model action: {}".format(model_action))
 
-        assert np.all(
-            model_action == reloaded_action
-        ), "ERROR: Models return different actions!"
+        np.testing.assert_array_almost_equal(
+            model_action, reloaded_action, err_msg="ERROR: Models return different actions!"
+        )
         print("Models returned the same action.")
-
-        # write parameters to json files for easier comparison
-        # with open(rl_config.save_path + "_params.json", "w") as f:
-        #     print("write file %s" % f.name)
-        #     json.dump(model.get_parameters(), f, indent=2, cls=TensorEncoder)
-        # with open(rl_config.save_path + "_params_reloaded.json", "w") as f:
-        #     print("write file %s" % f.name)
-        #     json.dump(reloaded.get_parameters(), f, indent=2, cls=TensorEncoder)
 
 
 def eval_stable_baselines(
