@@ -26,7 +26,13 @@ class RestartInfo:
             with open(self.file_path, "r") as f:
                 self._data = json.load(f)
         else:
-            self._data = {"finished_runs": 0, "eprewmean": [], "failed_attempts": {}}
+            self._data = {
+                "training_continuation_counter": 0,
+                "unfinished_model": "",
+                "finished_trainings": 0,
+                "eprewmean": [],
+                "failed_attempts": {},
+            }
 
     def save(self):
         """Save changes to file.
@@ -37,18 +43,28 @@ class RestartInfo:
             json.dump(self._data, f)
 
     @property
-    def finished_runs(self) -> int:
-        """Get number of already finished runs.
+    def training_continuation_counter(self) -> int:
+        """Get number of times the has been continued in a new job."""
+        return self._data["training_continuation_counter"]
+
+    @property
+    def unfinished_model(self) -> str:
+        """Get path to the unfinished model or empty string if there is none."""
+        return self._data["unfinished_model"]
+
+    @property
+    def finished_trainigs(self) -> int:
+        """Get number of already finished training runs.
 
         This also corresponds to the index of the current run (starting at zero).
         """
-        return self._data["finished_runs"]
+        return self._data["finished_trainings"]
 
     @property
     def failed_attempts(self) -> int:
         """Get number of failed attempts for the current run."""
         try:
-            return self._data["failed_attempts"][str(self.finished_runs)]
+            return self._data["failed_attempts"][str(self.finished_trainigs)]
         except KeyError:
             return 0
 
@@ -57,18 +73,29 @@ class RestartInfo:
         """Get list of rewards of all runs."""
         return self._data["eprewmean"]
 
-    def mark_run_finished(self, eprewmean: float):
+    def continue_training(self, model_path: str):
+        """Increases the training continuation counter by one.
+
+        Args:
+            model_path: Path to the model for which training should be continued.
+        """
+        self._data["unfinished_model"] = model_path
+        self._data["training_continuation_counter"] += 1
+
+    def mark_training_finished(self, eprewmean: float):
         """Mark the current run as successfully finished and log its reward.
 
         Args:
             eprewmean: Reward that was achieved by the run.
         """
-        self._data["finished_runs"] += 1
+        self._data["unfinished_model"] = ""
+        self._data["training_continuation_counter"] = 0
+        self._data["finished_trainings"] += 1
         self._data["eprewmean"].append(eprewmean)
 
     def mark_attempt_failed(self):
         """Mark the current attempt as failed."""
         try:
-            self._data["failed_attempts"][str(self.finished_runs)] += 1
+            self._data["failed_attempts"][str(self.finished_trainigs)] += 1
         except KeyError:
-            self._data["failed_attempts"][str(self.finished_runs)] = 1
+            self._data["failed_attempts"][str(self.finished_trainigs)] = 1

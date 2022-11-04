@@ -11,12 +11,12 @@ import csv
 import json
 import logging
 import os
-import pathlib
 import re
 import subprocess
 import sys
 import time
 import typing
+from pathlib import Path, PurePath
 
 import numpy as np
 import cluster
@@ -28,6 +28,7 @@ from utils import RestartInfo
 # Max. number of attempts.  If it fails this many times, do not try again.
 DEFAULT_MAX_ATTEMPTS = 3
 DEFAULT_LEARNING_RUNS_PER_JOB = 3
+DEFAULT_TRAINING_ITERATIONS = 1
 RESTART_INFO_FILENAME = "restarts.json"
 
 _logger = None
@@ -43,7 +44,7 @@ def init_logger(name: str = None) -> logging.Logger:
         name: Name of the application (added to each message).
     """
     if name is None:
-        name = pathlib.PurePath(__file__).name
+        name = PurePath(__file__).name
     formatter = logging.Formatter(
         "[{} %(levelname)s %(asctime)s] %(message)s".format(name)
     )
@@ -90,7 +91,7 @@ def prepare_config_file(
     name: str,
     template_file: typing.Union[str, os.PathLike],
     parameter_updates: dict,
-    destination_directory: pathlib.PurePath,
+    destination_directory: PurePath,
 ) -> None:
     """Create config file based on the given template and parameter updates.
 
@@ -156,10 +157,10 @@ def prepare_config_file(
 
     destination_file = destination_directory / "{}.json".format(name)
     with open(destination_file, "w") as f:
-        json.dump(config, f)
+        json.dump(config, f, indent=4)
 
 
-def setup_config(working_dir: pathlib.Path, params: dict) -> pathlib.Path:
+def setup_config(working_dir: Path, run_data_dir: Path, params: dict) -> Path:
     """Set up config files based on templates and parameters.
 
     The *params* dictionary is expected to have an entry "config_templates" which
@@ -189,7 +190,8 @@ def setup_config(working_dir: pathlib.Path, params: dict) -> pathlib.Path:
         }
 
     Args:
-        working_dir:  Directory in which the config setup is created.
+        working_dir:  Directory in which the job is executed.
+        run_data_dir:  Directory in which the run-specific data should be stored.
         params:  Dictionary of parameters (see above).
 
     Returns:
@@ -198,11 +200,11 @@ def setup_config(working_dir: pathlib.Path, params: dict) -> pathlib.Path:
     logger = get_logger()
 
     base_config = {
-        "reward_config": "./config/reward_config.json",
-        "hysr_config": "./config/hysr_config.json",
-        "pam_config": "./config/pam_config.json",
-        "rl_config": "./config/rl_config.json",
-        "rl_common_config": "./config/rl_common_config.json",
+        "reward_config": str(run_data_dir / "./config/reward_config.json"),
+        "hysr_config": str(run_data_dir / "./config/hysr_config.json"),
+        "pam_config": str(run_data_dir / "./config/pam_config.json"),
+        "rl_config": str(run_data_dir / "./config/rl_config.json"),
+        "rl_common_config": str(run_data_dir / "./config/rl_common_config.json"),
     }
 
     # raise error if there is any unexpected value in the config
@@ -212,29 +214,25 @@ def setup_config(working_dir: pathlib.Path, params: dict) -> pathlib.Path:
             raise KeyError("Unexpected key '{}' in params".format(key))
 
     main_config_file = working_dir / "config.json"
-    # if config is already there, skip creation (this is the case when
-    # restarting after a failure)
-    if main_config_file.exists():
-        logger.info("config.json already exists, skip setup.")
-    else:
-        with open(params["config_templates"], "r") as f:
-            config_file_templates = json.load(f)
 
-        config_dir = working_dir / "config"
-        config_dir.mkdir(exist_ok=True, parents=True)
+    with open(params["config_templates"], "r") as f:
+        config_file_templates = json.load(f)
 
-        with open(main_config_file, "w") as f:
-            json.dump(base_config, f)
+    config_dir = run_data_dir / "config"
+    config_dir.mkdir(exist_ok=True, parents=True)
 
-        base_config_path = pathlib.PurePath(params["config_templates"]).parent
-        for name in base_config.keys():
-            template_path = base_config_path / config_file_templates[name]
-            prepare_config_file(name, template_path, params.get(name, {}), config_dir)
+    with open(main_config_file, "w") as f:
+        json.dump(base_config, f, indent=4)
+
+    base_config_path = PurePath(params["config_templates"]).parent
+    for name in base_config.keys():
+        template_path = base_config_path / config_file_templates[name]
+        prepare_config_file(name, template_path, params.get(name, {}), config_dir)
 
     return main_config_file
 
 
-def read_reward_from_log(log_dir: pathlib.PurePath) -> float:
+def read_reward_from_log(log_dir: PurePath) -> float:
     """Extract 'eprewmean' from the log.
 
     Args:
@@ -267,7 +265,7 @@ def rename_directory(path: typing.Union[str, os.PathLike], suffix: str):
         path: Path that is to be renamed.
         suffix: Suffix that is added to the current name.
     """
-    path = pathlib.Path(path)
+    path = Path(path)
     if path.exists():
         new_path = "{}_{}".format(path, suffix)
         path.rename(new_path)
@@ -293,7 +291,7 @@ class Runner:
                 set environment variable OPENAI_LOGDIR for the learning process).
         """
         # prepare environment
-        self.training_log_dir = pathlib.Path(training_log_dir)
+        self.training_log_dir = Path(training_log_dir)
         self.config_file = config_file
 
     def start_backend(self):
@@ -377,9 +375,20 @@ def main() -> int:
     # get parameters (make mutable so defaults can easily be set later)
     params = cluster.read_params_from_cmdline(make_immutable=False)
 
-    working_dir = pathlib.Path(params.working_dir)
-    training_log_dir = working_dir / "training_logs"
+    working_dir = Path(params.working_dir)
     restart_info_file = working_dir / RESTART_INFO_FILENAME
+
+    restart_info = RestartInfo(restart_info_file)
+
+    run_id = "{}.{}-{}".format(
+        restart_info.finished_trainigs,
+        restart_info.training_continuation_counter,
+        restart_info.failed_attempts,
+    )
+
+    run_data_dir = working_dir / f"run_{run_id}"
+    training_log_dir = run_data_dir / "training_logs"
+    model_save_path = os.fspath(run_data_dir / "model")
 
     # Overwrite some values from the config templates to disable any graphical
     # interfaces and to save the model in working_dir (unless a different value
@@ -391,10 +400,12 @@ def main() -> int:
                 "xterms": False,
             },
             "rl_config": {
-                "save_path": os.fspath(working_dir / "model"),
+                "load_path": restart_info.unfinished_model,
+                "save_path": model_save_path,
                 "log_path": os.fspath(training_log_dir),
             },
         },
+        "training_iterations": DEFAULT_TRAINING_ITERATIONS,
         "learning_runs_per_job": DEFAULT_LEARNING_RUNS_PER_JOB,
         "max_attempts": DEFAULT_MAX_ATTEMPTS,
     }
@@ -403,18 +414,19 @@ def main() -> int:
     )
     logger.info("Params:\n%s\n-------------" % params)
 
-    config_file = setup_config(working_dir, params.config)
+    config_file = setup_config(working_dir, run_data_dir, params.config)
     os.chdir(working_dir)
 
-    restart_info = RestartInfo(restart_info_file)
     runner = Runner(config_file, training_log_dir)
 
-    run_id = f"{restart_info.finished_runs}-{restart_info.failed_attempts}"
     try:
         logger.info(f"\n\n############################# Start Run {run_id}\n")
 
         eprewmean = runner.run()
-        restart_info.mark_run_finished(eprewmean)
+
+        restart_info.continue_training(model_save_path)
+        if restart_info.training_continuation_counter >= params.training_iterations:
+            restart_info.mark_training_finished(eprewmean)
 
     except subprocess.CalledProcessError as e:
         logger.error("\n!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
@@ -427,9 +439,6 @@ def main() -> int:
     finally:
         runner.stop_backend()
 
-    # rename training log directory, so it does not get overwritten by next run
-    rename_directory(training_log_dir, run_id)
-
     # store the restart info
     restart_info.save()
 
@@ -439,7 +448,7 @@ def main() -> int:
 
     # if desired number of runs have not yet finished, exit for resume (i.e. restart
     # with a new cluster job)
-    if restart_info.finished_runs < params.learning_runs_per_job:
+    if restart_info.finished_trainigs < params.learning_runs_per_job:
         # print separator to both stdout and stderr (so we have it in both log files)
         logger.info(
             f"Exit for restart [{run_id}].\n"
@@ -450,7 +459,9 @@ def main() -> int:
             "==========================================\n\n",
         )
 
-        fraction_finished = restart_info.finished_runs / params.learning_runs_per_job
+        fraction_finished = (
+            restart_info.finished_trainigs / params.learning_runs_per_job
+        )
         cluster.announce_fraction_finished(fraction_finished)
         cluster.exit_for_resume()
 
