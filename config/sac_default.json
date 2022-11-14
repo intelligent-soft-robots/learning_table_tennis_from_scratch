@@ -5,6 +5,7 @@
     "batch_size": 90,
     "log_path": "/tmp/training_log",
     "num_timesteps": 500000,
+    "load_path": "",
     "save_path": "/tmp/model",
     "num_layers": 1,
     "num_hidden": 60,
