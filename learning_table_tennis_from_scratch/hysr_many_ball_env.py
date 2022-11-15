@@ -106,6 +106,7 @@ class HysrManyBallEnv(gym.Env):
         self._algo_time_step = hysr_one_ball_config.algo_time_step
         self._pressure_change_range = hysr_one_ball_config.pressure_change_range
         self._accelerated_time = hysr_one_ball_config.accelerated_time
+        self._action_repeat_counter = hysr_one_ball_config.action_repeat_counter
 
         self._hysr = HysrOneBall(hysr_one_ball_config, reward_function)
 
@@ -370,7 +371,10 @@ class HysrManyBallEnv(gym.Env):
         action = [int(a) for a in action]
 
         # performing a step
-        observation, reward, episode_over, extra_observations, extra_rewards, extra_dones = self._hysr.step(list(action))
+        for _ in range(self._action_repeat_counter):
+            observation, reward, episode_over, extra_observations, extra_rewards, extra_dones = self._hysr.step(list(action))
+            if episode_over:
+                break
 
         # imposing frequency to learning agent
         if not self._accelerated_time:
