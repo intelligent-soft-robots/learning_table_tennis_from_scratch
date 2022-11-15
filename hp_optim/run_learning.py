@@ -459,9 +459,12 @@ def main() -> int:
             "==========================================\n\n",
         )
 
-        fraction_finished = (
-            restart_info.finished_trainigs / params.learning_runs_per_job
+        training_progress = (
+            restart_info.training_continuation_counter / params.training_iterations
         )
+        fraction_finished = (
+            restart_info.finished_trainigs + training_progress
+        ) / params.learning_runs_per_job
         cluster.announce_fraction_finished(fraction_finished)
         cluster.exit_for_resume()
 
