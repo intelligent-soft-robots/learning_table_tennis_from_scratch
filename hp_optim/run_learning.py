@@ -255,22 +255,6 @@ def read_reward_from_log(log_dir: PurePath) -> float:
     return eprewmean
 
 
-def rename_directory(path: typing.Union[str, os.PathLike], suffix: str):
-    """Rename the given directory by adding ``suffix`` at the end if it exists.
-
-    If path exists, rename it by appending suffix (separated with an underscore) to its
-    name.  If it does not exist, do nothing.
-
-    Args:
-        path: Path that is to be renamed.
-        suffix: Suffix that is added to the current name.
-    """
-    path = Path(path)
-    if path.exists():
-        new_path = "{}_{}".format(path, suffix)
-        path.rename(new_path)
-
-
 class Runner:
     """Run learning in subprocesses.
 
