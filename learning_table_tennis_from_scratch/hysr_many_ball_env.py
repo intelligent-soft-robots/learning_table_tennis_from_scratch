@@ -373,7 +373,8 @@ class HysrManyBallEnv(gym.Env):
         # performing a step
         for _ in range(self._action_repeat_counter):
             observation, reward, episode_over, extra_observations, extra_rewards, extra_dones = self._hysr.step(list(action))
-            if episode_over:
+            all_episodes_over = episode_over and all(extra_dones)
+            if all_episodes_over:
                 break
 
         # imposing frequency to learning agent
