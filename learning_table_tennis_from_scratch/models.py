@@ -138,9 +138,18 @@ def run_stable_baselines(
 
     
     if rl_config.load_path:
+        del model
         print("loading policy from", rl_config.load_path)
-        model = model_type[algorithm].load(rl_config.load_path, env)
-        print("load model from:", rl_config.load_path)
+        model = model_type[algorithm].load(rl_config.load_path, env, seed=seed)
+        if rl_config.save_and_load_buffer:
+            print("loading replay buffer from", rl_config.load_path)
+            model.load_replay_buffer(rl_config.save_path+"_buf")
+        continue_training = True
+    else:
+        continue_training = False
+
+    # set custom logger, so we also get CSV output
+    model.set_logger(tensorboard_logger)
 
     model.learn(
         total_timesteps=rl_config.num_timesteps,
@@ -162,6 +171,11 @@ def run_stable_baselines(
 
     if rl_config.save_path:
         model.save(rl_config.save_path)
+        print("policy saved to", rl_config.save_path)
+        if rl_config.save_and_load_buffer:
+            model.save_replay_buffer(rl_config.save_path+"_buf")
+            print("buffer saved to", rl_config.save_path+"_buf")
+        
 
 
 def run_openai_baselines(
