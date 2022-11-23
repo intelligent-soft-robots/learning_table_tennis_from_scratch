@@ -128,9 +128,6 @@ def init_logger(name: typing.Optional[str] = None) -> logging.Logger:
     Args:
         name: Name of the application (added to each message).
     """
-    if name is None:
-        name = pathlib.PurePath(__file__).name
-
     formatter = logging.Formatter("[%(name)s %(levelname)s %(asctime)s] %(message)s")
 
     # Code below mostly by Zoey Greer, CC BY-SA 3.0

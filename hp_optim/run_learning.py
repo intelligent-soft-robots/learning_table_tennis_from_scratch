@@ -39,7 +39,7 @@ def get_logger() -> logging.Logger:
     global _logger
 
     if _logger is None:
-        _logger = init_logger()
+        _logger = init_logger(PurePath(__file__).name)
 
     return _logger
 
