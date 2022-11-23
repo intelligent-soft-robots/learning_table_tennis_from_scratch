@@ -130,9 +130,8 @@ def init_logger(name: typing.Optional[str] = None) -> logging.Logger:
     """
     if name is None:
         name = pathlib.PurePath(__file__).name
-    formatter = logging.Formatter(
-        "[{} %(levelname)s %(asctime)s] %(message)s".format(name)
-    )
+
+    formatter = logging.Formatter("[%(name)s %(levelname)s %(asctime)s] %(message)s")
 
     # Code below mostly by Zoey Greer, CC BY-SA 3.0
     # (https://stackoverflow.com/a/31459386, 2022-03-10)
@@ -145,7 +144,7 @@ def init_logger(name: typing.Optional[str] = None) -> logging.Logger:
             # non-zero return means we log this message
             return 1 if record.levelno < self.max_level else 0
 
-    logger = logging.getLogger()
+    logger = logging.getLogger(name)
     logger.setLevel(logging.NOTSET)
 
     handler_stdout = logging.StreamHandler(sys.stdout)
