@@ -19,10 +19,10 @@ import typing
 from pathlib import Path, PurePath
 
 import numpy as np
-import cluster
-import smart_settings.param_classes
+import cluster  # type: ignore
+import smart_settings.param_classes  # type: ignore
 
-from utils import RestartInfo
+from utils import RestartInfo, init_logger
 
 
 # Max. number of attempts.  If it fails this many times, do not try again.
@@ -32,49 +32,6 @@ DEFAULT_TRAINING_ITERATIONS = 1
 RESTART_INFO_FILENAME = "restarts.json"
 
 _logger = None
-
-
-def init_logger(name: str = None) -> logging.Logger:
-    """Initialise stdout/stderr-logger.
-
-    The logger is configured to write messages with level <= INFO to stdout and any
-    higher levels to stderr.
-
-    Args:
-        name: Name of the application (added to each message).
-    """
-    if name is None:
-        name = PurePath(__file__).name
-    formatter = logging.Formatter(
-        "[{} %(levelname)s %(asctime)s] %(message)s".format(name)
-    )
-
-    # Code below mostly by Zoey Greer, CC BY-SA 3.0
-    # (https://stackoverflow.com/a/31459386, 2022-03-10)
-    class LessThanFilter(logging.Filter):
-        def __init__(self, exclusive_maximum, name=""):
-            super(LessThanFilter, self).__init__(name)
-            self.max_level = exclusive_maximum
-
-        def filter(self, record):
-            # non-zero return means we log this message
-            return 1 if record.levelno < self.max_level else 0
-
-    logger = logging.getLogger()
-    logger.setLevel(logging.NOTSET)
-
-    handler_stdout = logging.StreamHandler(sys.stdout)
-    handler_stdout.setLevel(logging.DEBUG)
-    handler_stdout.addFilter(LessThanFilter(logging.WARNING))
-    handler_stdout.setFormatter(formatter)
-    logger.addHandler(handler_stdout)
-
-    handler_stderr = logging.StreamHandler(sys.stderr)
-    handler_stderr.setLevel(logging.WARNING)
-    handler_stderr.setFormatter(formatter)
-    logger.addHandler(handler_stderr)
-
-    return logger
 
 
 def get_logger() -> logging.Logger:
@@ -278,18 +235,20 @@ class Runner:
         self.training_log_dir = Path(training_log_dir)
         self.config_file = config_file
 
+        self.logger = get_logger()
+
     def start_backend(self):
-        get_logger().info("#### Start robots [hysr_start_robots]\n")
+        self.logger.info("#### Start robots [hysr_start_robots]\n")
         self.proc_backend = subprocess.Popen(
             ["hysr_start_robots", os.fspath(self.config_file)]
         )
 
     def stop_backend(self):
-        get_logger().info("#### Stop backend [hysr_stop]")
+        self.logger.info("#### Stop backend [hysr_stop]")
         subprocess.run(["hysr_stop"])
 
     def start_learning(self):
-        get_logger().info("\n\n#### Start learning [hysr_one_ball_rl]\n")
+        self.logger.info("\n\n#### Start learning [hysr_one_ball_rl]\n")
         self.learning_start_time = time.time()
         self.proc_learning = subprocess.Popen(
             ["hysr_one_ball_rl", os.fspath(self.config_file)]
@@ -308,14 +267,22 @@ class Runner:
             time.sleep(5)
 
             if self.proc_backend.poll() is not None:
-                # backend terminated, this is bad!
-                # kill learning and fail
+                # backend terminated, this is bad! Kill learning and fail.
+                self.logger.fatal(
+                    "Back end unexpectedly terminated with return code %d.",
+                    self.proc_backend.returncode,
+                )
+                self.logger.info("Kill learning process.")
                 self.proc_learning.kill()
                 raise subprocess.CalledProcessError(
                     self.proc_backend.returncode, self.proc_backend.args
                 )
 
             if self.proc_learning.poll() is not None:
+                self.logger.info(
+                    "Learning process terminated with return code %d.",
+                    self.proc_learning.returncode,
+                )
                 if self.proc_learning.returncode == 0:
                     # learning finished cleanly, all good
                     break
@@ -335,8 +302,6 @@ class Runner:
         Raises:
             subprocess.CalledProcessError: if one of the processes fails.
         """
-        logger = get_logger()
-
         self.start_backend()
         self.start_learning()
 
@@ -344,11 +309,11 @@ class Runner:
         self.monitor_processes()
 
         duration = (time.time() - self.learning_start_time) / 60.0
-        logger.info("\n\nlearning took %0.2f min" % duration)
+        self.logger.info("\n\nlearning took %0.2f min" % duration)
 
         # extract eprewmean from the log
         eprewmean = read_reward_from_log(self.training_log_dir)
-        logger.info("Final Reward: %0.2f" % eprewmean)
+        self.logger.info("Final Reward: %0.2f" % eprewmean)
 
         return eprewmean
 
