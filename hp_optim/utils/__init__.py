@@ -134,7 +134,7 @@ def init_logger(name: typing.Optional[str] = None) -> logging.Logger:
     # (https://stackoverflow.com/a/31459386, 2022-03-10)
     class LessThanFilter(logging.Filter):
         def __init__(self, exclusive_maximum, name=""):
-            super(LessThanFilter, self).__init__(name)
+            super().__init__(name)
             self.max_level = exclusive_maximum
 
         def filter(self, record):
@@ -146,12 +146,13 @@ def init_logger(name: typing.Optional[str] = None) -> logging.Logger:
 
     handler_stdout = logging.StreamHandler(sys.stdout)
     handler_stdout.setLevel(logging.DEBUG)
-    handler_stdout.addFilter(LessThanFilter(logging.WARNING))
+    #handler_stdout.addFilter(LessThanFilter(logging.WARNING))
     handler_stdout.setFormatter(formatter)
     logger.addHandler(handler_stdout)
 
     handler_stderr = logging.StreamHandler(sys.stderr)
-    handler_stderr.setLevel(logging.WARNING)
+    #handler_stderr.setLevel(logging.WARNING)
+    handler_stderr.setLevel(logging.INFO)
     handler_stderr.setFormatter(formatter)
     logger.addHandler(handler_stderr)
 
