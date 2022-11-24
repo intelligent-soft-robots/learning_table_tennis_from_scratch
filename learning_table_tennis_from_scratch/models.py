@@ -1,4 +1,5 @@
 import pathlib
+import os
 
 from learning_table_tennis_from_scratch.hysr_one_ball_env import HysrOneBallEnv
 from learning_table_tennis_from_scratch.hysr_many_ball_env import HysrManyBallEnv
@@ -134,6 +135,9 @@ def run_stable_baselines(
         if rl_config.save_and_load_buffer:
             print("loading replay buffer from", rl_config.load_path)
             model.load_replay_buffer(rl_config.load_path+"_buf")
+            if rl_config.delete_buffer_file_after_loading:
+                os.remove(rl_config.load_path+"_buf.pkl")
+                print("buffer file deleted")
         continue_training = True
     else:
         continue_training = False
