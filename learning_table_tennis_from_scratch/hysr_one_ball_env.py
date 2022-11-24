@@ -402,6 +402,8 @@ class HysrOneBallEnv(gym.Env):
             dict_data["episode_over"] = [x[5] for x in data_buffer]
             json.dump(dict_data, json_data)
 
+    def close(self):
+        self._hysr.close()
 
 
                 
