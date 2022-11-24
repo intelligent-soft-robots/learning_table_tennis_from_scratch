@@ -153,7 +153,8 @@ def run_stable_baselines(
         if rl_config.save_and_load_buffer:
             model.save_replay_buffer(rl_config.save_path+"_buf")
             print("buffer saved to", rl_config.save_path+"_buf")
-        
+
+    env.close()
 
 
 def run_openai_baselines(
