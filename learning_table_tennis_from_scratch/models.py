@@ -133,7 +133,7 @@ def run_stable_baselines(
         model = model_type[algorithm].load(rl_config.load_path, env, seed=seed)
         if rl_config.save_and_load_buffer:
             print("loading replay buffer from", rl_config.load_path)
-            model.load_replay_buffer(rl_config.save_path+"_buf")
+            model.load_replay_buffer(rl_config.load_path+"_buf")
         continue_training = True
     else:
         continue_training = False
