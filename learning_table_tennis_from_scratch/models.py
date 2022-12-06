@@ -71,7 +71,7 @@ def run_stable_baselines(
 
     if algorithm in ["ppo", "sac"]:
         model = model_type[algorithm](
-            "MlpPolicy",
+            rl_config.policy_network,
             env,
             seed=seed,
             policy_kwargs={
@@ -81,7 +81,7 @@ def run_stable_baselines(
         )
     elif algorithm in ["sac_her"]:
         model = model_type[algorithm](
-            "MultiInputPolicy",
+            rl_config.policy_network,
             env,
             replay_buffer_class=HerReplayBuffer,
             seed=seed,
@@ -91,14 +91,14 @@ def run_stable_baselines(
             replay_buffer_kwargs=dict(
                 n_sampled_goal = rl_config.n_sampled_goal,
                 goal_selection_strategy = rl_config.goal_selection_strategy,
-                online_sampling = False,
+                online_sampling = rl_config.online_sampling,
                 max_episode_length = 200
             ),
             **rl_config.get_rl_params(),
         )
     elif algorithm in ["sac_hsm"]:
         model = model_type[algorithm](
-            "MultiInputPolicy",
+            rl_config.policy_network,
             env,
             replay_buffer_class=HerReplayBuffer,
             seed=seed,
