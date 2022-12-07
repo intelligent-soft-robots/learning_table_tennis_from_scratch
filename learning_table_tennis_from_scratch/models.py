@@ -82,6 +82,7 @@ def run_stable_baselines(
             seed=seed,
             policy_kwargs={
                 "net_arch": [rl_config.num_hidden] * rl_config.num_layers,
+                "n_critics": rl_config.n_critics
             },
             **rl_config.get_rl_params(),
         )
@@ -93,6 +94,7 @@ def run_stable_baselines(
             seed=seed,
             policy_kwargs={
                 "net_arch": [rl_config.num_hidden] * rl_config.num_layers,
+                "n_critics": rl_config.n_critics
             },
             replay_buffer_kwargs=dict(
                 n_sampled_goal = rl_config.n_sampled_goal,
@@ -110,6 +112,7 @@ def run_stable_baselines(
             seed=seed,
             policy_kwargs={
                 "net_arch": [rl_config.num_hidden] * rl_config.num_layers,
+                "n_critics": rl_config.n_critics
             },
             replay_buffer_kwargs=dict(
                 n_sampled_hindsight_states = rl_config.n_sampled_hindsight_states,

@@ -71,6 +71,7 @@ class RLConfig:
         "policy_network", #E.g. MLP or CNN
         "num_layers",  # Number of layers in the network
         "num_hidden",  # Size of each layer (all layers have same size)
+        "n_critics", # Number of critics
         "log_path",  # Destination for checkpoints and log files
     )
 
