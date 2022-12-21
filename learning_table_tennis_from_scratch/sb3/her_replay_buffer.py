@@ -415,7 +415,7 @@ class HerReplayBuffer(DictReplayBuffer):
                         else:
                             raise ValueError(f"Strategy {self.hindsight_state_selection_strategy} - {self.hindsight_state_selection_strategy_horizon} for sampling hindsight states is not supported!")
 
-                        action = self.to_torch([action])
+                        action = self.to_torch(action)
                         ob_norm_1 = self._normalize_obs(ob_1)
                         ob_norm_1 = {key: self.to_torch([ob_norm_1[key]]) for key in self._observation_keys}
                         if self.hindsight_state_selection_strategy_horizon == HindsightStateSelectionStrategyHorizon.STEP:
