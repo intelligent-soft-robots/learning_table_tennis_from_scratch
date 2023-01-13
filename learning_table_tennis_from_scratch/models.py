@@ -63,7 +63,7 @@ def run_stable_baselines(
     }
     env = make_vec_env(env_type, env_kwargs=env_config, seed=seed)
 
-    model_type = {"ppo": PPO, "sac": SAC, "sac_her": SAC, "sac_hsm": SAC}
+    model_type = {"ppo": PPO, "sac": SAC, "sac_her": SAC, "sac_hsm": SAC, "sac_hsm_her": SAC}
 
     if rl_config.load_path:
         print("loading policy from", rl_config.load_path)
@@ -131,6 +131,38 @@ def run_stable_baselines(
                 apply_HSM = True,
                 apply_HER = False,
                 max_episode_length = 200
+            ),
+            **rl_config.get_rl_params(),
+        )
+    elif algorithm in ["sac_hsm_her"]:
+        model = model_type[algorithm](
+            rl_config.policy_network,
+            env,
+            replay_buffer_class=HerReplayBuffer,
+            seed=seed,
+            policy_kwargs={
+                "net_arch": [rl_config.num_hidden] * rl_config.num_layers,
+                "n_critics": rl_config.n_critics
+            },
+            replay_buffer_kwargs=dict(
+                n_sampled_hindsight_states = rl_config.n_sampled_hindsight_states,
+                hindsight_state_selection_strategy = rl_config.hindsight_state_selection_strategy,
+                hindsight_state_selection_strategy_horizon = rl_config.hindsight_state_selection_strategy_horizon,
+                HSM_shape = rl_config.HSM_shape,
+                HSM_goal_env = rl_config.HSM_goal_env,
+                HSM_n_traj_freq = rl_config.HSM_n_traj_freq,
+                HSM_min_criterion = rl_config.HSM_min_criterion,
+                n_sampled_hindsight_states_change_per_step = rl_config.n_sampled_hindsight_states_change_rel / rl_config.num_timesteps * rl_config.n_sampled_hindsight_states,
+                HSM_criterion_change_per_step = rl_config.HSM_criterion_change / rl_config.num_timesteps,
+                HSM_use_likelihood_ratio = rl_config.HSM_use_likelihood_ratio,
+                HSM_likelihood_ratio_cutoff = rl_config.HSM_likelihood_ratio_cutoff,
+                prioritized_replay_baseline = rl_config.prioritized_replay_baseline,
+                online_sampling = True,
+                apply_HSM = True,
+                apply_HER = True,
+                max_episode_length = 200,
+                n_sampled_goal = rl_config.n_sampled_goal,
+                goal_selection_strategy = rl_config.goal_selection_strategy
             ),
             **rl_config.get_rl_params(),
         )
