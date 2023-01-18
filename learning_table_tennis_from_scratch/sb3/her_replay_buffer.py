@@ -410,6 +410,7 @@ class HerReplayBuffer(DictReplayBuffer):
                         self.add(obs, next_obs, action, reward, done, infos)
                         
             self.hsm_traj_buffer = []
+            print("return add_full_trajectories_HSM")
                         
 
     def add_trajectories_HSM(
@@ -598,6 +599,7 @@ class HerReplayBuffer(DictReplayBuffer):
         :param n_sampled_goal: Number of sampled goals for replay. (offline sampling)
         :return: Samples.
         """
+        print("_sample_transitions in -", end=" ")
         # Select which episodes to use
         if online_sampling:
             assert batch_size is not None, "No batch_size specified for online sampling of HER transitions"
@@ -688,6 +690,7 @@ class HerReplayBuffer(DictReplayBuffer):
         }
         next_observations = self._normalize_obs(next_observations, maybe_vec_env)
 
+        print("_sample_transitions out")
         if online_sampling:
             next_obs = {key: self.to_torch(next_observations[key][:, 0, :]) for key in self._observation_keys}
 
@@ -713,6 +716,7 @@ class HerReplayBuffer(DictReplayBuffer):
         infos: List[Dict[str, Any]],
     ) -> None:
 
+        print("--add", obs["observation"][0][0], "--", end=' ')
         if self.current_idx == 0 and self.full:
             # Clear info buffer
             self.info_buffer[self.pos] = deque(maxlen=self.max_episode_length)
@@ -759,6 +763,7 @@ class HerReplayBuffer(DictReplayBuffer):
         self.episode_steps += 1
 
         if done or self.episode_steps >= self.max_episode_length:
+            print("ep done")
             self.store_episode()
             if not self.online_sampling:
                 if self.apply_HER:
@@ -778,6 +783,7 @@ class HerReplayBuffer(DictReplayBuffer):
                         info["trajectory"], info["hsm_trajectories"]
                     )
                 if "extra_obs" in info:
+                    print("--HSM--", end=" ")
                     extra_obs = info["extra_obs"]
                     extra_rewards = info["extra_rewards"]
                     extra_dones = info["extra_terminated"]
@@ -866,6 +872,7 @@ class HerReplayBuffer(DictReplayBuffer):
         when using offline sampling.
         """
 
+        print("_sample_her_transitions in")
         # Sample goals to create virtual transitions for the last episode.
         observations, next_observations, actions, rewards = self._sample_offline(n_sampled_goal=self.n_sampled_goal)
 
@@ -881,6 +888,7 @@ class HerReplayBuffer(DictReplayBuffer):
                     done=[False],
                     infos=[{}],
                 )
+        print("_sample_her_transitions out")
 
     @property
     def n_episodes_stored(self) -> int:
