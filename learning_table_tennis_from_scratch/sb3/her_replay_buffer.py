@@ -382,7 +382,6 @@ class HerReplayBuffer(DictReplayBuffer):
         self.idx_eps_hsm += 1
         # calculate criterion for every trajectory in hsm trajectories buffer
         if len(self.hsm_traj_buffer)>=self.HSM_n_traj_freq:
-            print("---- add_full_trajectories_HSM ---")
             hsm_trajectories_criterion = []
             for hsm_trajectory, idx_env, idx_eps in self.hsm_traj_buffer:
                 if self.hindsight_state_selection_strategy == HindsightStateSelectionStrategy.RANDOM and self.hindsight_state_selection_strategy_horizon == HindsightStateSelectionStrategyHorizon.EPISODE:
@@ -391,6 +390,11 @@ class HerReplayBuffer(DictReplayBuffer):
                     criterion = -sum([hsm_trajectory[idx][3]*1.0**idx for idx in range(0, len(hsm_trajectory))])
                 elif self.hindsight_state_selection_strategy == HindsightStateSelectionStrategy.ACHIEVED_GOAL and self.hindsight_state_selection_strategy_horizon == HindsightStateSelectionStrategyHorizon.EPISODE:
                     criterion = -float(np.linalg.norm(hsm_trajectory[0][0]["achieved_goal"] - hsm_trajectory[-1][1]["achieved_goal"])>self.HSM_min_criterion)
+                elif self.hindsight_state_selection_strategy == HindsightStateSelectionStrategy.REWARD_ACHIEVED_GOAL_002 and self.hindsight_state_selection_strategy_horizon == HindsightStateSelectionStrategyHorizon.EPISODE:
+                    if np.linalg.norm(hsm_trajectory[0][0]["achieved_goal"] - hsm_trajectory[-1][1]["achieved_goal"])>0.02:
+                        criterion = -sum([hsm_trajectory[idx][3]*1.0**idx for idx in range(0, len(hsm_trajectory))])
+                    else:
+                        criterion = 9999   # do not use
                 else:
                     raise ValueError(f"Strategy {self.hindsight_state_selection_strategy} - {self.hindsight_state_selection_strategy_horizon} for sampling hindsight states is not supported!")
                 hsm_trajectories_criterion.append((criterion, hsm_trajectory, idx_eps, idx_env))
@@ -751,7 +755,22 @@ class HerReplayBuffer(DictReplayBuffer):
             self.n_total_steps += 1
 
 
-        self.info_buffer[self.pos].append(infos)
+        # remove extra data from info for info buffer
+        infos_without_extras = []
+        for info in infos:
+            info_without_extras = info.copy()
+            for key in ("extra_obs",
+                    "extra_rewards",
+                    "extra_terminated",
+                    "extra_truncated",
+                    "extra_is_success",
+                    "initial_extra_obs",
+                    "trajectory",
+                    "hsm_trajectories"):
+                if key in info_without_extras:
+                    del info_without_extras[key]
+            infos_without_extras.append(info_without_extras)
+        self.info_buffer[self.pos].append(infos_without_extras)
 
         # update current pointer
         self.current_idx += 1
@@ -787,7 +806,6 @@ class HerReplayBuffer(DictReplayBuffer):
                     del info_without_extras["extra_terminated"]
                     del info_without_extras["extra_truncated"]
                     del info_without_extras["extra_is_success"]
-                    del info_without_extras["is_success"]
                     del info_without_extras["initial_extra_obs"]
                     info_for_extras = {}
                     if info.get("TimeLimit.truncated", False):
