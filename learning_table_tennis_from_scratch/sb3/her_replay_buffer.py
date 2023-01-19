@@ -755,7 +755,23 @@ class HerReplayBuffer(DictReplayBuffer):
             self.n_total_steps += 1
 
 
-        self.info_buffer[self.pos].append(infos)
+        # remove extra data from info for info buffer
+        infos_without_extras = []
+        for info in infos:
+            info_without_extras = info.copy()
+            for key in ("extra_obs",
+                    "extra_rewards",
+                    "extra_terminated",
+                    "extra_truncated",
+                    "extra_is_success",
+                    "initial_extra_obs",
+                    "trajectory",
+                    "hsm_trajectories"):
+                if key in info_without_extras:
+                    del info_without_extras[key]
+            infos_without_extras.append(info_without_extras)
+        print("info:", infos_without_extras)
+        self.info_buffer[self.pos].append(infos_without_extras)
 
         # update current pointer
         self.current_idx += 1
@@ -793,7 +809,6 @@ class HerReplayBuffer(DictReplayBuffer):
                     del info_without_extras["extra_terminated"]
                     del info_without_extras["extra_truncated"]
                     del info_without_extras["extra_is_success"]
-                    del info_without_extras["is_success"]
                     del info_without_extras["initial_extra_obs"]
                     info_for_extras = {}
                     if info.get("TimeLimit.truncated", False):
