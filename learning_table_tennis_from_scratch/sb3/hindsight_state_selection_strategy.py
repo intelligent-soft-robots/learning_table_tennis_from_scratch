@@ -11,6 +11,7 @@ class HindsightStateSelectionStrategy(Enum):
     REWARD = 1
     ADVANTAGE = 2
     ACHIEVED_GOAL = 3
+    REWARD_ACHIEVED_GOAL_002 = 4
 
 class HindsightStateSelectionStrategyHorizon(Enum):
     """
@@ -30,6 +31,7 @@ KEY_TO_HINDSIGHT_STATE_STRATEGY = {
     "reward": HindsightStateSelectionStrategy.REWARD,
     "advantage": HindsightStateSelectionStrategy.ADVANTAGE,
     "achieved_goal": HindsightStateSelectionStrategy.ACHIEVED_GOAL,
+    "reward_achieved_goal_002": HindsightStateSelectionStrategy.REWARD_ACHIEVED_GOAL_002,
 }
 
 KEY_TO_HINDSIGHT_STATE_STRATEGY_HORIZON = {
