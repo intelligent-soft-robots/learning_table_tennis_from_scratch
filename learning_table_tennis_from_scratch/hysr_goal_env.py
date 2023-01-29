@@ -308,6 +308,11 @@ class HysrGoalEnv(gym_robotics.GoalEnv):
         # casting similar to old code
         action_diffs_factor = self._pressure_change_range / 18000
         action = action * action_diffs_factor
+
+        # increase actions in 1. dof further
+        action[0] *= 4
+        action[1] *= 4
+
         action_sigmoid = [1 / (1 + np.exp(-a)) - 0.5 for a in action]
         action = [
             np.clip(a1 + a2, 0, 1) for a1, a2 in zip(self.last_action, action_sigmoid)
