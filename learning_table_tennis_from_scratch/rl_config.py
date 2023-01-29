@@ -28,7 +28,6 @@ class RLConfig:
 
     _algo_params_sac = (
         "gamma",
-        "tau",
         "ent_coef",
         "learning_rate",
         "batch_size",

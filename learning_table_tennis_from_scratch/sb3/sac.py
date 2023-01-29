@@ -188,12 +188,14 @@ class SAC(OffPolicyAlgorithm):
         self.critic_target = self.policy.critic_target
 
         if self.replay_buffer_class == HerReplayBuffer:
+            self.replay_buffer.gym_robotics_logger = self.logger
             if self.replay_buffer.apply_HSM:
                 self.replay_buffer.HSM_critic = self.critic
                 self.replay_buffer.HSM_policy = self.policy
                 self.replay_buffer.HSM_critic_target = self.critic_target
 
     def train(self, gradient_steps: int, batch_size: int = 64) -> None:
+
         # Switch to train mode (this affects batch norm / dropout)
         self.policy.set_training_mode(True)
         # Update optimizers learning rate
@@ -301,6 +303,10 @@ class SAC(OffPolicyAlgorithm):
         eval_log_path: Optional[str] = None,
         reset_num_timesteps: bool = True,
     ) -> OffPolicyAlgorithm:
+
+        # Share logger with HerReplayBuffer
+        if self.replay_buffer_class == HerReplayBuffer:
+            self.replay_buffer.gym_robotics_logger = self.logger
 
         return super(SAC, self).learn(
             total_timesteps=total_timesteps,

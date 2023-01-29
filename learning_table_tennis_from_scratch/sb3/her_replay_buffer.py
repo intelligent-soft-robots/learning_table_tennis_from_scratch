@@ -105,8 +105,9 @@ class HerReplayBuffer(DictReplayBuffer):
         HSM_use_likelihood_ratio = False,
         HSM_likelihood_ratio_cutoff = 1/np.e,
         prioritized_replay_baseline = False,
+        logger = None
     ):
-        
+
         super(HerReplayBuffer, self).__init__(buffer_size, env.observation_space, env.action_space, device, env.num_envs)
 
         if apply_HER:
@@ -199,7 +200,7 @@ class HerReplayBuffer(DictReplayBuffer):
         self.current_trajectory = []
         self.current_hsm_trajectories = [[]  for _ in range(HSM_shape)]
         self.extra_reset = True
-        
+
 
         # buffer with episodes
         # number of episodes which can be stored until buffer size is reached
@@ -238,7 +239,7 @@ class HerReplayBuffer(DictReplayBuffer):
             self._observation_keys = ["observation"]
 
 
-        
+
         self._buffer = {
             key: np.zeros((self.max_episode_stored, self.max_episode_length, *dim), dtype=np.float32)
             for key, dim in input_shape.items()
@@ -247,6 +248,18 @@ class HerReplayBuffer(DictReplayBuffer):
         self.info_buffer = [deque(maxlen=self.max_episode_length) for _ in range(self.max_episode_stored)]
         # episode length storage, needed for episodes which has less steps than the maximum length
         self.episode_lengths = np.zeros(self.max_episode_stored, dtype=np.int64)
+
+        # logging for gym robotic enfs
+        self.gym_robotics_logger = logger
+        self.n_hsm_traj = 0
+        self.n_success_hsm_traj = 0
+        self.n_dx_hsm_traj = 0
+        self.n_success_dx_hsm_traj = 0
+        self.n_traj = 0
+        self.n_success_traj = 0
+        self.n_dx_traj = 0
+        self.n_success_dx_traj = 0
+
 
     def __getstate__(self) -> Dict[str, Any]:
         """
@@ -368,6 +381,16 @@ class HerReplayBuffer(DictReplayBuffer):
             trajectory,
             hsm_trajectories
             ):
+
+        self.n_traj += 1
+        if np.linalg.norm(trajectory[0][0]["achieved_goal"] - trajectory[-1][1]["achieved_goal"])>0.02:
+            self.n_dx_traj += 1
+        if sum([trajectory[idx][3]*1.0**idx for idx in range(0, len(trajectory))])>-49:
+            self.n_success_traj += 1
+        if (np.linalg.norm(trajectory[0][0]["achieved_goal"] - trajectory[-1][1]["achieved_goal"])>0.02 and
+                sum([trajectory[idx][3]*1.0**idx for idx in range(0, len(trajectory))])>-49):
+            self.n_success_dx_traj += 1
+
         # store hsm trajectories in buffer
         if self.prioritized_replay_baseline:
             # use 'normal' trajectories
@@ -410,11 +433,29 @@ class HerReplayBuffer(DictReplayBuffer):
             for idx in indices:
                 criterion, trajectory, _, _ = hsm_trajectories_criterion[idx]
                 if -1.0*criterion>=HSM_min_criterion_eff:
+                    self.n_hsm_traj += 1
+                    if np.linalg.norm(trajectory[0][0]["achieved_goal"] - trajectory[-1][1]["achieved_goal"])>0.02:
+                        self.n_dx_hsm_traj += 1
+                    if sum([trajectory[idx][3]*1.0**idx for idx in range(0, len(trajectory))])>-49:
+                        self.n_success_hsm_traj += 1
+                    if (np.linalg.norm(trajectory[0][0]["achieved_goal"] - trajectory[-1][1]["achieved_goal"])>0.02 and
+                         sum([trajectory[idx][3]*1.0**idx for idx in range(0, len(trajectory))])>-49):
+                        self.n_success_dx_hsm_traj += 1
                     for obs, next_obs, action, reward, done, infos in trajectory:
                         self.add(obs, next_obs, action, reward, done, infos)
-                        
+
             self.hsm_traj_buffer = []
-                        
+
+        if self.gym_robotics_logger:
+            self.gym_robotics_logger.record("buffer/n_hsm_traj", self.n_hsm_traj)
+            self.gym_robotics_logger.record("buffer/n_success_hsm_traj", self.n_success_hsm_traj)
+            self.gym_robotics_logger.record("buffer/n_dx_hsm_traj", self.n_dx_hsm_traj)
+            self.gym_robotics_logger.record("buffer/n_success_dx_hsm_traj", self.n_success_dx_hsm_traj)
+            self.gym_robotics_logger.record("buffer/n_traj", self.n_traj)
+            self.gym_robotics_logger.record("buffer/n_success_traj", self.n_success_traj)
+            self.gym_robotics_logger.record("buffer/n_dx_traj", self.n_dx_traj)
+            self.gym_robotics_logger.record("buffer/n_success_dx_traj", self.n_success_dx_traj)
+
 
     def add_trajectories_HSM(
             self,
@@ -500,7 +541,7 @@ class HerReplayBuffer(DictReplayBuffer):
                         raise ValueError(f"Strategy {self.hindsight_state_selection_strategy} - {self.hindsight_state_selection_strategy_horizon} for sampling hindsight states is not supported!")
 
                     if self.HSM_use_likelihood_ratio and idx_trans<len(trajectory):
-                        
+
 
                         ob_norm = self._normalize_obs(ob)
                         ob_norm = {key: self.to_torch([ob_norm[key]]) for key in self._observation_keys}
@@ -514,10 +555,10 @@ class HerReplayBuffer(DictReplayBuffer):
                         mean_actions, log_std, _ = self.HSM_policy.actor.get_action_dist_params(ob_real_norm)
                         self.HSM_policy.actor.action_dist.proba_distribution(mean_actions, log_std)
                         log_likelihood_real = self.HSM_policy.actor.action_dist.log_prob(action)
-                        
+
                         log_likelihood = log_likelihood[0].item()
                         log_likelihood_real = log_likelihood_real[0].item()
-                        
+
                         is_factor = np.exp(log_likelihood - log_likelihood_real)
                         is_factor = min(self.HSM_likelihood_ratio_cutoff, is_factor)
                         is_factor = max(is_factor, self.HSM_likelihood_ratio_cutoff)
@@ -542,7 +583,7 @@ class HerReplayBuffer(DictReplayBuffer):
                     f.write(repr(hsm_transitions) + "\n\n")
                     print("------log------")
 
-        
+
             # sort by criterion and add to replay buffer
 
             n_sampled_hindsight_states_eff = max([0, self.n_sampled_hindsight_states + self.n_sampled_hindsight_states_change_per_step * self.n_total_steps])
@@ -569,13 +610,13 @@ class HerReplayBuffer(DictReplayBuffer):
                             # clear storage for current episode
                             self.reset()
                         self.episode_steps = 0
-                    
+
                     hsm_transitions_selected.append(hsm_transitions[idx])
 
             if self.HSM_logging:
                 with open ("/tmp/log_select.txt", "a+") as f:
                     f.write(repr(hsm_transitions_selected) + "\n\n")
-                
+
             self.hsm_traj_buffer = []
 
         # add all 'normally' collected transitions
@@ -651,7 +692,7 @@ class HerReplayBuffer(DictReplayBuffer):
             new_goals = self.sample_goals(episode_indices, her_indices, transitions_indices)
             transitions["desired_goal"][her_indices] = new_goals
 
-        
+
 
 
         # Convert info buffer to numpy array
@@ -835,7 +876,7 @@ class HerReplayBuffer(DictReplayBuffer):
                             extra_rewards[idx],
                             extra_dones[idx],
                             [info_for_extras]))
-                    
+
 
 
                     self.extra_current_obs = extra_obs.copy()
@@ -848,16 +889,16 @@ class HerReplayBuffer(DictReplayBuffer):
                         self.extra_reset = True
 
 
-        
-                                
-                        
-                                       
+
+       
+
+              
 
 
 
-        
 
-        
+
+
 
     def store_episode(self) -> None:
         """
