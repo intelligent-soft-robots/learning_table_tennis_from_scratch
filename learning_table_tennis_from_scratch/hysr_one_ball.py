@@ -38,7 +38,6 @@ def _to_robot_type(robot_type: str) -> pam_mujoco.RobotType:
 
 
 class HysrOneBallConfig:
-
     __slots__ = (
         "real_robot",
         "robot_type",
@@ -151,7 +150,6 @@ class _BallBehavior:
         cls._trajectory_reader = context.BallTrajectories(group)
 
     def __init__(self, line=False, index=False, random=False):
-
         if not hasattr(self.__class__, "_trajectory_reader"):
             raise UnboundLocalError(
                 "_BallBehavior: the classmethod read_trajectories(group:str) "
@@ -196,7 +194,6 @@ class _BallBehavior:
 
 
 class _ExtraBall:
-
     # see pam_demos/balls
     # for usage of handles and frontends
     # setid : handle
@@ -227,7 +224,6 @@ class _ExtraBall:
 
 
 def _get_extra_balls(setid, hysr_config):
-
     values = configure_mujoco.configure_extra_set(setid, hysr_config)
 
     handle = values[0]
@@ -292,7 +288,6 @@ class _Observation:
 
 class HysrOneBall:
     def __init__(self, hysr_config, reward_function):
-
         self._hysr_config = hysr_config
 
         # we will track the episode number
@@ -475,11 +470,9 @@ class HysrOneBall:
             hysr_config.extra_balls_sets is not None
             and hysr_config.extra_balls_sets > 0
         ):
-
             self._extra_balls = []
 
             for setid in range(hysr_config.extra_balls_sets):
-
                 # balls: list of instances of _ExtraBalls (defined in this file)
                 # mirroring : for sending mirroring command to the robot
                 #             of the set (joint controlled)
@@ -675,7 +668,6 @@ class HysrOneBall:
         self._move_to_position(self._hysr_config.reference_posture)
 
     def _do_instant_reset(self):
-
         # "instant": reset all mujoco instances
         # to their starting state. Not applicable
         # to real robot
@@ -737,7 +729,6 @@ class HysrOneBall:
 
         # applying the controller twice yields better results
         for _ in range(2):
-
             _, _, q_current, _ = self._pressure_commands.read()
 
             # the position controller
@@ -774,7 +765,6 @@ class HysrOneBall:
                     frequency_manager.wait()
 
     def reset(self):
-
         # what happens during reset does not correspond
         # to any episode (-1 means: no active episode)
         self._share_episode_number(-1)
@@ -862,7 +852,6 @@ class HysrOneBall:
         return self._create_observation()
 
     def _episode_over(self):
-
         # if self._nb_steps_per_episode is positive,
         # exiting based on the number of steps
         if self._nb_steps_per_episode > 0:
@@ -894,7 +883,6 @@ class HysrOneBall:
 
     # action assumed to be np.array(ago1,antago1,ago2,antago2,...)
     def step(self, action):
-
         # reading current real (or pseudo real) robot state
         (
             pressures_ago,

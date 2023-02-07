@@ -121,7 +121,6 @@ def prepare_config_file(
 
     # check if all provided parameter updates correspond to existing parameters
     for param in parameter_updates:
-
         # if parameter name ends with ":#", this indicates the #-th index of a parameter
         # whose value is a list
         m = re.match(r"(.*):([0-9])+$", param)

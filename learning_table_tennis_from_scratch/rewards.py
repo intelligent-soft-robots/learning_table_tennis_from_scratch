@@ -31,7 +31,6 @@ def _compute_reward(
     c,
     rtt_cap,
 ):
-
     # i.e. the ball did not hit the racket,
     # so computing a reward based on the minimum
     # distance between the racket and the ball
@@ -166,7 +165,6 @@ class JsonReward:
 
 
 def compute_rewards(reward_function, target, nb_balls, observations, episode=None):
-
     """
     observations is a list of observations obtained via an extra_balls_frontend.
     This method returns a list of reward {extra ball index:reward}
@@ -225,10 +223,9 @@ def compute_rewards(reward_function, target, nb_balls, observations, episode=Non
 
     # compute the reward of a specific ball
     def _compute_reward(index):
-
         # returns norm of a vector
         def _velocity_norm(velocity):
-            return math.sqrt(sum([v ** 2 for v in velocity]))
+            return math.sqrt(sum([v**2 for v in velocity]))
 
         # returns euclidian distance between two vectors
         def _distance(p1, p2):

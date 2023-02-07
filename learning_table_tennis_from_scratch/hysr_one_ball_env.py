@@ -13,7 +13,6 @@ from .rewards import JsonReward
 
 
 class _ObservationSpace:
-
     # the model does not support gym Dict or Tuple spaces
     # which is very inconvenient. This class implements
     # something similar to a Dict space, but which can
@@ -76,7 +75,6 @@ class HysrOneBallEnv(gym.Env):
         log_episodes=False,
         logger=None,
     ):
-
         super().__init__()
 
         self._log_episodes = log_episodes
@@ -208,7 +206,6 @@ class HysrOneBallEnv(gym.Env):
         return self._obs_boxes.get_normalized_values()
 
     def step(self, action):
-
         if not self._accelerated_time and self._frequency_manager is None:
             self._frequency_manager = o80.FrequencyManager(1.0 / self._algo_time_step)
 
