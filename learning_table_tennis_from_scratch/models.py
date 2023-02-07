@@ -167,7 +167,6 @@ def replay_openai_baselines(
     rl_config_file,
     log_episodes=False,
 ):
-
     model, env = run_openai_baselines(
         reward_config_file,
         hysr_one_ball_config_file,

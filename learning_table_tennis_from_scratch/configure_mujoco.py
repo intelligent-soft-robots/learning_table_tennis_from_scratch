@@ -34,7 +34,6 @@ def get_ball_segment_id(set_id, index):
 
 
 def configure_extra_set(setid, hysr_config):
-
     nb_balls = hysr_config.extra_balls_per_set
     graphics = hysr_config.graphics_extra_balls
     accelerated_time = True
@@ -90,7 +89,6 @@ def configure_pseudo_real(
     graphics=True,
     accelerated_time=False,
 ):
-
     if accelerated_time:
         burst_mode = True
     else:
@@ -116,7 +114,6 @@ def configure_pseudo_real(
 
 
 def configure_simulation(hysr_config, mujoco_id="simulation"):
-
     accelerated_time = True
     burst_mode = True
     graphics = hysr_config.graphics_simulation
