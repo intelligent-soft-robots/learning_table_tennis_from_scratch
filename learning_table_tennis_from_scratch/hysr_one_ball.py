@@ -5,6 +5,8 @@ import site
 import sys
 import time
 
+from scipy.spatial.transform import Rotation
+
 import o80
 import o80_pam
 import pam_interface
@@ -107,6 +109,18 @@ class HysrOneBallConfig:
 
         # convert paths to Path objects and expand '~'
         instance.pam_config_file = pathlib.Path(instance.pam_config_file).expanduser()
+
+        # convert orientation to Rotation instance
+        orientation_fields = ["robot_orientation", "table_orientation"]
+        for field in orientation_fields:
+            try:
+                rot = Rotation.from_quat(getattr(instance, field))
+                setattr(instance, field, rot)
+            except ValueError as e:
+                raise ValueError(
+                    "Unable to parse %s from file %s.  Expect quaternion [x, y, z, w]."
+                    "  Error is '%s'" % (field, jsonpath, e)
+                )
 
         return instance
 
