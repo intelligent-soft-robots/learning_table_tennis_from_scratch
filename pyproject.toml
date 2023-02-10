@@ -1,2 +1,16 @@
 [tool.black]
 extend-exclude = "runner_buffered\\.py|modified_baselines_ppo2\\.py"
+
+[[tool.mypy.overrides]]
+module = [
+    "context",
+    "frequency_monitoring",
+    "o80",
+    "o80_pam",
+    "pam_interface",
+    "pam_mujoco_wrp",
+    "pam_vicon_o80",
+    "shared_memory",
+    "signal_handler",
+]
+ignore_missing_imports = true
