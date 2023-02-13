@@ -1,10 +1,15 @@
-import pathlib
+import dataclasses
 import json
+import logging
 import os
+import pathlib
 import site
 import sys
 import time
+import typing as t
 
+import omegaconf as oc
+import variconf
 from scipy.spatial.transform import Rotation
 
 import o80
@@ -39,99 +44,114 @@ def _to_robot_type(robot_type: str) -> pam_mujoco.RobotType:
         raise ValueError(error)
 
 
+@dataclasses.dataclass
+class Boundaries3d:
+    """Represents min/max boundaries in a 3-dimensional space."""
+
+    min: t.Tuple[float, float, float]
+    max: t.Tuple[float, float, float]
+
+
+@dataclasses.dataclass
 class HysrOneBallConfig:
-    __slots__ = (
-        "real_robot",
-        "robot_type",
-        "o80_pam_time_step",
-        "mujoco_time_step",
-        "algo_time_step",
-        "pam_config_file",
-        "robot_position",
-        "robot_orientation",
-        "table_position",
-        "table_orientation",
-        "target_position",
-        "reference_posture",
-        "starting_pressures",
-        "world_boundaries",
-        "pressure_change_range",
-        "trajectory",
-        "accelerated_time",
-        "graphics_pseudo_real",
-        "graphics_simulation",
-        "graphics_extra_balls",
-        "instant_reset",
-        "nb_steps_per_episode",
-        "extra_balls_sets",
-        "extra_balls_per_set",
-        "trajectory_group",
-        "frequency_monitoring_step",
-        "frequency_monitoring_episode",
-        "robot_integrity_check",
-        "robot_integrity_threshold",
-    )
+    """Configuration for HysrOneBall."""
 
-    def __init__(self):
-        for s in self.__slots__:
-            setattr(self, s, None)
+    # NOTE: Unfortunately, OmegaConf is a bit limited regarding the types.  It only
+    # supports primitive types, enums and a few basic containers.  Nesting of containers
+    # (e.g. list of tuples), unions or custom types are not supported.  For these cases
+    # Any is used, which basically disables type checking for the corresponding
+    # parameters.
 
-    def get(self):
-        r = {s: getattr(self, s) for s in self.__slots__}
-        return r
+    # oc.MISSING indicates that the value is mandatory (i.e. must be provided by the
+    # user).
 
-    @classmethod
-    def from_json(cls, jsonpath):
-        if not os.path.isfile(jsonpath):
-            raise FileNotFoundError(
-                "failed to find hysr configuration file: {}".format(jsonpath)
-            )
-        try:
-            with open(jsonpath) as f:
-                conf = json.load(f)
-        except Exception as e:
-            raise ValueError(
-                "failed to parse reward json configuration file {}: {}".format(
-                    jsonpath, e
-                )
-            )
-        instance = cls()
-        for s in cls.__slots__:
-            try:
-                setattr(instance, s, conf[s])
-            except Exception:
-                raise ValueError(
-                    "failed to find the attribute {} " "in {}".format(s, jsonpath)
-                )
-        # robot type given as string in json config, but
-        # the rest of the code will expect a pam_mujoco.RobotType
-        instance.robot_type = _to_robot_type(instance.robot_type)
+    real_robot: bool = oc.MISSING
+    robot_type: pam_mujoco.RobotType = oc.MISSING
+    o80_pam_time_step: float = oc.MISSING
+    mujoco_time_step: float = oc.MISSING
+    algo_time_step: float = oc.MISSING
+    pam_config_file: pathlib.Path = oc.MISSING
+    robot_position: t.List[float] = oc.MISSING
+    robot_orientation: t.Any = oc.MISSING  # Rotation
+    table_position: t.List[float] = oc.MISSING
+    table_orientation: t.Any = oc.MISSING  # Rotation
+    target_position: t.List[float] = oc.MISSING
+    reference_posture: t.List[t.Any] = oc.MISSING  # t.List[t.Tuple[float, float]]
+    starting_pressures: t.List[t.Any] = oc.MISSING  # t.List[t.Tuple[float, float]]
+    world_boundaries: Boundaries3d = oc.MISSING
+    pressure_change_range: int = oc.MISSING
+    trajectory: int = oc.MISSING
+    accelerated_time: bool = oc.MISSING
+    graphics_pseudo_real: bool = False
+    graphics_simulation: bool = False
+    graphics_extra_balls: bool = False
+    instant_reset: bool = oc.MISSING
+    nb_steps_per_episode: int = oc.MISSING
+    extra_balls_sets: int = oc.MISSING
+    extra_balls_per_set: int = oc.MISSING
+    trajectory_group: str = oc.MISSING
+    frequency_monitoring_step: bool = oc.MISSING
+    frequency_monitoring_episode: bool = oc.MISSING
+    robot_integrity_check: bool = oc.MISSING
+    robot_integrity_threshold: float = oc.MISSING
 
-        # convert paths to Path objects and expand '~'
-        instance.pam_config_file = pathlib.Path(instance.pam_config_file).expanduser()
+    graphics: bool = oc.MISSING
+    xterms: bool = oc.MISSING
+
+    # implement __{get,set}item__ to add dictionary-like access
+    def __getitem__(self, key: str) -> t.Any:
+        return getattr(self, key)
+
+    def __setitem__(self, key: str, value: t.Any) -> None:
+        setattr(self, key, value)
+
+    @staticmethod
+    def from_json(jsonpath: t.Union[str, os.PathLike]) -> t.Any:
+        """Construct config from JSON file."""
+        wconf = variconf.WConf(HysrOneBallConfig)
+        wconf.load_file(jsonpath)
+
+        # Convert the omegaconf DictConfig to a plain HysrOneBallConfig to disable the
+        # automatic type checking.  This is needed because otherwise it is not possible
+        # to overwrite fields with non-primitive types (even if they are annotated as
+        # Any), for example when converting orientation quaternions to Rotation
+        # instances.
+        cfg = t.cast(HysrOneBallConfig, oc.OmegaConf.to_object(wconf.cfg))
+
+        # expand '~'
+        cfg.pam_config_file = cfg.pam_config_file.expanduser()
 
         # convert orientation to Rotation instance
         orientation_fields = ["robot_orientation", "table_orientation"]
         for field in orientation_fields:
             try:
-                rot = Rotation.from_quat(getattr(instance, field))
-                setattr(instance, field, rot)
+                value = cfg[field]
+                if not isinstance(value, Rotation):
+                    cfg[field] = Rotation.from_quat(value)
             except ValueError as e:
                 raise ValueError(
                     "Unable to parse %s from file %s.  Expect quaternion [x, y, z, w]."
                     "  Error is '%s'" % (field, jsonpath, e)
-                )
+                ) from e
 
-        return instance
+        logging.debug("Load config from file '%s':\n %s", jsonpath, cfg)
+
+        return cfg
 
     @staticmethod
-    def default_path():
+    def default_path() -> str:
+        """Get path to default config file.
+
+        Raises:
+            FileNotFoundError: if no default config file is found.
+        """
         global_install = os.path.join(
             sys.prefix,
             "local",
             "learning_table_tennis_from_scratch_config",
             "hysr_one_ball_default.json",
         )
+        assert site.USER_BASE is not None
         local_install = os.path.join(
             site.USER_BASE,
             "learning_table_tennis_from_scratch_config",
@@ -142,6 +162,8 @@ class HysrOneBallConfig:
             return local_install
         if os.path.isfile(global_install):
             return global_install
+
+        raise FileNotFoundError("No default config file found.")
 
 
 class _BallBehavior:
