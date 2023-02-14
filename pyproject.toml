@@ -5,6 +5,7 @@ extend-exclude = "runner_buffered\\.py|modified_baselines_ppo2\\.py"
 module = [
     "context",
     "frequency_monitoring",
+    "gym",
     "o80",
     "o80_pam",
     "pam_interface",
