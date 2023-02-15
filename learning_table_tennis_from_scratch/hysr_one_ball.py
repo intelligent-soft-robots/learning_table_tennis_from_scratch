@@ -143,6 +143,8 @@ class HysrOneBallConfig:
                 vicon.update()
                 robot_pose = vicon.get_robot_pose()
                 table_pose = vicon.get_table_pose(yaw_only=True)
+                logging.info("Get robot pose from Vicon: %s", robot_pose)
+                logging.info("Get table pose from Vicon: %s", table_pose)
             except Exception as e:
                 msg = f"Failed to get robot/table pose from Vicon: {e}"
                 raise RuntimeError(msg) from e
