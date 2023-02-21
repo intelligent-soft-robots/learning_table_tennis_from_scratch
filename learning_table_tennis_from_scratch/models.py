@@ -75,8 +75,7 @@ def run_stable_baselines(
             env,
             seed=seed,
             policy_kwargs={
-                "net_arch": [rl_config.num_hidden] * rl_config.num_layers,
-                "n_critics": rl_config.n_critics
+                "net_arch": [rl_config.num_hidden] * rl_config.num_layers
             },
             **rl_config.get_rl_params(),
         )

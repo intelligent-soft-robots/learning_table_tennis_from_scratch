@@ -593,7 +593,7 @@ class HysrOneBall:
             joint_positions,
             joint_velocities,
         ) = self._pressure_commands.read()
-        ball_position, ball_velocity = self._ball_communication.get()
+        _, ball_position, ball_velocity = self._ball_communication.get()
         observation = _Observation(
             joint_positions,
             joint_velocities,
@@ -707,7 +707,16 @@ class HysrOneBall:
             ball.deactivate_contact()
 
     def _do_natural_reset(self):
-        self._move_to_position(self._hysr_config.reference_posture)
+        # reset with position controller
+        # self._move_to_position(self._hysr_config.reference_posture)
+
+        # reset without position controller
+        starting_pressures_ago_smaller = list(list(np.int_(ps) for ps in np.array(self._hysr_config.starting_pressures)*[0.95, 1.02]))
+        starting_pressures_antago_smaller = list(list(np.int_(ps) for ps in np.array(self._hysr_config.starting_pressures)*[1.02, 0.95]))
+        self._move_to_pressure(starting_pressures_ago_smaller)
+        self._move_to_pressure(starting_pressures_antago_smaller)
+        self._move_to_pressure(self._hysr_config.starting_pressures)
+        self._move_to_pressure(self._hysr_config.starting_pressures)
 
     def _do_instant_reset(self):
 
@@ -914,6 +923,9 @@ class HysrOneBall:
                 ball.ball_status.target_position = sample_point_circle(self._target_position, self._target_position_sampling_radius)
             ball.ball_status.reset()
 
+        # timestamp, ball_position, ball_velocity = self._ball_communication.get() 
+        # print(f"real\t{time.time()}\tvirtual\t{timestamp}")
+
         # resetting extra balls
         self.extra_contacts = [False]*self._hysr_config.extra_balls_per_set
         self.extra_min_distance_ball_racket = [None]*self._hysr_config.extra_balls_per_set
@@ -942,6 +954,10 @@ class HysrOneBall:
         # returning an observation
         observation = self._create_observation()
 
+        #check if reset position close to target
+        if not self._instant_reset:
+            self.reset_check(observation)
+
         if self._extra_balls_frontend is not None:
             nb_balls = self._hysr_config.extra_balls_per_set
 
@@ -962,6 +978,54 @@ class HysrOneBall:
         
         return observation, []
 
+    def reset_check(self, observation):
+        
+        print(observation.joint_positions)
+
+        
+        reset_counter = 0
+        while not self.check_init_joint_postions(observation.joint_positions):
+            self._do_natural_reset()
+            observation = self._create_observation()
+
+            # try reset 5 times
+            reset_counter += 1
+            if reset_counter>=5:
+                input()
+
+            # check if 2. dof gets stuck on wrong side after reset
+            if observation.joint_positions[2]<0.1:
+                self.move_second_dof_to_positive_angle_joint_pos()
+
+
+        # log reset position and pressures to file
+        with open("init_joint_pos.txt", "a") as f:
+            f.write(str(observation.joint_positions)+',\n')
+        with open("init_pressures.txt", "a") as f:
+            f.write(str(self._hysr_config.starting_pressures)+',\n')
+
+
+    def check_init_joint_postions(self, pos):
+        # calculate error
+        err = [pos[i]-self._hysr_config.reference_posture[i] for i in range(4)]
+        err_capped = np.array([max([min([e, 0.1]), -0.1]) for e in err])
+
+        # update starting pressures
+        self._hysr_config.starting_pressures = list(list(np.int_(ps) for ps in np.array(self._hysr_config.starting_pressures)*np.swapaxes([1+err_capped*abs(err_capped), [1,1,1,1]], 0, 1)))
+
+        #check if starting position within boundaries
+        max_err = [0.1, 0.35, 0.25, 0.5]
+        if any([abs(err[i])>max_err[i] for i in range(4)]):
+            print("_______reset____________")
+            print("init error to large...")
+            print("init pos:", pos, "reference:", self._hysr_config.reference_posture)
+            return False
+        return True
+
+    def move_second_dof_to_positive_angle_joint_pos(self):
+        print("___ Move 2. dof to other side ______")
+        target_pressures = list(list(np.int_(ps) for ps in np.array(self._hysr_config.starting_pressures)*np.swapaxes([[1, 0.6, 1, 1], [1,1.3,1,1]], 0, 1)))
+        self._move_to_pressure(target_pressures)
 
 
     def _episode_over(self):
@@ -992,7 +1056,7 @@ class HysrOneBall:
 
     def get_ball_position(self):
         # returning current ball position
-        ball_position, _ = self._ball_communication.get()
+        _, ball_position, _ = self._ball_communication.get()
         return ball_position
 
     # action assumed to be np.array(ago1,antago1,ago2,antago2,...)
@@ -1007,7 +1071,7 @@ class HysrOneBall:
         ) = self._pressure_commands.read()
 
         # getting information about simulated ball
-        ball_position, ball_velocity = self._ball_communication.get()
+        _, ball_position, ball_velocity = self._ball_communication.get()
 
         # getting information about extra simulated balls
         if self._extra_balls_frontend is not None:

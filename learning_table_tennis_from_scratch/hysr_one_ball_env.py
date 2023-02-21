@@ -282,6 +282,11 @@ class HysrOneBallEnv(gym.Env):
         # casting similar to old code
         action_diffs_factor = self._pressure_change_range / 18000
         action = action * action_diffs_factor
+
+        # increase actions in 1. dof further
+        action[0] *= 4
+        action[1] *= 4
+
         action_sigmoid = [1 / (1 + np.exp(-a)) - 0.5 for a in action]
         action = [
             np.clip(a1 + a2, 0, 1) for a1, a2 in zip(self.last_action, action_sigmoid)
@@ -333,17 +338,20 @@ class HysrOneBallEnv(gym.Env):
         action = [int(a) for a in action]
 
         # performing a step
-        for _ in range(self._action_repeat_counter):
+        for i in range(self._action_repeat_counter):
             observation, reward, episode_over, *extrainfo = self._hysr.step(list(action))
+
             if episode_over:
                 break
 
+            # imposing frequency to learning agent
+            if not self._accelerated_time:
+                self._frequency_manager.wait()
+
+            
+
         # formatting observation in a format suitable for gym
         observation = self._convert_observation(observation, action_casted)
-
-        # imposing frequency to learning agent
-        if not self._accelerated_time:
-            self._frequency_manager.wait()
 
         # Ignore steps after hitting the ball
         if not episode_over and not self._hysr._ball_status.min_distance_ball_racket:
@@ -372,6 +380,7 @@ class HysrOneBallEnv(gym.Env):
             print("ep:", self.n_eps, " steps:", self.n_steps, " rew:", reward)
             if self._logger:
                 self._logger.record("eprew", reward)
+                self._logger.record("success_sparse", float(reward>1.5))
                 self._logger.record("min_discante_ball_racket", self._hysr._ball_status.min_distance_ball_racket or 0)
                 self._logger.record("min_distance_ball_target_capped",
                     min(
