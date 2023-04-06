@@ -15,7 +15,6 @@ import o80
 import o80_pam
 import pam_interface
 import pam_mujoco
-import pam_vicon_o80
 import context
 import frequency_monitoring
 import shared_memory
@@ -136,6 +135,7 @@ class HysrOneBallConfig:
         cfg.pam_config_file = cfg.pam_config_file.expanduser()
 
         if cfg.use_vicon:
+            import pam_vicon_o80
             try:
                 # get Vicon data via o80 (requires back end to be running in separate
                 # process)
