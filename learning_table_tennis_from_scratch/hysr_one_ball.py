@@ -435,6 +435,7 @@ class HysrOneBall:
 
         # to read all recorded trajectory files
         if not hysr_config.real_ball:
+            self._real_ball = False
             self._trajectory_reader = context.BallTrajectories(
                 hysr_config.trajectory_group
             )
@@ -458,8 +459,12 @@ class HysrOneBall:
         else:
             from .ball_launcher import BallLauncher
 
+            self._real_ball = True
             self._ball_launcher = BallLauncherConfig(hysr_config.ball_launcher)
             self._ball_communication = o80_pam.RealBall(hysr_config.tennicam_segment_id)
+            self._simulated_ball_communication = (
+                self._simulated_robot_handle.interfaces[SEGMENT_ID_BALL]
+            )
             self._ball_behavior = None
 
         # if requested, logging info about the frequencies of the steps and/or the
@@ -982,7 +987,12 @@ class HysrOneBall:
         # getting information about simulated ball
         _, ball_position, ball_velocity = self._ball_communication.get()
 
+        # if real ball: mirroring the tennicam ball in the simulated environment
+        if self._real_ball:
+            self._simulated_ball_communication.set(ball_position, ball_velocity)
+
         # getting information about simulated balls
+
         def commented():
             if self._extra_balls_frontend is not None:
                 observation = self._extra_balls_frontend.latest()
