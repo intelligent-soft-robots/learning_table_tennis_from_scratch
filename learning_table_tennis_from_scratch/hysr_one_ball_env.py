@@ -142,6 +142,8 @@ class HysrOneBallEnv(gym.Env):
             self.last_action[2 * dof + 1] = self._reverse_scale_pressure(
                 dof, False, starting_pressures[dof][1]
             )
+        self.joint_penalty = 0.0
+        self.accelarated_towards_limits = False
 
     def _bound_pressure(self, dof, ago, value):
         if ago:
@@ -206,6 +208,10 @@ class HysrOneBallEnv(gym.Env):
         return self._obs_boxes.get_normalized_values()
 
     def step(self, action):
+
+        # action[0] = action[0]*32
+        # action[1] = action[1]*32
+
         if not self._accelerated_time and self._frequency_manager is None:
             self._frequency_manager = o80.FrequencyManager(1.0 / self._algo_time_step)
 
@@ -241,16 +247,69 @@ class HysrOneBallEnv(gym.Env):
         # performing a step
         observation, reward, episode_over = self._hysr.step(list(action))
 
-        # formatting observation in a format suitable for gym
-        observation = self._convert_observation(observation)
+        # give negative reward 0.5 if joint limits are reached (limit joint 1: 100, 2 and 3: 89, 4: no limit)
+        if abs(observation.joint_positions[0]) > 100 * np.pi/180 or abs(observation.joint_positions[1]) > 89 * np.pi/180 or abs(observation.joint_positions[2]) > 89 * np.pi/180:
+            print("joint limits reached", observation.joint_positions)
+            self.joint_penalty = -0.25
 
         # imposing frequency to learning agent
         if not self._accelerated_time:
             self._frequency_manager.wait()
 
         # Ignore steps after hitting the ball
-        if not episode_over and not self._hysr._ball_status.min_distance_ball_racket:
+        if (not episode_over and not self._hysr._ball_status.min_distance_ball_racket):
+            action_orig[0] = 0
+            action_orig[1] = 0
+            action_orig[2] = 0
+            action_orig[3] = 0
+            action_orig[4] = 0
+            action_orig[5] = 0
+            action_orig[6] = 0
+            action_orig[7] = 0
+
+             # stop second joint if necessary
+            if (observation.joint_positions[1] > 80 * np.pi/180  and observation.joint_velocities[1]>0.0):
+                action_orig[2] = 2.0
+                action_orig[3] = -2.0
+
+            # stop first joint if necessary
+            if (observation.joint_positions[0] > 60 * np.pi/180  and observation.joint_velocities[0]>0) or observation.joint_velocities[0]>10.0:
+                self.accelarated_towards_limits = True
+                if observation.joint_velocities[0]>10.0:
+                    print("pos:", observation.joint_positions[0], "vel:", observation.joint_velocities[0], " -- 6.0")
+                    action_orig[0] = 6.0
+                    action_orig[1] = -6.0
+                else:
+                    print("pos:", observation.joint_positions[0], "vel:", observation.joint_velocities[0], " -- 3.0")
+                    action_orig[0] = 3.0
+                    action_orig[1] = -3.0
+            elif (observation.joint_positions[0] > 10 * np.pi/180  and observation.joint_velocities[0]>6.0):
+                print("pos:", observation.joint_positions[0], "vel:", observation.joint_velocities[0], " -- 3.0")
+                action_orig[0] = 1.0
+                action_orig[1] = -1.0
+                print("pos:", observation.joint_positions[0], "vel:", observation.joint_velocities[0], " -- 1.0")
+            elif observation.joint_positions[0] < -60 * np.pi/180 and self.accelarated_towards_limits:
+                print("pos:", observation.joint_positions[0], "vel:", observation.joint_velocities[0], " -- -2.0")
+                action_orig[0] = -2.0
+                action_orig[1] = 2.0
+            elif self.accelarated_towards_limits and observation.joint_velocities[0]<-2.0:
+                print("pos:", observation.joint_positions[0], "vel:", observation.joint_velocities[0]," -- -2.5")
+                action_orig[0] = -2.5
+                action_orig[1] = 2.5
+            elif self.accelarated_towards_limits and observation.joint_velocities[0]>6.0:
+                print("pos:", observation.joint_positions[0], "vel:", observation.joint_velocities[0]," -- 1.5")
+                action_orig[0] = 1.5
+                action_orig[1] = -1.5
+            else:
+                action_orig[0] = 0.0
+                action_orig[1] = 0.0
+                if self.accelarated_towards_limits:
+                    print("pos:", observation.joint_positions[0], "vel:", observation.joint_velocities[0], " -- 0.0")
+
             return self.step(action_orig)
+        
+         # formatting observation in a format suitable for gym
+        observation = self._convert_observation(observation)
 
         # logging
         self.n_steps += 1
@@ -266,12 +325,14 @@ class HysrOneBallEnv(gym.Env):
                 )
             )
         if episode_over:
+            reward += self.joint_penalty
             if self._log_episodes:
                 self.dump_data(self.data_buffer)
             self.n_eps += 1
             if self._logger:
                 print("log", "rew:", reward, "n_eps:", self.n_eps, "n_steps:", self.n_steps)
-                self._logger.record("eprew", reward)
+                self._logger.record("eprew", reward - self.joint_penalty)
+                self._logger.record("joint_penalty", self.joint_penalty)
                 self._logger.record("min_discante_ball_racket", self._hysr._ball_status.min_distance_ball_racket or 0)
                 self._logger.record("min_distance_ball_target_capped",
                     min(

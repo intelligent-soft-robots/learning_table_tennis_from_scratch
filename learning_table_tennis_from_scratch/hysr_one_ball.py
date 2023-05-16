@@ -625,7 +625,7 @@ class HysrOneBall:
             joint_positions,
             joint_velocities,
         ) = self._pressure_commands.read()
-        ball_position, ball_velocity = self._ball_communication.get()
+        _, ball_position, ball_velocity= self._ball_communication.get()
         observation = _Observation(
             joint_positions,
             joint_velocities,
@@ -1014,7 +1014,7 @@ class HysrOneBall:
 
     def get_ball_position(self):
         # returning current ball position
-        ball_position, _ = self._ball_communication.get()
+        _, ball_position, _ = self._ball_communication.get()
         return ball_position
 
     # action assumed to be np.array(ago1,antago1,ago2,antago2,...)
@@ -1028,7 +1028,7 @@ class HysrOneBall:
         ) = self._pressure_commands.read()
 
         # getting information about simulated ball
-        ball_position, ball_velocity = self._ball_communication.get()
+        _, ball_position, ball_velocity = self._ball_communication.get()
 
         # getting information about simulated balls
         def commented():

@@ -11,7 +11,8 @@ def _no_hit_reward(min_distance_ball_racket):
 
 
 def _return_task_reward(min_distance_ball_target, c, rtt_cap):
-    reward = 1.0 - ((min_distance_ball_target / c) ** 0.75)
+    # reward = 1.0 - ((min_distance_ball_target / c) ** 0.75)
+    reward = 1.0 - min_distance_ball_target**0.75/(2.95942**0.75)
     reward = max(reward, rtt_cap)
     return reward
 
