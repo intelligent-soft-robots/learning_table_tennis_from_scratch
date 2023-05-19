@@ -21,6 +21,17 @@
     "accelerated_time":false,
     "instant_reset":false,
     "nb_steps_per_episode":-1,
+    "real_ball": false,
+    "ball_launcher": {
+	"IP": "10.42.X.X",
+	"port": 1,
+	"phi": [0.4, 0.6],
+	"theta": [0.4, 0.6],
+	"top_left_actuation": [0.2,0.4],
+	"top_right_actuation": [0.2,0.4],
+	"bottom_center_actuation": [0.2,0.4]
+    },
+    "tennicam_segment_id" : "tennicam_client",
     "extra_balls_sets":-1,
     "extra_balls_per_set":-1,
     "graphics_pseudo_real":false,

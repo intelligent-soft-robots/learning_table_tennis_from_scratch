@@ -21,6 +21,7 @@ import shared_memory
 from pam_mujoco import mirroring
 from . import configure_mujoco
 from . import robot_integrity
+from .ball_launcher import BallLauncherConfig
 
 
 SEGMENT_ID_BALL = pam_mujoco.segment_ids.ball
@@ -64,7 +65,7 @@ class HysrOneBallConfig:
     # oc.MISSING indicates that the value is mandatory (i.e. must be provided by the
     # user).
 
-    real_robot: bool = oc.MISSING
+    real_robot: t.Union[bool,str] = oc.MISSING
     robot_type: pam_mujoco.RobotType = oc.MISSING
     o80_pam_time_step: float = oc.MISSING
     mujoco_time_step: float = oc.MISSING
@@ -86,6 +87,9 @@ class HysrOneBallConfig:
     graphics_extra_balls: bool = False
     instant_reset: bool = oc.MISSING
     nb_steps_per_episode: int = oc.MISSING
+    real_ball: bool = oc.MISSING
+    ball_launcher: BallLauncherConfig = oc.MISSING
+    tennicam_segment_id: str = oc.MISSING
     extra_balls_sets: int = oc.MISSING
     extra_balls_per_set: int = oc.MISSING
     trajectory_group: str = oc.MISSING
@@ -136,6 +140,7 @@ class HysrOneBallConfig:
 
         if cfg.use_vicon:
             import pam_vicon_o80
+
             try:
                 # get Vicon data via o80 (requires back end to be running in separate
                 # process)
@@ -429,8 +434,38 @@ class HysrOneBall:
         self._goal = self._simulated_robot_handle.interfaces[SEGMENT_ID_GOAL]
 
         # to read all recorded trajectory files
-        self._trajectory_reader = context.BallTrajectories(hysr_config.trajectory_group)
-        _BallBehavior.read_trajectories(hysr_config.trajectory_group)
+        if not hysr_config.real_ball:
+            self._real_ball = False
+            self._trajectory_reader = context.BallTrajectories(
+                hysr_config.trajectory_group
+            )
+            _BallBehavior.read_trajectories(hysr_config.trajectory_group)
+
+            # the config sets either a zero or positive int (playing the
+            # corresponding indexed pre-recorded trajectory) or a negative int
+            # (playing randomly selected indexed trajectories)
+            if hysr_config.trajectory >= 0:
+                self._ball_behavior = _BallBehavior(index=hysr_config.trajectory)
+            else:
+                self._ball_behavior = _BallBehavior(random=True)
+
+            # to get information regarding the ball
+            # (instance of o80_pam.o80_ball.o80Ball)
+            self._ball_communication = self._simulated_robot_handle.interfaces[
+                SEGMENT_ID_BALL
+            ]
+            self._ball_launcher = None
+
+        else:
+            from .ball_launcher import BallLauncher
+
+            self._real_ball = True
+            self._ball_launcher = BallLauncher(hysr_config.ball_launcher)
+            self._ball_communication = o80_pam.o80RealBall(hysr_config.tennicam_segment_id)
+            self._simulated_ball_communication = (
+                self._simulated_robot_handle.interfaces[SEGMENT_ID_BALL]
+            )
+            self._ball_behavior = None
 
         # if requested, logging info about the frequencies of the steps and/or the
         # episodes
@@ -470,26 +505,12 @@ class HysrOneBall:
             hysr_config.algo_time_step / hysr_config.mujoco_time_step
         )
 
-        # the config sets either a zero or positive int (playing the
-        # corresponding indexed pre-recorded trajectory) or a negative int
-        # (playing randomly selected indexed trajectories)
-        if hysr_config.trajectory >= 0:
-            self._ball_behavior = _BallBehavior(index=hysr_config.trajectory)
-        else:
-            self._ball_behavior = _BallBehavior(random=True)
-
         # the robot will interpolate between current and
         # target posture over this duration
         self._period_ms = hysr_config.algo_time_step
 
         # reward configuration
         self._reward_function = reward_function
-
-        # to get information regarding the ball
-        # (instance of o80_pam.o80_ball.o80Ball)
-        self._ball_communication = self._simulated_robot_handle.interfaces[
-            SEGMENT_ID_BALL
-        ]
 
         # to send pressure commands to the real or pseudo-real robot
         # (instance of o80_pam.o80_pressures.o80Pressures)
@@ -652,16 +673,28 @@ class HysrOneBall:
         return self._ball_status.contact_occured()
 
     def _load_main_ball(self):
-        # "load" the ball means creating the o80 commands corresponding
-        # to the ball behavior (set by the "set_ball_behavior" method)
-        trajectory = self._ball_behavior.get_trajectory()
-        iterator = context.ball_trajectories.BallTrajectories.iterate(trajectory)
-        # setting the ball to the first trajectory point
-        duration, state = next(iterator)
-        self._ball_communication.set(state.get_position(), [0, 0, 0])
-        # shooting the ball
-        self._ball_communication.iterate_trajectory(iterator, overwrite=False)
-
+        if self._ball_behavior is not None:
+            # "load" the ball means creating the o80 commands corresponding
+            # to the ball behavior (set by the "set_ball_behavior" method)
+            trajectory = self._ball_behavior.get_trajectory()
+            iterator = context.ball_trajectories.BallTrajectories.iterate(trajectory)
+            # setting the ball to the first trajectory point
+            duration, state = next(iterator)
+            self._ball_communication.set(state.get_position(), [0, 0, 0])
+            # shooting the ball
+            self._ball_communication.iterate_trajectory(iterator, overwrite=False)
+        if self._ball_launcher is not None:
+            self.deactivate_contact()
+            self._ball_launcher.launch()
+            time_stamp, _, __ = self._ball_communication.get()
+            timeout = 3.0
+            start = time.time()
+            while time.time()-start<timeout:
+                ts, _, __ = self._ball_communication.get()
+                if ts != time_stamp:
+                    break
+                time.sleep(0.001)
+            
     def _load_extra_balls(self):
         # load the trajectory of each extra balls, as set by their
         # ball_behavior attribute. See method set_extra_ball_behavior
@@ -865,6 +898,7 @@ class HysrOneBall:
         else:
             # moving to reset position
             self._do_natural_reset()
+            pass
 
         # going to starting pressure
         self._move_to_pressure(self._hysr_config.starting_pressures)
@@ -960,10 +994,15 @@ class HysrOneBall:
             joint_velocities,
         ) = self._pressure_commands.read()
 
-        # getting information about simulated ball
-        _, ball_position, ball_velocity = self._ball_communication.get()
+        # getting information about simulated or real ball
+        ball_stamp, ball_position, ball_velocity = self._ball_communication.get()
+
+        # if real ball: mirroring the tennicam ball in the simulated environment
+        if self._real_ball:
+            self._simulated_ball_communication.set(ball_position, ball_velocity)
 
         # getting information about simulated balls
+
         def commented():
             if self._extra_balls_frontend is not None:
                 observation = self._extra_balls_frontend.latest()
