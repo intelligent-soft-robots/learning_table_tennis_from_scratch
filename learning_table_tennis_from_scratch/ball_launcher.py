@@ -1,9 +1,9 @@
 import json
 import random
 import dataclasses
-from typing import Optional
+from typing import Optional, Union
 
-_no_zmq: bool | str = False
+_no_zmq: Union[bool, str] = False
 try:
     from ball_launcher_beepy import BallLauncherClient
 except ModuleNotFoundError as me:
@@ -22,18 +22,18 @@ class BallLauncherConfig:
     port: int
     phi: tuple[float, float]
     theta: tuple[float, float]
-    top_left_actuation: tuple[float, float]
-    top_right_actuation: tuple[float, float]
-    bottom_center_actuation: tuple[float, float]
+    top_left_motor: tuple[float, float]
+    top_right_motor: tuple[float, float]
+    bottom_motor: tuple[float, float]
 
 
 class BallLauncher:
     _ranges: tuple[str, ...] = (
         "phi",
         "theta",
-        "top_left_actuation",
-        "top_right_actuation",
-        "bottom_center_actuation",
+        "top_left_motor",
+        "top_right_motor",
+        "bottom_motor",
     )
 
     def __init__(self, config: BallLauncherConfig) -> None:
@@ -46,9 +46,9 @@ class BallLauncher:
         self,
         phi: Optional[float] = None,
         theta: Optional[float] = None,
-        top_left_actuation: Optional[float] = None,
-        top_right_actuation: Optional[float] = None,
-        bottom_center_actuation: Optional[float] = None,
+        top_left_motor: Optional[float] = None,
+        top_right_motor: Optional[float] = None,
+        bottom_motor: Optional[float] = None,
     ) -> None:
         """
         Launch a ball using either random parameters (if corresponding argument

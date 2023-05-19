@@ -65,7 +65,7 @@ class HysrOneBallConfig:
     # oc.MISSING indicates that the value is mandatory (i.e. must be provided by the
     # user).
 
-    real_robot: bool = oc.MISSING
+    real_robot: t.Union[bool,str] = oc.MISSING
     robot_type: pam_mujoco.RobotType = oc.MISSING
     o80_pam_time_step: float = oc.MISSING
     mujoco_time_step: float = oc.MISSING
@@ -460,8 +460,8 @@ class HysrOneBall:
             from .ball_launcher import BallLauncher
 
             self._real_ball = True
-            self._ball_launcher = BallLauncherConfig(hysr_config.ball_launcher)
-            self._ball_communication = o80_pam.RealBall(hysr_config.tennicam_segment_id)
+            self._ball_launcher = BallLauncher(hysr_config.ball_launcher)
+            self._ball_communication = o80_pam.o80RealBall(hysr_config.tennicam_segment_id)
             self._simulated_ball_communication = (
                 self._simulated_robot_handle.interfaces[SEGMENT_ID_BALL]
             )
@@ -684,8 +684,17 @@ class HysrOneBall:
             # shooting the ball
             self._ball_communication.iterate_trajectory(iterator, overwrite=False)
         if self._ball_launcher is not None:
+            self.deactivate_contact()
             self._ball_launcher.launch()
-
+            time_stamp, _, __ = self._ball_communication.get()
+            timeout = 3.0
+            start = time.time()
+            while time.time()-start<timeout:
+                ts, _, __ = self._ball_communication.get()
+                if ts != time_stamp:
+                    break
+                time.sleep(0.001)
+            
     def _load_extra_balls(self):
         # load the trajectory of each extra balls, as set by their
         # ball_behavior attribute. See method set_extra_ball_behavior
@@ -889,6 +898,7 @@ class HysrOneBall:
         else:
             # moving to reset position
             self._do_natural_reset()
+            pass
 
         # going to starting pressure
         self._move_to_pressure(self._hysr_config.starting_pressures)
@@ -984,8 +994,8 @@ class HysrOneBall:
             joint_velocities,
         ) = self._pressure_commands.read()
 
-        # getting information about simulated ball
-        _, ball_position, ball_velocity = self._ball_communication.get()
+        # getting information about simulated or real ball
+        ball_stamp, ball_position, ball_velocity = self._ball_communication.get()
 
         # if real ball: mirroring the tennicam ball in the simulated environment
         if self._real_ball:
