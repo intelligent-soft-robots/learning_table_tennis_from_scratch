@@ -46,7 +46,7 @@ def _compute_reward(
     # i.e. the ball did not hit the racket,
     # so computing a reward based on the minimum
     # distance between the racket and the ball
-    if min_distance_ball_racket is not None:
+    if min_distance_ball_racket is not None and min_distance_ball_racket > 0.01:
         return _no_hit_reward(min_distance_ball_racket, binary, sparse)
 
     # the ball did hit the racket, so computing
