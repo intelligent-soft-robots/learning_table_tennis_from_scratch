@@ -3,7 +3,7 @@ import math
 import time
 from collections import OrderedDict
 
-import gym
+import gymnasium as gym
 import numpy as np
 import o80
 import pam_interface
