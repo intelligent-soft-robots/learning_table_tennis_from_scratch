@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import logging
 
 import signal_handler
 import o80
@@ -64,7 +65,6 @@ def _get_handle_to(
     segment_id_extra_balls,
     extra_balls_segment_ids,
 ):
-
     if segment_id_extra_balls is not None:
         balls = pam_mujoco.MujocoItems(segment_id_extra_balls)
         balls.contact_type = pam_mujoco_wrp.ContactTypes.no_contact
@@ -115,7 +115,6 @@ def _get_handle_to(
 
 
 def _execute_visualization(config):
-
     #########################################################
     # config of mujoco data are sent to (for visualization) #
     #########################################################
@@ -248,10 +247,14 @@ def _execute_visualization(config):
 
 
 def execute():
+    logging.basicConfig(
+        format="[hysr_visualization.%(name)s] [%(levelname)s] %(message)s",
+        level=logging.INFO,
+    )
 
     files = get_json_config(expected_keys=["hysr_config"])
     hysr_path = files["hysr_config"]
-    print("\nusing configuration file:\n- {}\n".format(hysr_path))
+    logging.info("\nUsing configuration file:\n- %s\n", hysr_path)
     hysr_config = HysrOneBallConfig.from_json(hysr_path)
     config = _Config()
     config.robot_type = hysr_config.robot_type
@@ -266,5 +269,4 @@ def execute():
 
 
 if __name__ == "__main__":
-
     execute()
