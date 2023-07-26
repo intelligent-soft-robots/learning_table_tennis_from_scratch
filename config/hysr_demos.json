@@ -5,6 +5,7 @@
     "mujoco_time_step":0.002,
     "algo_time_step":0.01,
     "pam_config_file":"~/.mpi-is/pam/pam_interface/pamy1/config/pam_sim.json",
+    "use_vicon": false,
     "robot_position":[0.0, 0.0, 1.21],
     "robot_orientation": [0, 0, 0, 1],
     "table_position":[0.4, 1.57, 0.755],

@@ -10,7 +10,7 @@ module = [
     "o80_pam",
     "pam_interface",
     "pam_mujoco_wrp",
-    "pam_vicon_o80",
+    "pam_vicon",
     "shared_memory",
     "signal_handler",
 ]

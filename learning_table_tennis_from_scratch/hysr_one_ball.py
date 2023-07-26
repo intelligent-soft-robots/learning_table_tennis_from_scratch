@@ -15,6 +15,7 @@ import o80
 import o80_pam
 import pam_interface
 import pam_mujoco
+import pam_vicon
 import context
 import frequency_monitoring
 import shared_memory
@@ -97,7 +98,7 @@ class HysrOneBallConfig:
     use_vicon: bool = False
     """If true, get robot and table pose from the Vicon system.
 
-    This requires a pam_vicon_o80 back end to be running, which provides the Vicon data.
+    This requires a pam_vicon back end to be running, which provides the Vicon data.
     The segment id used for this can be set via :attr:`vicon_segment_id`.
 
     If enabled, the values of :attr:`robot_position`, :attr:`robot_orientation`,
@@ -135,11 +136,10 @@ class HysrOneBallConfig:
         cfg.pam_config_file = cfg.pam_config_file.expanduser()
 
         if cfg.use_vicon:
-            import pam_vicon_o80
             try:
                 # get Vicon data via o80 (requires back end to be running in separate
                 # process)
-                vicon = pam_vicon_o80.PamVicon(cfg.vicon_segment_id)
+                vicon = pam_vicon.PamVicon(cfg.vicon_segment_id)
                 vicon.update()
                 robot_pose = vicon.get_robot_pose()
                 table_pose = vicon.get_table_pose(yaw_only=True)
