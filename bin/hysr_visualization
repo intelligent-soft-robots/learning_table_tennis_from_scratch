@@ -217,7 +217,11 @@ def _execute_visualization(config):
             self._previous1, self._previous2 = None, None
 
         def __call__(self):
-            v1, v2 = self._interface_get.get()
+            vs = self._interface_get.get()
+            if len(vs)==3:
+                _,v1,v2 = vs
+            else:
+                v1,v2 = vs
             if v1 != self._previous1 or v2 != self._previous2:
                 self._interface_set.set(v1, v2, duration_ms=self._duration_ms)
                 self._previous1, self._previous2 = v1, v2

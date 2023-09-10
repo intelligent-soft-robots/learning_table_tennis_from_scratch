@@ -142,7 +142,7 @@ class HysrOneBallEnv(gym.Env):
             self.last_action[2 * dof + 1] = self._reverse_scale_pressure(
                 dof, False, starting_pressures[dof][1]
             )
-
+        
     def _bound_pressure(self, dof, ago, value):
         if ago:
             return int(
@@ -239,7 +239,10 @@ class HysrOneBallEnv(gym.Env):
         action = [int(a) for a in action]
 
         # performing a step
-        observation, reward, episode_over = self._hysr.step(list(action))
+        for _ in range(4):
+            observation, reward, episode_over = self._hysr.step(list(action))
+            if episode_over:
+                break
 
         # formatting observation in a format suitable for gym
         observation = self._convert_observation(observation)
@@ -252,8 +255,8 @@ class HysrOneBallEnv(gym.Env):
         if not episode_over and not self._hysr._ball_status.min_distance_ball_racket:
             return self.step(action_orig)
 
-        # logging
         self.n_steps += 1
+
         if self._log_episodes:
             self.data_buffer.append(
                 (

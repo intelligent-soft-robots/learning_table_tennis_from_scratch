@@ -3,9 +3,29 @@ import os
 import sys
 import typing
 
+from typing import Callable
 
 ConfigDict = typing.Dict[str, typing.Any]
 
+
+def linear_schedule(initial_value: float) -> Callable[[float], float]:
+    """
+    Linear learning rate schedule.
+
+    :param initial_value: Initial learning rate.
+    :return: schedule that computes
+      current learning rate depending on remaining progress
+    """
+    def func(progress_remaining: float) -> float:
+        """
+        Progress will decrease from 1 (beginning) to 0.
+
+        :param progress_remaining:
+        :return: current learning rate
+        """
+        return progress_remaining * initial_value
+
+    return func
 
 class RLConfig:
     """Configuration for stable_baselines3 RL."""
@@ -52,8 +72,10 @@ class RLConfig:
 
     def __init__(self, algorithm):
         if algorithm == "ppo":
+            print("ppo params...")
             self._params = self._params_ppo
             self._algo_params = self._algo_params_ppo
+            
         elif algorithm == "sac":
             self._params = self._params_sac
             self._algo_params = self._algo_params_sac
@@ -70,6 +92,7 @@ class RLConfig:
         This includes only the parameters that can be passed as keyword arguments to
         stable_baselines3.RL.
         """
+        print("rl_params:", {attr: getattr(self, attr) for attr in self._algo_params})
         return {attr: getattr(self, attr) for attr in self._algo_params}
 
     @classmethod
@@ -94,6 +117,18 @@ class RLConfig:
             raise ValueError(
                 "failed to parse RL json configuration file {}: {}".format(jsonpath, e)
             )
+
+        if "learning_rate_schedule" in conf:
+            if conf["learning_rate_schedule"]:
+                conf["learning_rate"] = linear_schedule(conf["learning_rate"])
+                print("using linear schedule for learning rate")
+                print(conf["learning_rate"])
+            else:
+                print("not using linear schedule for learning rate")
+            del conf["learning_rate_schedule"]
+        else:
+            print("schedule not found")
+            print(conf)
 
         instance = cls(algorithm)
         for s in instance._params:
