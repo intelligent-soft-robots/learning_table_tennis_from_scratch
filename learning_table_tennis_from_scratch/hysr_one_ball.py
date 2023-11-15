@@ -15,7 +15,8 @@ import o80
 import o80_pam
 import pam_interface
 import pam_mujoco
-import pam_vicon
+
+# import pam_vicon
 import context
 import frequency_monitoring
 import shared_memory
@@ -82,6 +83,8 @@ class HysrOneBallConfig:
     pressure_change_range: int = oc.MISSING
     trajectory: int = oc.MISSING
     accelerated_time: bool = oc.MISSING
+    save_data: bool = oc.MISSING
+    save_folder: str = "/tmp/"
     graphics_pseudo_real: bool = False
     graphics_simulation: bool = False
     graphics_extra_balls: bool = False
@@ -392,6 +395,8 @@ class HysrOneBall:
             ) = configure_mujoco.configure_pseudo_real(
                 str(hysr_config.pam_config_file),
                 hysr_config.robot_type,
+                hysr_config.save_data,
+                hysr_config.save_folder,
                 graphics=hysr_config.graphics_pseudo_real,
                 accelerated_time=hysr_config.accelerated_time,
             )

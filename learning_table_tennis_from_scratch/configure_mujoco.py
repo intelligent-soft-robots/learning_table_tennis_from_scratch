@@ -85,6 +85,8 @@ def configure_extra_set(setid, hysr_config):
 def configure_pseudo_real(
     pam_config_file,
     robot_type,
+    save_data,
+    save_folder="/tmp",
     mujoco_id="pseudo-real",
     graphics=True,
     accelerated_time=False,
@@ -105,6 +107,8 @@ def configure_pseudo_real(
         graphics=graphics,
         accelerated_time=accelerated_time,
         burst_mode=burst_mode,
+        save_data=save_data,
+        save_folder=save_folder,
         robot1=robot,
     )
 
@@ -117,6 +121,8 @@ def configure_simulation(hysr_config, mujoco_id="simulation"):
     accelerated_time = True
     burst_mode = True
     graphics = hysr_config.graphics_simulation
+    save_data = hysr_config.save_data
+    save_folder = hysr_config.save_folder
 
     table = pam_mujoco.MujocoTable(
         SEGMENT_ID_TABLE,
@@ -146,6 +152,8 @@ def configure_simulation(hysr_config, mujoco_id="simulation"):
         graphics=graphics,
         accelerated_time=accelerated_time,
         burst_mode=burst_mode,
+        save_data=save_data,
+        save_folder=save_folder,
         table=table,
         robot1=robot,
         balls=(ball,),

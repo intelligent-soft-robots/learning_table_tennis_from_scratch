@@ -1,6 +1,8 @@
 {
     "real_robot":false,
     "robot_type":"PAMY2",
+    "save_data":false,
+    "save_folder":"/tmp/",
     "o80_pam_time_step":0.002,
     "mujoco_time_step":0.002,
     "algo_time_step":0.01,
@@ -11,7 +13,7 @@
     "table_position":[0.4, 1.57, 0.755],
     "table_orientation": [0, 0, 0, 1],
     "starting_pressures":[[18000,18000],[18000,18000],[18000,18000],[18000,18000]],
-    "target_position":[0.0,2.5,0.78],
+    "target_position":[0.0,2.5,1.78],
     "reference_posture":[[19900,16000],[16800,19100],[18700,17300],[18000,18000]],
     "world_boundaries":{
         "min":[0.0,-1.0,0.17],
@@ -27,7 +29,7 @@
     "trajectory_group":"originals",
     "graphics_pseudo_real":false,
     "graphics_simulation":false,
-    "graphics_extra_balls":true,
+    "graphics_extra_balls":false,
     "graphics":true,
     "xterms":false,
     "frequency_monitoring_episode":true,
