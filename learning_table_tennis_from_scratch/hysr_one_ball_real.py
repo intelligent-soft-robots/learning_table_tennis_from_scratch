@@ -356,6 +356,7 @@ class HysrOneBall:
 
         # to control pseudo-real robot (pressure control)
         if not hysr_config.real_robot:
+            print("NOT REAL ROBOT", flush=True)
             (
                 self._real_robot_handle,
                 self._real_robot_frontend,
@@ -367,6 +368,7 @@ class HysrOneBall:
             )
             self._mujoco_ids.append(self._real_robot_handle.get_mujoco_id())
         else:
+            print("REAL ROBOT", flush=True)
             # real robot: making some sanity check that the
             # rest of the configuration is ok
             if hysr_config.instant_reset:

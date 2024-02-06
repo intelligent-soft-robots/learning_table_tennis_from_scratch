@@ -249,7 +249,8 @@ class HysrOneBallEnv(gym.Env):
 
         # give negative reward 0.5 if joint limits are reached (limit joint 1: 100, 2 and 3: 89, 4: no limit)
         if abs(observation.joint_positions[0]) > 100 * np.pi/180 or abs(observation.joint_positions[1]) > 89 * np.pi/180 or abs(observation.joint_positions[2]) > 89 * np.pi/180:
-            print("joint limits reached", observation.joint_positions)
+            if self.joint_penalty < -0.1:
+                print("joint limits reached", observation.joint_positions)
             self.joint_penalty = -0.25
 
         # imposing frequency to learning agent
@@ -257,56 +258,110 @@ class HysrOneBallEnv(gym.Env):
             self._frequency_manager.wait()
 
         # Ignore steps after hitting the ball
-        if (not episode_over and not self._hysr._ball_status.min_distance_ball_racket):
-            action_orig[0] = 0
-            action_orig[1] = 0
-            action_orig[2] = 0
-            action_orig[3] = 0
-            action_orig[4] = 0
-            action_orig[5] = 0
-            action_orig[6] = 0
-            action_orig[7] = 0
+        if (not episode_over and not self._hysr._ball_status.min_distance_ball_racket) or (not episode_over and observation.ball_position[2] < -1.39 + 0.15 and observation.ball_position[1]<-3.38):
 
-             # stop second joint if necessary
-            if (observation.joint_positions[1] > 80 * np.pi/180  and observation.joint_velocities[1]>0.0):
-                action_orig[2] = 2.0
-                action_orig[3] = -2.0
+            if not self._hysr._ball_status.min_distance_ball_racket and not self.print_ball_hit:
+                print("ball hit")
+                self.print_ball_hit = True
+            if observation.ball_position[2] < -1.39 + 0.15 and not self.print_ball_below_racket:
+                print("ball below racket")
+                self.print_ball_below_racket = True
 
-            # stop first joint if necessary
+            #  # stop second joint if necessary
+            # if (observation.joint_positions[1] > 80 * np.pi/180  and observation.joint_velocities[1]>0.0):
+            #     action_orig[2] = 2.0
+            #     action_orig[3] = -2.0
+
+            # # stop first joint if necessary
+            # if (observation.joint_positions[0] > 60 * np.pi/180  and observation.joint_velocities[0]>0) or observation.joint_velocities[0]>10.0:
+            #     self.accelarated_towards_limits = True
+            #     if observation.joint_velocities[0]>10.0:
+            #         print("pos:", observation.joint_positions[0], "vel:", observation.joint_velocities[0], " -- 6.0")
+            #         action_orig[0] = 6.0
+            #         action_orig[1] = -6.0
+            #     else:
+            #         print("pos:", observation.joint_positions[0], "vel:", observation.joint_velocities[0], " -- 3.0")
+            #         action_orig[0] = 3.0
+            #         action_orig[1] = -3.0
+            # elif (observation.joint_positions[0] > 10 * np.pi/180  and observation.joint_velocities[0]>6.0):
+            #     print("pos:", observation.joint_positions[0], "vel:", observation.joint_velocities[0], " -- 3.0")
+            #     action_orig[0] = 1.0
+            #     action_orig[1] = -1.0
+            #     print("pos:", observation.joint_positions[0], "vel:", observation.joint_velocities[0], " -- 1.0")
+            # elif observation.joint_positions[0] < -60 * np.pi/180 and self.accelarated_towards_limits:
+            #     print("pos:", observation.joint_positions[0], "vel:", observation.joint_velocities[0], " -- -2.0")
+            #     action_orig[0] = -2.0
+            #     action_orig[1] = 2.0
+            # elif self.accelarated_towards_limits and observation.joint_velocities[0]<-2.0:
+            #     print("pos:", observation.joint_positions[0], "vel:", observation.joint_velocities[0]," -- -2.5")
+            #     action_orig[0] = -2.5
+            #     action_orig[1] = 2.5
+            # elif self.accelarated_towards_limits and observation.joint_velocities[0]>6.0:
+            #     print("pos:", observation.joint_positions[0], "vel:", observation.joint_velocities[0]," -- 1.5")
+            #     action_orig[0] = 1.5
+            #     action_orig[1] = -1.5
+            # else:
+            #     action_orig[0] = 0.0
+            #     action_orig[1] = 0.0
+            #     if self.accelarated_towards_limits:
+            #         print("pos:", observation.joint_positions[0], "vel:", observation.joint_velocities[0], " -- 0.0")
+
+                        # stop first joint if necessary
+            
+
+            self.last_action = np.ones(self._nb_dofs * 2, dtype=np.float32) * 0.29  # 0.29 = 1.5 bar, 0.5 = 2.0 bar
+            action_orig = np.zeros(self._nb_dofs * 2, dtype=np.float32)
+
             if (observation.joint_positions[0] > 60 * np.pi/180  and observation.joint_velocities[0]>0) or observation.joint_velocities[0]>10.0:
                 self.accelarated_towards_limits = True
                 if observation.joint_velocities[0]>10.0:
                     print("pos:", observation.joint_positions[0], "vel:", observation.joint_velocities[0], " -- 6.0")
-                    action_orig[0] = 6.0
-                    action_orig[1] = -6.0
+                    self.last_action[0] = 0.29
+                    self.last_action[1] = 0
                 else:
                     print("pos:", observation.joint_positions[0], "vel:", observation.joint_velocities[0], " -- 3.0")
-                    action_orig[0] = 3.0
-                    action_orig[1] = -3.0
+                    self.last_action[0] = 0.29
+                    self.last_action[1] = 0.1
             elif (observation.joint_positions[0] > 10 * np.pi/180  and observation.joint_velocities[0]>6.0):
                 print("pos:", observation.joint_positions[0], "vel:", observation.joint_velocities[0], " -- 3.0")
-                action_orig[0] = 1.0
-                action_orig[1] = -1.0
+                self.last_action[0] = 0.29
+                self.last_action[1] = 0.2
                 print("pos:", observation.joint_positions[0], "vel:", observation.joint_velocities[0], " -- 1.0")
             elif observation.joint_positions[0] < -60 * np.pi/180 and self.accelarated_towards_limits:
                 print("pos:", observation.joint_positions[0], "vel:", observation.joint_velocities[0], " -- -2.0")
-                action_orig[0] = -2.0
-                action_orig[1] = 2.0
+                self.last_action[0] = 0.2
+                self.last_action[1] = 0.29
             elif self.accelarated_towards_limits and observation.joint_velocities[0]<-2.0:
                 print("pos:", observation.joint_positions[0], "vel:", observation.joint_velocities[0]," -- -2.5")
-                action_orig[0] = -2.5
-                action_orig[1] = 2.5
+                self.last_action[0] = 0.15
+                self.last_action[1] = 0.29
             elif self.accelarated_towards_limits and observation.joint_velocities[0]>6.0:
                 print("pos:", observation.joint_positions[0], "vel:", observation.joint_velocities[0]," -- 1.5")
-                action_orig[0] = 1.5
-                action_orig[1] = -1.5
+                self.last_action[0] = 0.29
+                self.last_action[1] = 0.15
             else:
-                action_orig[0] = 0.0
-                action_orig[1] = 0.0
+                self.last_action[0] = 0.29
+                self.last_action[1] = 0.29
                 if self.accelarated_towards_limits:
                     print("pos:", observation.joint_positions[0], "vel:", observation.joint_velocities[0], " -- 0.0")
 
+
+
+
+            # # stop first joint if necessary
+            # if (observation.joint_positions[0] > 60 * np.pi/180  and observation.joint_velocities[0]>0) or observation.joint_velocities[0]>10.0:
+            #     self.accelarated_towards_limits = True
+            #     self.last_action = np.ones(self._nb_dofs * 2, dtype=np.float32) * 0.5  # 0.29 = 1.5 bar, 0.5 = 2.0 bar
+            #     # self.last_action[0] = 0.29
+            #     action_orig = np.zeros(self._nb_dofs * 2, dtype=np.float32)
+
             return self.step(action_orig)
+        
+        # if not episode_over and observation.ball_position[2] < -1.39 + 0.15:
+        #     self.last_action = np.ones(self._nb_dofs * 2, dtype=np.float32) * 0.5
+        #     action_orig = np.zeros(self._nb_dofs * 2, dtype=np.float32)
+        #     return self.step(action_orig)
+
         
          # formatting observation in a format suitable for gym
         observation = self._convert_observation(observation)
@@ -349,6 +404,8 @@ class HysrOneBallEnv(gym.Env):
         observation = self._convert_observation(observation)
         if not self._accelerated_time:
             self._frequency_manager = None
+        self.print_ball_hit = False
+        self.print_ball_below_racket = False
         return observation
 
     def dump_data(self, data_buffer):

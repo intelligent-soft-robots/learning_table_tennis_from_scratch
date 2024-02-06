@@ -18,7 +18,7 @@ def _return_task_reward(min_distance_ball_target, c, rtt_cap):
 
 
 def _smash_task_reward(min_distance_ball_target, max_ball_velocity, c, rtt_cap):
-    reward = min(max_ball_velocity, 200)**2 * 0.025 * (1 - min_distance_ball_target**0.75/(2.95942**0.75))
+    reward = min(max_ball_velocity, 40)**2 * 1.0 * 0.025 * (1 - min_distance_ball_target**0.75/(2.95942**0.75))
     # reward = 1.0 - ((min_distance_ball_target / c) ** 0.75)
     # reward = reward * max_ball_velocity
     reward = max(reward, rtt_cap)

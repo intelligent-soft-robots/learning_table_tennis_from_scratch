@@ -23,6 +23,19 @@ import shared_memory
 from pam_mujoco import mirroring
 from . import configure_mujoco
 from . import robot_integrity
+import ast
+import random
+
+import sys
+sys.path.append('/home/sguist/Software/o80_kalman_filter')
+from ball import Ball
+import matplotlib.pyplot as plt
+import json
+from datetime import datetime
+
+import signal_handler
+import tennicam_client
+TENNICAM_CLIENT_DEFAULT_SEGMENT_ID = "tennicam_client"
 
 
 SEGMENT_ID_BALL = pam_mujoco.segment_ids.ball
@@ -67,6 +80,8 @@ class HysrOneBallConfig:
     # user).
 
     real_robot: str = oc.MISSING
+    real_ball: bool = oc.MISSING
+    ball_from_file: bool = oc.MISSING
     robot_type: pam_mujoco.RobotType = oc.MISSING
     o80_pam_time_step: float = oc.MISSING
     mujoco_time_step: float = oc.MISSING
@@ -359,6 +374,9 @@ class _Observation:
 
 class HysrOneBall:
     def __init__(self, hysr_config, reward_function):
+        
+        self.adjust_real_ball_into_future = True
+
         self._hysr_config = hysr_config
 
         # we will track the episode number
@@ -388,6 +406,7 @@ class HysrOneBall:
 
         # to control pseudo-real robot (pressure control)
         if not hysr_config.real_robot:
+            print("NOT REAL ROBOT")
             (
                 self._real_robot_handle,
                 self._real_robot_frontend,
@@ -399,6 +418,7 @@ class HysrOneBall:
             )
             self._mujoco_ids.append(self._real_robot_handle.get_mujoco_id())
         else:
+            print("REAL ROBOT")
             # real robot: making some sanity check that the
             # rest of the configuration is ok
             if hysr_config.instant_reset:
@@ -487,21 +507,35 @@ class HysrOneBall:
         # reward configuration
         self._reward_function = reward_function
 
-        # to get information regarding the ball
-        # (instance of o80_pam.o80_ball.o80Ball)
+        if hysr_config.ball_from_file:
+            print("READ BALL FROM FILE")
+            self.init_load_ball_from_file()
+        else:
+            if not hysr_config.real_ball:
+                # to get information regarding the ball
+                # (instance of o80_pam.o80_ball.o80Ball)
+                print("NOT REAL BALL")
+            else:
+                print("REAL BALL")
+                self.init_real_ball_kalman_filter()
+
         self._ball_communication = self._simulated_robot_handle.interfaces[
-            SEGMENT_ID_BALL
-        ]
+                SEGMENT_ID_BALL
+            ]
+
 
         # to send pressure commands to the real or pseudo-real robot
         # (instance of o80_pam.o80_pressures.o80Pressures)
         # hysr_config.real robot is either false (i.e. pseudo real
         # mujoco robot) or the segment_id of the real robot backend
+        print(hysr_config.real_robot)
         if not hysr_config.real_robot:
+            print("NOT REAL ROBOT")
             self._pressure_commands = self._real_robot_handle.interfaces[
                 SEGMENT_ID_PSEUDO_REAL_ROBOT
             ]
         else:
+            print("REAL ROBOT")
             self._real_robot_frontend = o80_pam.FrontEnd(hysr_config.real_robot)
             self._pressure_commands = o80_pam.o80Pressures(
                 hysr_config.real_robot, frontend=self._real_robot_frontend
@@ -618,14 +652,23 @@ class HysrOneBall:
             line=line, index=index, random=random
         )
 
-    def _create_observation(self):
+    def _create_observation(self, ignore_ball=True):
         (
             pressures_ago,
             pressures_antago,
             joint_positions,
             joint_velocities,
         ) = self._pressure_commands.read()
-        _, ball_position, ball_velocity= self._ball_communication.get()
+        if ignore_ball:
+            ball_position, ball_velocity = [0, 0, 0], [0, 0, 0]
+        else:
+            if self._hysr_config.ball_from_file:
+                ball_position, ball_velocity = self.init_load_ball_from_file()
+            else:
+                if not self._hysr_config.real_ball:
+                    ball_position, ball_velocity = self._ball_communication.get()
+                else:
+                    ball_position, ball_velocity = self.reset_real_ball_kalman_filter()
         observation = _Observation(
             joint_positions,
             joint_velocities,
@@ -758,7 +801,7 @@ class HysrOneBall:
         self._simulated_robot_handle.reset()
         for handle in _ExtraBall.handles.values():
             handle.reset()
-        self._move_to_pressure(self._hysr_config.reference_posture)
+        self._move_to_pressure(self._hysr_config.starting_pressures)
 
     def _move_to_pressure(self, pressures):
         # moves to pseudo-real robot to desired pressure in synchronization
@@ -877,6 +920,8 @@ class HysrOneBall:
             mirroring.align_robots(self._pressure_commands, self._mirrorings)
         else:
             # moving to reset position
+            time.sleep(0.3)
+            self._move_to_pressure(self._hysr_config.starting_pressures)
             self._do_natural_reset()
 
         # going to starting pressure
@@ -885,8 +930,9 @@ class HysrOneBall:
         # moving the goal to the target position
         self._goal.set(self._target_position, [0, 0, 0])
 
-        # setting the ball behavior
-        self.load_ball()
+        if not self._hysr_config.real_ball:
+            # setting the ball behavior
+            self.load_ball()
 
         # control post contact was lost, restoring it
         self._simulated_robot_handle.reset_contact(SEGMENT_ID_BALL)
@@ -936,7 +982,7 @@ class HysrOneBall:
             self.reset_check(observation)
 
         # returning an observation
-        return self._create_observation()
+        return self._create_observation(ignore_ball=False)
 
     def reset_check(self, observation):
         print(observation.joint_positions)
@@ -947,13 +993,13 @@ class HysrOneBall:
             self._do_natural_reset()
             observation = self._create_observation()
 
-            # try reset 5 times
+            # try reset 15 times
             reset_counter += 1
-            if reset_counter>=5:
+            if reset_counter>=15:
                 input()
 
             # check if 2. dof gets stuck on wrong side after reset
-            if observation.joint_positions[2]<0.1:
+            if observation.joint_positions[1]<0.1:
                 self.move_second_dof_to_positive_angle_joint_pos()
 
 
@@ -967,6 +1013,7 @@ class HysrOneBall:
     def check_init_joint_postions(self, pos):
         # calculate error
         err = [pos[i]-self._hysr_config.reference_posture[i] for i in range(4)]
+        # err[1] = -err[1] # swap sign of 2. dof
         err_capped = np.array([max([min([e, 0.1]), -0.1]) for e in err])
 
         # update starting pressures
@@ -1002,7 +1049,7 @@ class HysrOneBall:
         # note : all prerecorded trajectories are added a last ball position
         # with z = -10.0, to insure this always occurs.
         # see: function reset
-        if self._ball_status.ball_position[2] < 0.7:
+        if self._ball_status.ball_position[2] < -1.41:
             print("ball below table", self._ball_status.ball_position)
             return True
         # in case the user called the method
@@ -1014,8 +1061,268 @@ class HysrOneBall:
 
     def get_ball_position(self):
         # returning current ball position
-        _, ball_position, _ = self._ball_communication.get()
+        ball_position, _ = self._ball_communication.get()
         return ball_position
+
+    
+    def parse_line_properly(self, line):
+        # Extracting data within parentheses and splitting
+        data_str = line.strip()[1:-1]
+        parts = data_str.split(', ', 2)
+        position_str = parts[2].split('], ')[0] + ']'
+        velocity_str = parts[2].split('], ')[1]
+        ball_id = int(parts[0])
+        timestamp = int(parts[1])
+
+        # Converting string representations to actual lists
+        position = ast.literal_eval(position_str)
+        velocity = ast.literal_eval(velocity_str)
+        return ball_id, timestamp, position, velocity
+
+    def init_load_ball_from_file(self):
+
+        folder = "/home/sguist/data/tennicam02_long/"
+        # ex filename: tennicam_231_long
+        # load random file from folder matching the pattern
+        file_path = folder + random.choice([f for f in os.listdir(folder) if f.startswith("tennicam")])
+
+        self.from_file_ball_ids = []
+        self.from_file_timestamps = []
+        self.from_file_positions = []
+        self.from_file_velocities = []
+
+        with open(file_path, 'r') as file:
+            for line in file:
+                ball_id, timestamp, position, velocity = self.parse_line_properly(line)
+                self.from_file_ball_ids.append(ball_id)
+                self.from_file_timestamps.append(timestamp)
+                self.from_file_positions.append(position)
+                self.from_file_velocities.append(velocity)
+
+        return self.from_file_positions[0], self.from_file_velocities[0]
+        
+    def step_ball_from_file(self, idx):
+        print("s ", end=" ")
+        time = idx * 0.01 * 1e9
+        print("t ", time, end=" ")
+        while self.from_file_timestamps[0] < time and len(self.from_file_timestamps)>1:
+            print(" p", end=" ")
+            self.from_file_ball_ids.pop(0)
+            self.from_file_timestamps.pop(0)
+            self.from_file_positions.pop(0)
+            self.from_file_velocities.pop(0)
+
+        if len(self.from_file_timestamps)==1:
+            print("end of file")
+            self.from_file_positions[0][2] = -1.5  # below table
+            return self.from_file_positions[0], self.from_file_velocities[0]
+        
+        velocity = self.from_file_velocities[0]
+        position = self.from_file_positions[0]
+        print()
+        return position, velocity
+
+
+    def init_real_ball_kalman_filter(self):
+        # initialize tennicam client
+        self.tennicam_frontend = tennicam_client.FrontEnd(TENNICAM_CLIENT_DEFAULT_SEGMENT_ID)
+        
+        # # read first observation
+        # iteration = self.tennicam_frontend.latest().get_iteration()
+        # obs = self.tennicam_frontend.read(iteration)
+        # time_stamp = obs.get_time_stamp() * 1e-9
+        # position = obs.get_position()
+        # velocity = obs.get_velocity()
+
+        # # initialize kalman filter
+        # self.ball_kl = Ball()
+        # self.ball_kl.ball_initialization(time_stamp, np.array(position), np.array(velocity), np.array([0,0,0]))
+       
+        # # initialize lists for plotting
+        # self.ball_kl_positions = []
+        # self.ball_kl_velocities = []
+        # self.idxs_kl = []
+
+    def reset_real_ball_kalman_filter(self):
+        # wait for ball and read first observation
+        print("waiting for ball...")
+        last_ball_id = -1
+        for i in range(1):  # wait for one observatiosn
+            ball_id = -1
+            while ball_id==-1 or ball_id==last_ball_id:
+                iteration = self.tennicam_frontend.latest().get_iteration()
+                obs = self.tennicam_frontend.read(iteration)
+                time_stamp = obs.get_time_stamp() * 1e-9
+                position = obs.get_position()
+                velocity = obs.get_velocity()
+                ball_id = obs.get_ball_id()
+            last_ball_id = ball_id
+            print("ball", i)
+            print("ball_id", ball_id, "position", position, "velocity", velocity)
+
+        # # wait for y
+        # while position[1]>-0.3 or ball_id == -1:
+        #     iteration = self.tennicam_frontend.latest().get_iteration()
+        #     obs = self.tennicam_frontend.read(iteration)
+        #     position = obs.get_position()
+        #     velocity = obs.get_velocity()
+        #     ball_id = obs.get_ball_id()
+
+        # last_ball_id = ball_id
+        # print("ball_id", ball_id, "position", position, "velocity", velocity)
+
+        # initialize kalman filter
+        self.ball_kl = Ball()
+        self.ball_kl.ball_initialization(time_stamp, np.array(position), np.array(velocity), np.array([0,0,0]))
+       
+        # initialize lists for plotting
+        self.ball_kl_positions = []
+        self.ball_kl_velocities = []
+        self.ball_camera_positions = []
+        self.ball_camera_velocities = []
+        self.idxs_kl = []
+        self.top_five_velocites_kl = []
+
+        self.previous_state_kl = self.ball_kl.ball['states']
+        self.previous_time_stamp_kl = time_stamp
+        self.previous_ball_id = ball_id
+
+        curr_state = self.ball_kl.ball['states']
+
+        if self.adjust_real_ball_into_future:
+            time_into_future = max(90-0, 0) / 90 * 11 * 0.01
+            dt = 0.0001
+            curr_state = self.ball_kl.prediction(curr_state, time_into_future, dt)[-1]
+
+        return curr_state[0:3], curr_state[3:6]
+
+
+    def step_real_ball_kalman_filter(self, idx):
+        # read observation
+        iteration = self.tennicam_frontend.latest().get_iteration()
+        obs = self.tennicam_frontend.read(iteration)
+        ball_id = obs.get_ball_id()
+        time_stamp = obs.get_time_stamp() * 1e-9
+        position = obs.get_position()
+        velocity = obs.get_velocity()
+        
+        # ignore outlier
+        outlier = False
+        if ball_id == -1 or len(self.ball_kl_positions)>1 and (np.linalg.norm(np.array(position)-np.array(self.ball_kl_positions[-1]))>0.4 or np.linalg.norm(np.array(velocity))>60.0):
+            outlier = True
+
+        # print("step ball_id", ball_id, "position", position, "velocity", velocity)
+        
+        if not outlier:
+        # apply kalman filter
+            # check ball id same, or absolute velocity small
+            if not (self.previous_ball_id==ball_id or np.linalg.norm(np.array(velocity))<0.1):
+                self.ball_kl.input_data(
+                            time_stamp,
+                            # if np.linalg.norm(positions[i]) > 1e-6 and np.linalg.norm(velocities[i]) > 1e-6
+                            # else -1,
+                            np.array(position),
+                            np.array(velocity),
+                            np.zeros(3),
+                )
+            curr_state = self.ball_kl.ball['states']
+
+            abs_vel = np.linalg.norm(np.array(velocity))
+            if len(self.top_five_velocites_kl)<5:
+                self.top_five_velocites_kl.append(abs_vel)
+            else:
+                self.top_five_velocites_kl.sort()
+                if abs_vel>self.top_five_velocites_kl[0]:
+                    self.top_five_velocites_kl[0] = abs_vel
+            print("o", end=" ")
+        else:
+            dt = 0.0001
+            time_stamp = self.previous_time_stamp_kl + 0.01
+            delta_t = time_stamp - self.previous_time_stamp_kl
+            if delta_t>dt*2:
+                # print("prediction, delta_t", delta_t)
+                curr_state = self.ball_kl.prediction(self.previous_state_kl, delta_t, dt)[-1]
+            else:
+                # print("previous state, delta_t", delta_t)
+                curr_state = self.previous_state_kl
+
+            print("x", end=" ")
+
+        
+
+        # save for plotting
+        self.ball_kl_positions.append(curr_state[0:3].tolist())
+        self.ball_kl_velocities.append(curr_state[3:6].tolist())
+
+        if not outlier:
+            self.ball_camera_positions.append(position)
+            self.ball_camera_velocities.append(velocity)
+        else:
+            if len(self.ball_camera_positions)>0:
+                self.ball_camera_positions.append(self.ball_camera_positions[-1])
+                self.ball_camera_velocities.append(self.ball_camera_velocities[-1])
+
+        self.idxs_kl.append(idx)
+        self.previous_ball_id = ball_id
+
+        self.previous_state_kl = curr_state
+        self.previous_time_stamp_kl = time_stamp
+
+        if self.adjust_real_ball_into_future:
+            # start timing
+            t_start = time.time()
+            time_into_future = max(90-idx, 0) / 90 * 11 * 0.01
+            print("time_into_future", time_into_future)
+            dt = 0.001
+            if time_into_future>2*dt:
+                curr_state = self.ball_kl.prediction(curr_state, time_into_future, dt)[-1]
+                # end timing
+                t_end = time.time()
+                print("timing kalman", t_end-t_start)
+
+
+        return curr_state[0:3], curr_state[3:6]
+    
+    def plot_kalman_filter(self):
+        # Separate the position and velocity components for plotting
+        pos_x, pos_y, pos_z = zip(*self.ball_kl_positions)
+        vel_x, vel_y, vel_z = zip(*self.ball_kl_velocities)
+
+        fig, axes = plt.subplots(2, 3, figsize=(15, 10))
+
+        # Plot positions
+        axes[0, 0].scatter(self.idxs_kl, pos_x, s=20, color='red')
+        axes[0, 0].set_title("Position X")
+        axes[0, 1].scatter(self.idxs_kl, pos_y, s=20, color='red')
+        axes[0, 1].set_title("Position Y")
+        axes[0, 2].scatter(self.idxs_kl, pos_z, s=20, color='red')
+        axes[0, 2].set_title("Position Z")
+
+        # Plot velocities
+        axes[1, 0].scatter(self.idxs_kl, vel_x, s=20, color='red')
+        axes[1, 0].set_title("Velocity X")
+        axes[1, 1].scatter(self.idxs_kl, vel_y, s=20, color='red')
+        axes[1, 1].set_title("Velocity Y")
+        axes[1, 2].scatter(self.idxs_kl, vel_z, s=20, color='red')
+        axes[1, 2].set_title("Velocity Z")
+
+    # save camera system and kalman filter data to file
+    def dump_kalman_filter(self):
+        # filename example: kl_20240201-145804 (year, month, day, hour, minute, second)
+        filename = "/tmp/" + "kl_" + datetime.now().strftime("%Y%m%d-%H%M%S") + ".json"
+
+        # save kalman filter data as json
+        data = {
+            "ball_kl_positions": self.ball_kl_positions,
+            "ball_kl_velocities": self.ball_kl_velocities,
+            "ball_camera_positions": self.ball_camera_positions,
+            "ball_camera_velocities": self.ball_camera_velocities,
+            "idxs_kl": self.idxs_kl,
+        }
+
+        with open(filename, "w") as f:
+            json.dump(data, f)
+
 
     # action assumed to be np.array(ago1,antago1,ago2,antago2,...)
     def step(self, action):
@@ -1027,8 +1334,19 @@ class HysrOneBall:
             joint_velocities,
         ) = self._pressure_commands.read()
 
-        # getting information about simulated ball
-        _, ball_position, ball_velocity = self._ball_communication.get()
+        if self._hysr_config.ball_from_file:
+            ball_position, ball_velocity = self.step_ball_from_file(self._step_number)
+            print("step", self._step_number, "ball_position", ball_position, "ball_velocity", ball_velocity)
+            self._ball_communication.set(ball_position, ball_velocity)
+        else:
+            if not self._hysr_config.real_ball:
+                # getting information about simulated ball
+                ball_position, ball_velocity = self._ball_communication.get()
+            else:
+                ball_position, ball_velocity = self.step_real_ball_kalman_filter(self._step_number)
+                self._ball_communication.set(ball_position, ball_velocity)
+
+        # print("ball_position", ball_position, "ball_velocity", ball_velocity)
 
         # getting information about simulated balls
         def commented():
@@ -1113,6 +1431,11 @@ class HysrOneBall:
                 self._ball_status.min_distance_ball_target,
                 self._ball_status.max_ball_velocity,
             )
+            if self._hysr_config.real_ball and not self._hysr_config.ball_from_file:
+                print("top five velocities", self.top_five_velocites_kl)
+                self.dump_kalman_filter()
+            #     print("plotting...", flush=True)
+            #     self.plot_kalman_filter()
 
         # next step can not be the first one
         # (reset will set this back to True)
