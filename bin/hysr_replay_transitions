@@ -6,7 +6,7 @@ import threading
 import pam_mujoco
 import o80_pam
 import o80
-from typing import Tuple, List, cast, Optional
+from typing import Tuple, List, cast, Optional, Sequence, Dict
 from pathlib import Path
 from pynput import keyboard
 
@@ -69,6 +69,15 @@ class Observation:
         self.ball_velocity = ball_velocity
         self.pressures = pressures
 
+    def same_robot_position(self, other, tolerance:float) -> bool:
+        """
+        Returns True if the other instance of observation has a robot position
+        attribute equals to the one of this instance (up to the specified tolerance)
+        """
+        diff = [abs(a - b) for a, b in zip(self.robot_position, other.robot_position)]
+        same = all([d < tolerance for d in diff])
+        return same
+
     def __str__(self) -> str:
         attrs = (
             "robot_position",
@@ -93,9 +102,60 @@ class Transition:
     Encapsulate two successive observations
     """
 
-    def __init__(self, observation1: Observation, observation2: Observation) -> None:
+    def __init__(
+        self,
+        episode_id: int,
+        timestep: int,
+        observation1: Observation,
+        observation2: Observation,
+    ) -> None:
+        self.id: Tuple[int, int] = (episode_id, timestep)
+        self.timestep = timestep
+        self.episode_id = episode_id
         self.observation1 = observation1
         self.observation2 = observation2
+
+    def get_id(self) -> Tuple[int, int]:
+        """
+        Returns the episode id and the timestep
+        associated with this transition
+        """
+        return self.id
+
+    def same_robot_positions(self, other, tolerance: float=0.001) -> bool:
+        """
+        Returns True if the other instance encapsulate observations which
+        refers to the same robot position as the observations encapsulated by
+        this instance (up to the provided tolerance)
+        """
+        if not self.observation1.same_robot_position(other.observation1,tolerance):
+            return False
+        if not self.observation2.same_robot_position(other.observation2,tolerance):
+            return False
+        return True
+
+    def __eq__(self, other) -> bool:
+        """
+        Two instances are equals if of the same episode id and
+        same timestep.
+        """
+        if self.episode_id != other.episode_id:
+            return False
+        if self.timestep != other.timestep:
+            return False
+        return True
+
+    def __le__(self, other) -> bool:
+        """
+        An instance is smaller compared to another if
+        its episode id is smaller. If the episode id are
+        equals: if its timestep is smaller.
+        """
+        if self.episode_id > other.episode_id:
+            return False
+        if self.timestep > other.timestep:
+            return False
+        return True
 
     def __str__(self) -> str:
         return str(
@@ -126,19 +186,21 @@ class Transition:
                 robot_position, robot_velocity, ball_position, ball_velocity, pressures
             )
 
-        transitions: List[Transition] = []
+        transitions: List[object] = []
 
         with open(path, "r") as f:
             s = f.read()
             d = s.split("\n\n")
             for chunk in d[:-1]:
                 transitions_ = eval(chunk)
-                for criterion, transition, *idx in transitions_:
+                for criterion, transition, timestep, episode_id, _ in transitions_:
                     observation, next_observation, action, _, _, _ = transition
                     observation = tuple(observation["observation"])
                     next_observation = tuple(next_observation["observation"])
                     transitions.append(
                         Transition(
+                            episode_id,
+                            timestep,
                             _get_observation(observation),
                             _get_observation(next_observation),
                         )
@@ -147,11 +209,93 @@ class Transition:
         return transitions
 
 
+def group_transitions(
+    transitions: Sequence[Transition],
+) -> Dict[Tuple[int, int], List[Transition]]:
+    """
+    Group together all transitions having the same id (i.e. recorded at the
+    same episode and the same timestep). Implicitely, the robot position
+    encapsulated by the observations of grouped transitions should be the same.
+    """
+    grouped: Dict[Tuple[int, int], List[Transition]] = {}
+    for transition in transitions:
+        try:
+            grouped[transition.get_id()].append(transition)
+        except KeyError:
+            grouped[transition.get_id()] = [transition]
+    return grouped
+
+
+def check_group(
+        episode_id: int, timestep: int, transitions: Sequence[Transition],
+        tolerance: float=0.001
+) -> List[str]:
+    """
+    All transitions are supposed to correspond to the same episode and to the 
+    same timestep, so their related robot's position should be the same. 
+    Checking this is the case. If not, for each successive transition for which this
+    is not the case, an error message is created (the list of error messages is 
+    returned)
+    """
+    
+    if len(transitions) < 1:
+        return
+
+    errors: List[str] = []
+
+    for t1, t2 in zip(transitions, transitions[1:]):
+        assert t1.get_id() == t2.get_id()
+        assert t1.get_id()[0] == episode_id
+        assert t1.get_id()[1] == timestep
+        obs1 = t1.observation1, t1.observation2
+        obs2 = t2.observation1, t2.observation2
+        for (o1, o2) in zip(obs1, obs2):
+            if not o1.same_robot_position(o2,tolerance):
+                p1 = o1.robot_position
+                p2 = o2.robot_position
+                diff = [abs(a - b) for a, b in zip(p1, p2)]
+                errors.append("{}\t{}\tdiff: {}".format(p1, p2, diff))
+
+    return errors
+
+
+def check_groups(
+    transitions: Sequence[Tuple[Tuple[int, int], List[Transition]]]
+) -> None:
+    """
+    Transitions are grouped based on the same episode and to the 
+    same timestep, so the robot's position related to all transitions
+    of the same group should be the same. 
+    Checking this is the case. If not, raising a ValueError which message lists
+    all the times this rule has not be observed.
+    """
+    errors: Dict[Tuple[int, int], List[str]] = {}
+
+    for id_, transitions_ in transitions:
+        error = check_group(id_[0], id_[1], transitions_)
+        if error:
+            errors[id_] = error
+
+    if errors:
+        err_list = "\n".format(
+            [
+                "episode {} , timestep {}: {}".format(id_[0], id_[1], error)
+                for id_, error in errors.items()
+            ]
+        )
+        raise ValueError(
+            "Some transitions corresponding to the same episode and the same "
+            "timestep do not have observations with the same robot position:\n"
+            "{}".format(err_list)
+        )
+
+
 def get_frontends(
     mujoco_id: str,
-) -> Tuple[o80_pam.FrontEnd, o80_pam.BallFrontEnd]:
+    nb_balls: int,
+) -> Tuple[o80_pam.FrontEnd, List[o80_pam.BallFrontEnd]]:
     """
-    Returns o80's frontend for the control of the ball and of
+    Returns o80's frontends for the control of the balls and of
     the robot of the pam_mujoco running instance.
     """
 
@@ -161,9 +305,22 @@ def get_frontends(
         control=pam_mujoco.MujocoRobot.JOINT_CONTROL,
     )
 
-    ball = pam_mujoco.MujocoItem(
-        "ball", control=pam_mujoco.MujocoItem.CONSTANT_CONTROL, color=(1, 0, 0, 1)
-    )
+    ball_segment_ids = ["ball_{}".format(index) for index in range(nb_balls)]
+
+    colors_step = 1.0 / nb_balls
+    colors = [
+        (1.0 - index * colors_step, 0, index * colors_step, 1.0)
+        for index in range(nb_balls)
+    ]
+
+    balls = [
+        pam_mujoco.MujocoItem(
+            segment_id,
+            control=pam_mujoco.MujocoItem.CONSTANT_CONTROL,
+            color=color,
+        )
+        for segment_id, color in zip(ball_segment_ids, colors)
+    ]
 
     table = pam_mujoco.MujocoTable("table")
 
@@ -173,15 +330,17 @@ def get_frontends(
         mujoco_id,
         table=table,
         robot1=robot,
-        balls=(ball,),
+        balls=balls,
         graphics=graphics,
         accelerated_time=accelerated_time,
     )
 
     robot_frontend: o80_pam.FrontEnd = handle.frontends["robot"]
-    ball_frontend: o80_pam.BallFrontEnd = handle.frontends["ball"]
+    ball_frontends: List[o80_pam.BallFrontEnd] = [
+        handle.frontends[segment_id] for segment_id in ball_segment_ids
+    ]
 
-    return robot_frontend, ball_frontend
+    return robot_frontend, ball_frontends
 
 
 class Stopper:
@@ -200,19 +359,20 @@ class Stopper:
         self.must_stop = False
 
 
-def play_transition(
+def play_transitions(
     info: str,
-    transition: Transition,
+    transitions: Sequence[Transition],
     robot: o80_pam.FrontEnd,
-    ball: o80_pam.BallFrontEnd,
+    balls: Sequence[o80_pam.BallFrontEnd],
     stopper: Stopper,
     short_sleep,
     long_sleep,
     algo_step_ms,
+    out_of_sight: Tuple[float, float, float] = (-10.0, -10.0, -10),
 ):
     """
-    Play the transition in the pam_mujoco instance.
-    The transition will be played over and over until
+    Play the transitions in the pam_mujoco instance.
+    The transitions will be played over and over until
     the stop method of the stopper has been called (this
     function is expected to be called in a thread).
 
@@ -220,12 +380,16 @@ def play_transition(
     ----------
     info:
       will be printed in the terminal
-    transition:
-      the transition to be played
+    transitions:
+      the transitions to be played. They are supposed to
+      correspond to the same episode id/ timestep, i.e. to
+      have similar observations in regard to the robot positions.
     robot:
       o80 frontend to the robot
-    ball:
-      o80 frontend to the ball
+    balls:
+      o80 frontends to the balls. On ball per transition. There should be
+      more simulated balls than transitions to display. If not, a ValueError
+      is raised.
     stopper:
       should be used to stop the thread
       running this function
@@ -236,19 +400,44 @@ def play_transition(
     algo_step_ms:
       time step between two collections of observation
       by the learning algorithm
+    out_of_sight (optional):
+      3d position where the unused balls will be moved to
     """
-    print()
-    print("transition:", info)
-    print(transition)
-    print()
+
+    # if not enough balls to play all the transitions, exiting
+    if len(balls) < len(transitions):
+        raise ValueError(
+            "play_transitions: one can not play {} transitions using "
+            "only {} balls".format(len(transitions), len(balls))
+        )
+
+    # if there are more balls than transitions, hiding the extra balls
+    for ball in balls[len(transitions) :]:
+        ball.add_command(
+            out_of_sight, [0.0] * 3, o80.Duration_us.milliseconds(5), o80.Mode.OVERWRITE
+        )
+        ball.pulse()
+
     robot_positions = (
-        transition.observation1.robot_position,
-        transition.observation2.robot_position,
+        transitions[0].observation1.robot_position,
+        transitions[0].observation2.robot_position,
     )
-    ball_positions = (
-        transition.observation1.ball_position,
-        transition.observation2.ball_position,
-    )
+    ball_positions = [
+        (
+            transition.observation1.ball_position,
+            transition.observation2.ball_position,
+        )
+        for transition in transitions
+    ]
+
+    print()
+    print("transitions:", info)
+    print("robot position:", robot_positions[0], "\t", robot_positions[1])
+    print("ball positions")
+    for p1, p2 in ball_positions:
+        print("\t", p1, "\t", p2)
+    print()
+
     sleeps = (short_sleep, long_sleep)
     duration = o80.Duration_us.milliseconds(algo_step_ms)
     index = 0
@@ -256,9 +445,13 @@ def play_transition(
         robot.add_command(
             robot_positions[index], [0.0] * 4, duration, o80.Mode.OVERWRITE
         )
-        ball.add_command(ball_positions[index], [0.0] * 3, duration, o80.Mode.OVERWRITE)
+        for ball, ball_position in zip(balls, ball_positions):
+            ball.add_command(
+                ball_position[index], [0.0] * 3, duration, o80.Mode.OVERWRITE
+            )
         robot.pulse()
-        ball.pulse()
+        for ball in balls:
+            ball.pulse()
         time.sleep(sleeps[index])
         index += 1
         if index == 2:
@@ -268,15 +461,18 @@ def play_transition(
 class TransitionsPlayer:
     """
     For playing transitions in the pam_mujoco instances.
+    The transitions that belong to the same episode id and time step are grouped
+    and played together
 
     Parameters
     ----------
     transitions:
-      the transitions to be played
+      the transitions to be played, grouped by id
+      (id: tuple(episode id, timestep))
     robot:
       o80 frontend to the robot
-    ball:
-      o80 frontend to the ball
+    balls:
+      o80 frontends to the balls
     short_sleep:
       pause time when playing the transition
     long_sleep:
@@ -289,22 +485,31 @@ class TransitionsPlayer:
 
     def __init__(
         self,
-        transitions: List[Transition],
+        transitions: List[Tuple[Tuple[int, int], List[Transition]]],
         robot: o80_pam.FrontEnd,
-        ball: o80_pam.BallFrontEnd,
+        balls: Sequence[o80_pam.BallFrontEnd],
         short_sleep: float = 1.0,
         long_sleep: float = 3.0,
         algo_ms: int = 10,
     ):
         self._transitions = transitions
         self._robot = robot
-        self._ball = ball
+        self._balls = balls
         self._short_sleep = short_sleep
         self._long_sleep = long_sleep
         self._algo_ms = algo_ms
         self._index = 0
         self._thread: Optional[threading.Thread] = None
         self._stopper: Stopper = Stopper()
+
+        max_nb_transitions: int = max(
+            [len(transitions[1]) for transitions in self._transitions]
+        )
+        if len(balls) < max_nb_transitions:
+            raise ValueError(
+                "TransitionsPlayer: frontends to {} balls are provided, but need "
+                "at least {}".format(len(balls), max_nb_transitions)
+            )
 
     @classmethod
     def from_file(
@@ -320,8 +525,19 @@ class TransitionsPlayer:
         of TransitionsPlayer.
         """
         transitions: List[Transition] = Transition.from_file(path)
-        robot, ball = get_frontends(mujoco_id)
-        return cls(transitions, robot, ball, short_sleep, long_sleep, algo_ms)
+        transitions_: Dict[Tuple[int, int], List[Transition]] = group_transitions(
+            transitions
+        )
+        transitions__: List[Tuple[Tuple[int, int], List[Transition]]] = [
+            (id_, transitions_[id_]) for id_ in sorted(transitions_.keys())
+        ]
+
+        # checking all grouped transitions have the same robot position
+        check_groups(transitions__)
+
+        max_nb_transitions = max([len(t) for _, t in transitions__])
+        robot, balls = get_frontends(mujoco_id, max_nb_transitions)
+        return cls(transitions__, robot, balls, short_sleep, long_sleep, algo_ms)
 
     def size(self) -> int:
         """
@@ -331,7 +547,7 @@ class TransitionsPlayer:
 
     def _play_transition(self, index: int) -> None:
         """
-        Spawns a thread that will play the transition
+        Spawns a thread that will play the transitions
         found at the given index over and over.
         """
         if self._thread:
@@ -339,12 +555,16 @@ class TransitionsPlayer:
             self._thread.join()
             self._stopper.reset()
         self._thread = threading.Thread(
-            target=play_transition,
+            target=play_transitions,
             args=(
-                str(index),
-                self._transitions[index],
+                "episode: {}, timestep: {} ({} transitions)".format(
+                    self._transitions[index][0][0],
+                    self._transitions[index][0][1],
+                    len(self._transitions[index][1]),
+                ),
+                self._transitions[index][1],
                 self._robot,
-                self._ball,
+                self._balls,
                 self._stopper,
                 self._short_sleep,
                 self._long_sleep,
