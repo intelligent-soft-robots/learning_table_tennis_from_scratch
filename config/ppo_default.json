@@ -12,7 +12,7 @@
     "clip_range_vf": 0.3,
     "log_path": "/tmp/training_log",
     "num_timesteps": 500000,
-    "load_path": "",
+    "load_path": "/var/Experiments/2024_01_31_02_smash_hasy_real_new_balls_replay_06",
     "save_path": "/tmp/model",
     "num_layers": 1,
     "num_hidden": 380

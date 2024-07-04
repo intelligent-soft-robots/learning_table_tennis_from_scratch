@@ -27,7 +27,7 @@ import ast
 import random
 
 import sys
-sys.path.append('/home/sguist/Software/o80_kalman_filter')
+sys.path.append('/home/jschneider/isr_workspace/workspace/src/o80_kalman_filter')
 from ball import Ball
 import matplotlib.pyplot as plt
 import json
@@ -451,6 +451,7 @@ class HysrOneBall:
         self._goal = self._simulated_robot_handle.interfaces[SEGMENT_ID_GOAL]
 
         # to read all recorded trajectory files
+        print(hysr_config)
         self._trajectory_reader = context.BallTrajectories(hysr_config.trajectory_group)
         _BallBehavior.read_trajectories(hysr_config.trajectory_group)
 
@@ -666,7 +667,7 @@ class HysrOneBall:
                 ball_position, ball_velocity = self.init_load_ball_from_file()
             else:
                 if not self._hysr_config.real_ball:
-                    ball_position, ball_velocity = self._ball_communication.get()
+                    _, ball_position, ball_velocity = self._ball_communication.get()
                 else:
                     ball_position, ball_velocity = self.reset_real_ball_kalman_filter()
         observation = _Observation(
@@ -1180,6 +1181,9 @@ class HysrOneBall:
         self.ball_kl_velocities = []
         self.ball_camera_positions = []
         self.ball_camera_velocities = []
+        self.ball_camera_positions_direct = []
+        self.ball_camera_velocities_direct = []
+        self.ball_timestamps = []
         self.idxs_kl = []
         self.top_five_velocites_kl = []
 
@@ -1253,6 +1257,9 @@ class HysrOneBall:
         # save for plotting
         self.ball_kl_positions.append(curr_state[0:3].tolist())
         self.ball_kl_velocities.append(curr_state[3:6].tolist())
+        self.ball_camera_positions_direct.append(obs.get_position())
+        self.ball_camera_velocities_direct.append(obs.get_velocity())
+        self.ball_timestamps.append(datetime.now().timestamp())
 
         if not outlier:
             self.ball_camera_positions.append(position)
@@ -1317,6 +1324,9 @@ class HysrOneBall:
             "ball_kl_velocities": self.ball_kl_velocities,
             "ball_camera_positions": self.ball_camera_positions,
             "ball_camera_velocities": self.ball_camera_velocities,
+            "ball_camera_positions_direct": self.ball_camera_positions_direct,
+            "ball_camera_velocities_direct": self.ball_camera_velocities_direct,
+            "timestamps": self.ball_timestamps,
             "idxs_kl": self.idxs_kl,
         }
 
@@ -1334,6 +1344,7 @@ class HysrOneBall:
             joint_velocities,
         ) = self._pressure_commands.read()
 
+        print(self._hysr_config)
         if self._hysr_config.ball_from_file:
             ball_position, ball_velocity = self.step_ball_from_file(self._step_number)
             print("step", self._step_number, "ball_position", ball_position, "ball_velocity", ball_velocity)
@@ -1341,7 +1352,7 @@ class HysrOneBall:
         else:
             if not self._hysr_config.real_ball:
                 # getting information about simulated ball
-                ball_position, ball_velocity = self._ball_communication.get()
+                _, ball_position, ball_velocity = self._ball_communication.get()
             else:
                 ball_position, ball_velocity = self.step_real_ball_kalman_filter(self._step_number)
                 self._ball_communication.set(ball_position, ball_velocity)

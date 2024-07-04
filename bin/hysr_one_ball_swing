@@ -26,9 +26,9 @@ def execute(reward_config_path, hysr_config_path):
 
     frequency_manager = o80.FrequencyManager(1.0 / algo_time_step)
 
-    swing_posture = [[18000, 17000], [16800, 19100], [18700, 17300], [18000, 18000]]
-    swing_pressures = [p for sublist in swing_posture for p in sublist]
-    wait_pressures = [p for sublist in hysr_config.reference_posture for p in sublist]
+    swing_posture = [18000, 17000, 16800, 19100, 18700, 17300, 18000, 18000]
+    swing_pressures = [0] * 8 # [p for sublist in swing_posture for p in sublist]
+    wait_pressures = [0] * 8 #[[0.0, 0.0]] * 4  #[p for sublist in hysr_config.reference_posture for p in sublist]
 
     for episode in range(3):
         print("EPISODE", episode)

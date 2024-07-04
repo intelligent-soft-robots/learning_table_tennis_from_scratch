@@ -7,6 +7,8 @@ import gym
 import numpy as np
 import o80
 import pam_interface
+import tennicam_client
+TENNICAM_CLIENT_DEFAULT_SEGMENT_ID = "tennicam_client"
 
 from .hysr_one_ball import HysrOneBall, HysrOneBallConfig
 from .rewards import JsonReward
@@ -125,6 +127,7 @@ class HysrOneBallEnv(gym.Env):
             )
 
         self.n_eps = 0
+        self.tennicam_frontend = tennicam_client.FrontEnd(TENNICAM_CLIENT_DEFAULT_SEGMENT_ID)
         self.init_episode()
 
     def init_episode(self):
@@ -369,6 +372,9 @@ class HysrOneBallEnv(gym.Env):
         # logging
         self.n_steps += 1
         if self._log_episodes:
+            ball_obs = self.tennicam_frontend.latest()
+            ball_pos = ball_obs.get_position()
+            ball_vel = ball_obs.get_velocity()
             self.data_buffer.append(
                 (
                     observation.copy(),
@@ -377,6 +383,8 @@ class HysrOneBallEnv(gym.Env):
                     action.copy(),
                     reward,
                     episode_over,
+                    ball_pos,
+                    ball_vel
                 )
             )
         if episode_over:
@@ -418,4 +426,6 @@ class HysrOneBallEnv(gym.Env):
             dict_data["prdes"] = [x[3] for x in data_buffer]
             dict_data["reward"] = [x[4] for x in data_buffer]
             dict_data["episode_over"] = [x[5] for x in data_buffer]
+            dict_data["ball_pos_unfiltered"] = [x[6] for x in data_buffer]
+            dict_data["ball_vel_unfiltered"] = [x[7] for x in data_buffer]
             json.dump(dict_data, json_data)
