@@ -19,7 +19,9 @@ def get_extra_balls_set_mujoco_id(
     return "_".join([mujoco_id_prefix, str(setid)])
 
 
-def get_extra_robot_segment_id(setid, segment_id_prefix=SEGMENT_ID_EXTRA_ROBOTS_PREFIX):
+def get_extra_robot_segment_id(
+    setid, segment_id_prefix=SEGMENT_ID_EXTRA_ROBOTS_PREFIX
+):
     return "_".join([segment_id_prefix, str(setid)])
 
 
@@ -57,7 +59,9 @@ def configure_extra_set(setid, hysr_config):
     extra_balls_segment_id = get_extra_balls_segment_id(setid)
     balls = pam_mujoco.MujocoItems(extra_balls_segment_id)
 
-    ball_segment_ids = [get_ball_segment_id(setid, index) for index in range(nb_balls)]
+    ball_segment_ids = [
+        get_ball_segment_id(setid, index) for index in range(nb_balls)
+    ]
 
     for index, ball_segment_id in enumerate(ball_segment_ids):
         ball = pam_mujoco.MujocoItem(
@@ -80,7 +84,13 @@ def configure_extra_set(setid, hysr_config):
         o80_backend_period=hysr_config.mujoco_time_step,
     )
 
-    return handle, mujoco_id, extra_balls_segment_id, robot_segment_id, ball_segment_ids
+    return (
+        handle,
+        mujoco_id,
+        extra_balls_segment_id,
+        robot_segment_id,
+        ball_segment_ids,
+    )
 
 
 def configure_pseudo_real(
