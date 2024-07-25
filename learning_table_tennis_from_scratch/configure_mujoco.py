@@ -77,6 +77,7 @@ def configure_extra_set(setid, hysr_config):
         table=table,
         robot1=robot,
         combined=balls,
+        o80_backend_period=hysr_config.mujoco_time_step,
     )
 
     return handle, mujoco_id, extra_balls_segment_id, robot_segment_id, ball_segment_ids
@@ -151,6 +152,7 @@ def configure_simulation(hysr_config, mujoco_id="simulation"):
         balls=(ball,),
         hit_points=(hit_point,),
         goals=(goal,),
+        o80_backend_period=hysr_config.mujoco_time_step,
     )
 
     return handle
