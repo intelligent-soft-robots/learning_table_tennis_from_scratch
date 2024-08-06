@@ -666,7 +666,7 @@ class HysrOneBall:
                 ball_position, ball_velocity = self.init_load_ball_from_file()
             else:
                 if not self._hysr_config.real_ball:
-                    ball_position, ball_velocity = self._ball_communication.get()
+                    _, ball_position, ball_velocity = self._ball_communication.get()
                 else:
                     ball_position, ball_velocity = self.reset_real_ball_kalman_filter()
         observation = _Observation(
@@ -1060,7 +1060,7 @@ class HysrOneBall:
 
     def get_ball_position(self):
         # returning current ball position
-        ball_position, _ = self._ball_communication.get()
+        _, ball_position, _ = self._ball_communication.get()
         return ball_position
 
     
@@ -1340,7 +1340,7 @@ class HysrOneBall:
         else:
             if not self._hysr_config.real_ball:
                 # getting information about simulated ball
-                ball_position, ball_velocity = self._ball_communication.get()
+                _, ball_position, ball_velocity = self._ball_communication.get()
             else:
                 ball_position, ball_velocity = self.step_real_ball_kalman_filter(self._step_number)
                 self._ball_communication.set(ball_position, ball_velocity)
