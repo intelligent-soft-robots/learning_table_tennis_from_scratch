@@ -662,8 +662,7 @@ class HysrOneBall:
         trajectory = self._ball_behavior.get_trajectory()
         iterator = context.ball_trajectories.BallTrajectories.iterate(trajectory)
         # setting the ball to the first trajectory point
-        duration, state = next(iterator)
-        self._ball_communication.set(state.get_position(), [0, 0, 0])
+        self._ball_communication.set(trajectory[1][0], [0, 0, 0])
         # shooting the ball
         self._ball_communication.iterate_trajectory(iterator, overwrite=False)
 
