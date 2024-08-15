@@ -74,6 +74,7 @@ class HysrOneBallEnv(gym.Env):
         hysr_one_ball_config_file=None,
         log_episodes=False,
         logger=None,
+        job_id: str = "",
     ):
         super().__init__()
 
@@ -92,7 +93,7 @@ class HysrOneBallEnv(gym.Env):
         self._pressure_change_range = hysr_one_ball_config.pressure_change_range
         self._accelerated_time = hysr_one_ball_config.accelerated_time
 
-        self._hysr = HysrOneBall(hysr_one_ball_config, reward_function)
+        self._hysr = HysrOneBall(hysr_one_ball_config, reward_function, job_id)
 
         self.action_space = gym.spaces.Box(
             low=-1.0, high=+1.0, shape=(self._nb_dofs * 2,), dtype=np.float32

@@ -97,8 +97,8 @@ class HysrOneBallConfig:
     frequency_monitoring_episode: bool = oc.MISSING
     robot_integrity_check: bool = oc.MISSING
     robot_integrity_threshold: float = oc.MISSING
-
     use_vicon: bool = False
+
     """If true, get robot and table pose from the Vicon system.
 
     This requires a pam_vicon back end to be running, which provides the Vicon data.
@@ -359,8 +359,16 @@ class _Observation:
 
 
 class HysrOneBall:
-    def __init__(self, hysr_config, reward_function):
+    def __init__(self, hysr_config, reward_function, job_id):
         self._hysr_config = hysr_config
+
+        self.segment_id_ball = SEGMENT_ID_BALL + job_id
+        self.segment_id_goal = SEGMENT_ID_GOAL + job_id
+        self.segment_id_hit_point = SEGMENT_ID_HIT_POINT + job_id
+        self.segment_id_robot_mirror = SEGMENT_ID_ROBOT_MIRROR + job_id
+        self.segment_id_pseudo_real_robot = SEGMENT_ID_PSEUDO_REAL_ROBOT + job_id
+        self.segment_id_episode_frequency = SEGMENT_ID_EPISODE_FREQUENCY + job_id
+        self.segment_id_step_frequency = SEGMENT_ID_STEP_FREQUENCY + job_id
 
         # we will track the episode number
         self._episode_number = -1
@@ -399,6 +407,8 @@ class HysrOneBall:
                 hysr_config.save_folder,
                 graphics=hysr_config.graphics_pseudo_real,
                 accelerated_time=hysr_config.accelerated_time,
+                mujoco_id="pseudo-real",
+                job_id=job_id
             )
             self._mujoco_ids.append(self._real_robot_handle.get_mujoco_id())
         else:
@@ -425,13 +435,13 @@ class HysrOneBall:
 
         # to control the simulated robot (joint control)
         self._simulated_robot_handle = configure_mujoco.configure_simulation(
-            hysr_config
+            hysr_config, "simulation", job_id
         )
         self._mujoco_ids.append(self._simulated_robot_handle.get_mujoco_id())
 
         # where we want to shoot the ball
         self._target_position = hysr_config.target_position
-        self._goal = self._simulated_robot_handle.interfaces[SEGMENT_ID_GOAL]
+        self._goal = self._simulated_robot_handle.interfaces[self.segment_id_goal]
 
         # to read all recorded trajectory files
         self._trajectory_reader = context.BallTrajectories(hysr_config.trajectory_group)
@@ -442,7 +452,7 @@ class HysrOneBall:
         if hysr_config.frequency_monitoring_step:
             size = 1000
             self._frequency_monitoring_step = frequency_monitoring.FrequencyMonitoring(
-                SEGMENT_ID_STEP_FREQUENCY, size
+                self.segment_id_step_frequency, size
             )
         else:
             self._frequency_monitoring_step = None
@@ -450,7 +460,7 @@ class HysrOneBall:
             size = 1000
             self._frequency_monitoring_episode = (
                 frequency_monitoring.FrequencyMonitoring(
-                    SEGMENT_ID_EPISODE_FREQUENCY, size
+                    self.segment_id_episode_frequency, size
                 )
             )
         else:
@@ -493,7 +503,7 @@ class HysrOneBall:
         # to get information regarding the ball
         # (instance of o80_pam.o80_ball.o80Ball)
         self._ball_communication = self._simulated_robot_handle.interfaces[
-            SEGMENT_ID_BALL
+            self.segment_id_ball
         ]
 
         # to send pressure commands to the real or pseudo-real robot
@@ -502,7 +512,7 @@ class HysrOneBall:
         # mujoco robot) or the segment_id of the real robot backend
         if not hysr_config.real_robot:
             self._pressure_commands = self._real_robot_handle.interfaces[
-                SEGMENT_ID_PSEUDO_REAL_ROBOT
+                self.segment_id_pseudo_real_robot
             ]
         else:
             self._real_robot_frontend = o80_pam.FrontEnd(hysr_config.real_robot)
@@ -516,12 +526,12 @@ class HysrOneBall:
 
         # to send mirroring commands to simulated robots
         self._mirrorings = [
-            self._simulated_robot_handle.interfaces[SEGMENT_ID_ROBOT_MIRROR]
+            self._simulated_robot_handle.interfaces[self.segment_id_robot_mirror]
         ]
 
         # to move the hit point marker
         # (instance of o80_pam.o80_hit_point.o80HitPoint)
-        self._hit_point = self._simulated_robot_handle.interfaces[SEGMENT_ID_HIT_POINT]
+        self._hit_point = self._simulated_robot_handle.interfaces[self.segment_id_hit_point]
 
         # tracking if this is the first step of the episode
         # (a call to the step function sets it to false, call to reset function sets it
@@ -728,12 +738,12 @@ class HysrOneBall:
         # restore the control.
         # Also: this delete the information about the
         # contact with the racket (if any)
-        self._simulated_robot_handle.reset_contact(SEGMENT_ID_BALL)
+        self._simulated_robot_handle.reset_contact(self.segment_id_ball)
         for ball in self._extra_balls:
             ball.reset_contact()
 
     def deactivate_contact(self):
-        self._simulated_robot_handle.deactivate_contact(SEGMENT_ID_BALL)
+        self._simulated_robot_handle.deactivate_contact(self.segment_id_ball)
         for ball in self._extra_balls:
             ball.deactivate_contact()
 
@@ -880,8 +890,8 @@ class HysrOneBall:
         self.load_ball()
 
         # control post contact was lost, restoring it
-        self._simulated_robot_handle.reset_contact(SEGMENT_ID_BALL)
-        self._simulated_robot_handle.deactivate_contact(SEGMENT_ID_BALL)
+        self._simulated_robot_handle.reset_contact(self.segment_id_ball)
+        self._simulated_robot_handle.deactivate_contact(self.segment_id_ball)
         for ball in self._extra_balls:
             ball.handle.reset_contact(ball.segment_id)
             ball.handle.deactivate_contact(ball.segment_id)
@@ -890,8 +900,8 @@ class HysrOneBall:
         self._parallel_burst.burst(4)
 
         # resetting ball/robot contact information
-        self._simulated_robot_handle.reset_contact(SEGMENT_ID_BALL)
-        self._simulated_robot_handle.activate_contact(SEGMENT_ID_BALL)
+        self._simulated_robot_handle.reset_contact(self.segment_id_ball)
+        self._simulated_robot_handle.activate_contact(self.segment_id_ball)
         for ball in self._extra_balls:
             ball.handle.reset_contact(ball.segment_id)
             ball.handle.activate_contact(ball.segment_id)
@@ -1020,7 +1030,7 @@ class HysrOneBall:
 
         # updating the status of all balls
         _update_ball_status(
-            self._simulated_robot_handle, SEGMENT_ID_BALL, self._ball_status
+            self._simulated_robot_handle, self.segment_id_ball, self._ball_status
         )
         for ball in self._extra_balls:
             _update_ball_status(ball.handle, ball.segment_id, ball.ball_status)
@@ -1070,6 +1080,6 @@ class HysrOneBall:
         if self._robot_integrity is not None:
             self._robot_integrity.close()
         self._parallel_burst.stop()
-        shared_memory.clear_shared_memory(SEGMENT_ID_EPISODE_FREQUENCY)
-        shared_memory.clear_shared_memory(SEGMENT_ID_STEP_FREQUENCY)
+        shared_memory.clear_shared_memory(self.segment_id_episode_frequency)
+        shared_memory.clear_shared_memory(self.segment_id_step_frequency)
         pass
