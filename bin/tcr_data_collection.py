@@ -77,6 +77,7 @@ if __name__ == "__main__":
     env = vec_env.envs[0]
     num_ball_trajectories = env.unwrapped._hysr._ball_behavior._trajectory_reader.size()
     print("Starting data collection")
+    avg_reward = 0.0
     for i in trange(start_intervention, args.num_interventions, initial=start_intervention, total=args.num_interventions):
         intervention_trajectory = np.random.normal(
             scale=args.intervention_std, size=(args.max_episode_length, 8)
@@ -112,6 +113,9 @@ if __name__ == "__main__":
             action_trajectories.append(np.stack(actions, axis=0))
             reward_trajectories.append(np.stack(rewards, axis=0))
 
+        num_rec_int = i - start_intervention
+        avg_reward = avg_reward * num_rec_int / (num_rec_int + 1) + np.mean([np.sum(r) for r in reward_trajectories]) / (num_rec_int + 1)
+        print(f"Average reward: {avg_reward}")
         outpath = get_outpath(args.outdir, args.job_id, i)
         with outpath.open("wb") as outfile:
             episode_data = {
