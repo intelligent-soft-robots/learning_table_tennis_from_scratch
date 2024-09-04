@@ -1,6 +1,8 @@
 {
     "real_robot": false,
     "robot_type":"PAMY2",
+    "save_data":false,
+    "save_folder":"/tmp/",
     "o80_pam_time_step":0.002,
     "mujoco_time_step":0.002,
     "algo_time_step":0.01,

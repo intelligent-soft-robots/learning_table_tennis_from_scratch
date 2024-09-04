@@ -19,7 +19,9 @@ def get_extra_balls_set_mujoco_id(
     return "_".join([mujoco_id_prefix, str(setid)])
 
 
-def get_extra_robot_segment_id(setid, segment_id_prefix=SEGMENT_ID_EXTRA_ROBOTS_PREFIX):
+def get_extra_robot_segment_id(
+    setid, segment_id_prefix=SEGMENT_ID_EXTRA_ROBOTS_PREFIX
+):
     return "_".join([segment_id_prefix, str(setid)])
 
 
@@ -57,7 +59,9 @@ def configure_extra_set(setid, hysr_config):
     extra_balls_segment_id = get_extra_balls_segment_id(setid)
     balls = pam_mujoco.MujocoItems(extra_balls_segment_id)
 
-    ball_segment_ids = [get_ball_segment_id(setid, index) for index in range(nb_balls)]
+    ball_segment_ids = [
+        get_ball_segment_id(setid, index) for index in range(nb_balls)
+    ]
 
     for index, ball_segment_id in enumerate(ball_segment_ids):
         ball = pam_mujoco.MujocoItem(
@@ -77,14 +81,23 @@ def configure_extra_set(setid, hysr_config):
         table=table,
         robot1=robot,
         combined=balls,
+        o80_backend_period=hysr_config.mujoco_time_step,
     )
 
-    return handle, mujoco_id, extra_balls_segment_id, robot_segment_id, ball_segment_ids
+    return (
+        handle,
+        mujoco_id,
+        extra_balls_segment_id,
+        robot_segment_id,
+        ball_segment_ids,
+    )
 
 
 def configure_pseudo_real(
     pam_config_file,
     robot_type,
+    save_data,
+    save_folder="/tmp",
     mujoco_id="pseudo-real",
     graphics=True,
     accelerated_time=False,
@@ -105,6 +118,8 @@ def configure_pseudo_real(
         graphics=graphics,
         accelerated_time=accelerated_time,
         burst_mode=burst_mode,
+        save_data=save_data,
+        save_folder=save_folder,
         robot1=robot,
     )
 
@@ -117,6 +132,8 @@ def configure_simulation(hysr_config, mujoco_id="simulation"):
     accelerated_time = True
     burst_mode = True
     graphics = hysr_config.graphics_simulation
+    save_data = hysr_config.save_data
+    save_folder = hysr_config.save_folder
 
     table = pam_mujoco.MujocoTable(
         SEGMENT_ID_TABLE,
@@ -146,11 +163,14 @@ def configure_simulation(hysr_config, mujoco_id="simulation"):
         graphics=graphics,
         accelerated_time=accelerated_time,
         burst_mode=burst_mode,
+        save_data=save_data,
+        save_folder=save_folder,
         table=table,
         robot1=robot,
         balls=(ball,),
         hit_points=(hit_point,),
         goals=(goal,),
+        o80_backend_period=hysr_config.mujoco_time_step,
     )
 
     return handle
