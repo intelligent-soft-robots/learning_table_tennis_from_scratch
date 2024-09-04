@@ -96,6 +96,5 @@ if __name__ == "__main__":
             rewards_int_stds[intervention_std].append(np.sum(rewards))
             dist_target_int_stds[intervention_std].append(env.unwrapped._hysr._ball_status.min_distance_ball_target)
 
-
-    with args.outfile.open("wb") as outfile:
-        pickle.dump({"rewards": rewards_int_stds, "distances_to_target": dist_target_int_stds}, outfile)
+        with args.outfile.open("wb") as outfile:
+            pickle.dump({"rewards": rewards_int_stds, "distances_to_target": dist_target_int_stds}, outfile)
