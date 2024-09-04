@@ -24,9 +24,9 @@ if __name__ == "__main__":
         default=Path(__file__).parents[1] / "example" / "config.json",
     )
     parser.add_argument("--seed", type=int)
-    parser.add_argument("--num-interventions", type=int, default=100)
-    parser.add_argument("--max-intervention-std", type=float, default=0.5)
-    parser.add_argument("--num-episodes-per-intervention", type=int, default=50)
+    parser.add_argument("--num-interventions", type=int, default=50)
+    parser.add_argument("--max-intervention-std", type=float, default=1.0)
+    parser.add_argument("--num-episodes-per-intervention", type=int, default=100)
     parser.add_argument("--max-episode-length", type=int, default=200)
     parser.add_argument(
         "--outfile", type=Path, default=Path(__file__).parents[1] / "out" / "tcr_intervention_scales.pkl"
