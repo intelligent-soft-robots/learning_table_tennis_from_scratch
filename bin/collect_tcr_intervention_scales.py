@@ -1,16 +1,19 @@
 import argparse
 import itertools
 import json
+import logging
 import pickle
 import re
 from pathlib import Path
+import traceback
 
 import numpy as np
 import tqdm
 from stable_baselines3 import PPO
 from stable_baselines3.common.env_util import make_vec_env
 from stable_baselines3.common.utils import set_random_seed
-from tqdm import trange
+
+logger = logging.getLogger(__name__)
 
 from learning_table_tennis_from_scratch.hysr_one_ball_env import HysrOneBallEnv
 from learning_table_tennis_from_scratch.rl_config import RLConfig
@@ -77,24 +80,28 @@ if __name__ == "__main__":
             replace=False,
         )
         for ball_traj_idx in ball_trajectory_indices:
-            intervention_trajectory = np.random.normal(
-                scale=intervention_std, size=(args.max_episode_length, 8)
-            )
+            try:
+                intervention_trajectory = np.random.normal(
+                    scale=intervention_std, size=(args.max_episode_length, 8)
+                )
 
-            env.unwrapped._hysr._ball_behavior.type = (
-                env.unwrapped._hysr._ball_behavior.INDEX
-            )
-            env.unwrapped._hysr._ball_behavior.value = ball_traj_idx
-            obs = env.reset()
-            rewards = []
-            for k in itertools.count():
-                action, _ = agent.predict(obs, deterministic=True)
-                obs, reward, done, _ = env.step(action + intervention_trajectory[k])
-                rewards.append(reward)
-                if done:
-                    break
-            rewards_int_stds[intervention_std].append(np.sum(rewards))
-            dist_target_int_stds[intervention_std].append(env.unwrapped._hysr._ball_status.min_distance_ball_target)
+                env.unwrapped._hysr._ball_behavior.type = (
+                    env.unwrapped._hysr._ball_behavior.INDEX
+                )
+                env.unwrapped._hysr._ball_behavior.value = ball_traj_idx
+                obs = env.reset()
+                rewards = []
+                for k in itertools.count():
+                    action, _ = agent.predict(obs, deterministic=True)
+                    obs, reward, done, _ = env.step(action + intervention_trajectory[k])
+                    rewards.append(reward)
+                    if done:
+                        break
+                rewards_int_stds[intervention_std].append(np.sum(rewards))
+                dist_target_int_stds[intervention_std].append(env.unwrapped._hysr._ball_status.min_distance_ball_target)
+            except Exception:
+                print(f"Encountered exception for intervention std: {intervention_std}, "
+                      f"ball trajectory index: {ball_traj_idx}: \n{traceback.format_exc()}")
 
         with args.outfile.open("wb") as outfile:
             pickle.dump({"rewards": rewards_int_stds, "distances_to_target": dist_target_int_stds}, outfile)
