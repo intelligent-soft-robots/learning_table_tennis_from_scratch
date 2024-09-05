@@ -396,9 +396,11 @@ class HysrOneBallEnv(gym.Env):
                 self._logger.record("max_ball_velocity", self._hysr._ball_status.max_ball_velocity)
                 self._logger.dump()
 
-        return observation, reward, episode_over, {}
+        return observation, reward, episode_over, False, {}
 
-    def reset(self):
+    def reset(self, *, seed=None, options=None):
+        np.random.seed(seed)
+
         self.init_episode()
         observation = self._hysr.reset()
         observation = self._convert_observation(observation)
@@ -406,7 +408,7 @@ class HysrOneBallEnv(gym.Env):
             self._frequency_manager = None
         self.print_ball_hit = False
         self.print_ball_below_racket = False
-        return observation
+        return observation, {}
 
     def dump_data(self, data_buffer):
         filename = "/tmp/ep_" + time.strftime("%Y%m%d-%H%M%S")
