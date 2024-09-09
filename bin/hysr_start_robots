@@ -111,8 +111,17 @@ if [ "$xterms" = "null" ]; then
     exit 1
 fi
 
-# building the command
+# checking if a mujoco simulation for a pseudo-real
+# robot should be started or not
+real_robot=$(jq -r .real_robot ${hysr_config})
+if [ "$real_robot" = false ]; then
+    mujoco_ids=( "pseudo-real" "simulation" )
+else
+    mujoco_ids=( "simulation" )
+fi
 
+
+# building the command
 
 if [ "$xterms" = true ]; then
     # all mujoco instances started in a
@@ -123,9 +132,6 @@ else
     # (mixed output)
     launch_pam_mujoco="launch_pam_mujoco"
 fi
-
-# pseudo-real and simulation used in any case
-mujoco_ids=( "pseudo-real" "simulation" )
 
 # adding extra balls (first set only) 
 if [ "$extra_balls" = true ]; then

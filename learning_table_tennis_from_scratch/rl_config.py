@@ -63,6 +63,7 @@ class RLConfig:
     # Additional parameters
     _additional_params = (
         "num_timesteps",  # 'total_timesteps' passed to RL.learn()
+        "load_path",  # If set the model is saved to the given path.
         "save_path",  # If set the model is saved to the given path.
         "save_and_load_buffer", #If set true, the buffer is saved/loaded together with the model.
         "delete_buffer_file_after_loading", #If set true, the buffer file is deleted after loading it.

@@ -27,7 +27,6 @@ class RobotIntegrity:
             self._file = None
 
     def set(self, current_position: list) -> bool:
-
         """
         At the first call, set current_position as the reference position,
         and returns False.
@@ -83,7 +82,6 @@ class RobotIntegrityException(Exception):
     """
 
     def __init__(self, robot_integrity: RobotIntegrity, error_position: list):
-
         self._instance = robot_integrity
         self._position = error_position
 

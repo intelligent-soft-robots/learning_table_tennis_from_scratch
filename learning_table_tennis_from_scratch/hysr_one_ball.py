@@ -1,10 +1,16 @@
 import math
-import pathlib
-import json
+import dataclasses
+import logging
 import os
+import pathlib
 import site
 import sys
 import time
+import typing as t
+
+import omegaconf as oc
+import variconf
+from scipy.spatial.transform import Rotation
 import numpy as np
 import math
 import random
@@ -13,6 +19,7 @@ import o80
 import o80_pam
 import pam_interface
 import pam_mujoco
+import pam_vicon
 import context
 import frequency_monitoring
 import shared_memory
@@ -40,119 +47,150 @@ def _to_robot_type(robot_type: str) -> pam_mujoco.RobotType:
         ).format(robot_type)
         raise ValueError(error)
 
-def velocity_norm(velocity):
-    return math.sqrt(sum([v ** 2 for v in velocity]))
 
-def distance(p1, p2):
-    return math.sqrt(sum([(a - b) ** 2 for a, b in zip(p1, p2)]))
+@dataclasses.dataclass
+class Boundaries3d:
+    """Represents min/max boundaries in a 3-dimensional space."""
 
-def min_distance(traj1, traj2):
-    return min([distance(p1, p2) for p1, p2 in zip(traj1, traj2)])
-
-def sample_point_circle(center, radius):
-    x = 1
-    y = 1
-    while x**2 + y**2>1:
-        x = random.random() * 2 - 1
-        y = random.random() * 2 - 1
-    return  [center[0] + radius * x,
-        center[1] + radius * y,
-        center[2]]
+    min: t.Tuple[float, float, float]
+    max: t.Tuple[float, float, float]
 
 
+@dataclasses.dataclass
 class HysrOneBallConfig:
+    """Configuration for HysrOneBall."""
 
-    __slots__ = (
-        "real_robot",
-        "robot_type",
-        "o80_pam_time_step",
-        "mujoco_time_step",
-        "algo_time_step",
-        "pam_config_file",
-        "robot_position",
-        "robot_orientation",
-        "table_position",
-        "table_orientation",
-        "target_position",
-        "target_position_sampling_radius",
-        "reference_posture",
-        "starting_pressures",
-        "world_boundaries",
-        "pressure_change_range",
-        "action_in_state",
-        "action_repeat_counter",
-        "delta_p",
-        "delta_p_p0_is_action",
-        "delta_p_p0_value",
-        "delta_u_init",
-        "pd_control",
-        "pd_control_T",
-        "pd_control_K_p",
-        "pd_control_K_d",
-        "trajectory",
-        "accelerated_time",
-        "graphics_pseudo_real",
-        "graphics_simulation",
-        "graphics_extra_balls",
-        "instant_reset",
-        "nb_steps_per_episode",
-        "extra_balls_sets",
-        "extra_balls_per_set",
-        "trajectory_group",
-        "frequency_monitoring_step",
-        "frequency_monitoring_episode",
-        "robot_integrity_check",
-        "robot_integrity_threshold",
-    )
+    # NOTE: Unfortunately, OmegaConf is a bit limited regarding the types.  It only
+    # supports primitive types, enums and a few basic containers.  Nesting of containers
+    # (e.g. list of tuples), unions or custom types are not supported.  For these cases
+    # Any is used, which basically disables type checking for the corresponding
+    # parameters.
 
-    def __init__(self):
-        for s in self.__slots__:
-            setattr(self, s, None)
+    # oc.MISSING indicates that the value is mandatory (i.e. must be provided by the
+    # user).
 
-    def get(self):
-        r = {s: getattr(self, s) for s in self.__slots__}
-        return r
+    real_robot: bool = oc.MISSING
+    robot_type: pam_mujoco.RobotType = oc.MISSING
+    o80_pam_time_step: float = oc.MISSING
+    mujoco_time_step: float = oc.MISSING
+    algo_time_step: float = oc.MISSING
+    pam_config_file: pathlib.Path = oc.MISSING
+    robot_position: t.List[float] = oc.MISSING
+    robot_orientation: t.Any = oc.MISSING  # Rotation
+    table_position: t.List[float] = oc.MISSING
+    table_orientation: t.Any = oc.MISSING  # Rotation
+    target_position: t.List[float] = oc.MISSING
+    reference_posture: t.List[t.Any] = oc.MISSING  # t.List[t.Tuple[float, float]]
+    starting_pressures: t.List[t.Any] = oc.MISSING  # t.List[t.Tuple[float, float]]
+    world_boundaries: Boundaries3d = oc.MISSING
+    pressure_change_range: int = oc.MISSING
+    trajectory: int = oc.MISSING
+    accelerated_time: bool = oc.MISSING
+    graphics_pseudo_real: bool = False
+    graphics_simulation: bool = False
+    graphics_extra_balls: bool = False
+    instant_reset: bool = oc.MISSING
+    nb_steps_per_episode: int = oc.MISSING
+    extra_balls_sets: int = oc.MISSING
+    extra_balls_per_set: int = oc.MISSING
+    trajectory_group: str = oc.MISSING
+    frequency_monitoring_step: bool = oc.MISSING
+    frequency_monitoring_episode: bool = oc.MISSING
+    robot_integrity_check: bool = oc.MISSING
+    robot_integrity_threshold: float = oc.MISSING
+    action_in_state: bool = oc.MISSING
+    action_repeat_counter: int = oc.MISSING
 
-    @classmethod
-    def from_json(cls, jsonpath):
-        if not os.path.isfile(jsonpath):
-            raise FileNotFoundError(
-                "failed to find hysr configuration file: {}".format(jsonpath)
-            )
-        try:
-            with open(jsonpath) as f:
-                conf = json.load(f)
-        except Exception as e:
-            raise ValueError(
-                "failed to parse reward json configuration file {}: {}".format(
-                    jsonpath, e
-                )
-            )
-        instance = cls()
-        for s in cls.__slots__:
-            try:
-                setattr(instance, s, conf[s])
-            except Exception:
-                raise ValueError(
-                    "failed to find the attribute {} " "in {}".format(s, jsonpath)
-                )
-        # robot type given as string in json config, but
-        # the rest of the code will expect a pam_mujoco.RobotType
-        instance.robot_type = _to_robot_type(instance.robot_type)
+    use_vicon: bool = False
+    """If true, get robot and table pose from the Vicon system.
 
-        # convert paths to Path objects and expand '~'
-        instance.pam_config_file = pathlib.Path(instance.pam_config_file).expanduser()
+    This requires a pam_vicon back end to be running, which provides the Vicon data.
+    The segment id used for this can be set via :attr:`vicon_segment_id`.
 
-        return instance
+    If enabled, the values of :attr:`robot_position`, :attr:`robot_orientation`,
+    :attr:`table_position` and :attr:`table_orientation` are overwritten with the data
+    provided by the Vicon system.
+    """
+
+    vicon_segment_id: str = "vicon"
+    """Segment ID used to access Vicon data (only used if use_vicon=True)."""
+
+    graphics: bool = oc.MISSING
+    xterms: bool = oc.MISSING
+
+    # implement __{get,set}item__ to add dictionary-like access
+    def __getitem__(self, key: str) -> t.Any:
+        return getattr(self, key)
+
+    def __setitem__(self, key: str, value: t.Any) -> None:
+        setattr(self, key, value)
 
     @staticmethod
-    def default_path():
+    def from_json(jsonpath: t.Union[str, os.PathLike]) -> t.Any:
+        """Construct config from JSON file."""
+        wconf = variconf.WConf(HysrOneBallConfig)
+        wconf.load_file(jsonpath)
+
+        # Convert the omegaconf DictConfig to a plain HysrOneBallConfig to disable the
+        # automatic type checking.  This is needed because otherwise it is not possible
+        # to overwrite fields with non-primitive types (even if they are annotated as
+        # Any), for example when converting orientation quaternions to Rotation
+        # instances.
+        cfg = t.cast(HysrOneBallConfig, oc.OmegaConf.to_object(wconf.cfg))
+
+        # expand '~'
+        cfg.pam_config_file = cfg.pam_config_file.expanduser()
+
+        if cfg.use_vicon:
+            try:
+                # get Vicon data via o80 (requires back end to be running in separate
+                # process)
+                vicon = pam_vicon.PamVicon(cfg.vicon_segment_id)
+                vicon.update()
+                robot_pose = vicon.get_robot_pose()
+                table_pose = vicon.get_table_pose(yaw_only=True)
+                logging.info("Get robot pose from Vicon: %s", robot_pose)
+                logging.info("Get table pose from Vicon: %s", table_pose)
+            except Exception as e:
+                msg = f"Failed to get robot/table pose from Vicon: {e}"
+                raise RuntimeError(msg) from e
+
+            cfg.robot_position = robot_pose.translation
+            cfg.robot_orientation = robot_pose.rotation
+            cfg.table_position = table_pose.translation
+            cfg.table_orientation = table_pose.rotation
+
+        # convert orientation to Rotation instance
+        orientation_fields = ["robot_orientation", "table_orientation"]
+        for field in orientation_fields:
+            try:
+                value = cfg[field]
+                if not isinstance(value, Rotation):
+                    cfg[field] = Rotation.from_quat(value)
+            except ValueError as e:
+                raise ValueError(
+                    "Unable to parse %s from file %s.  Expect quaternion [x, y, z, w]."
+                    "  Error is '%s'" % (field, jsonpath, e)
+                ) from e
+
+        logging.debug("Load config from file '%s':\n %s", jsonpath, cfg)
+
+        return cfg
+
+    @staticmethod
+    def default_path() -> str:
+        """Get path to default config file.
+
+        Raises:
+            FileNotFoundError: if no default config file is found.
+        """
         global_install = os.path.join(
             sys.prefix,
             "local",
             "learning_table_tennis_from_scratch_config",
             "hysr_one_ball_default.json",
         )
+        assert site.USER_BASE is not None
         local_install = os.path.join(
             site.USER_BASE,
             "learning_table_tennis_from_scratch_config",
@@ -163,6 +201,8 @@ class HysrOneBallConfig:
             return local_install
         if os.path.isfile(global_install):
             return global_install
+
+        raise FileNotFoundError("No default config file found.")
 
 
 class _BallBehavior:
@@ -185,7 +225,6 @@ class _BallBehavior:
         cls._trajectory_reader = context.BallTrajectories(group)
 
     def __init__(self, line=False, index=False, random=False):
-
         if not hasattr(self.__class__, "_trajectory_reader"):
             raise UnboundLocalError(
                 "_BallBehavior: the classmethod read_trajectories(group:str) "
@@ -230,7 +269,6 @@ class _BallBehavior:
 
 
 class _ExtraBall:
-
     # see pam_demos/balls
     # for usage of handles and frontends
     # setid : handle
@@ -261,7 +299,6 @@ class _ExtraBall:
 
 
 def _get_extra_balls(setid, hysr_config):
-
     values = configure_mujoco.configure_extra_set(setid, hysr_config)
 
     handle = values[0]
@@ -326,7 +363,6 @@ class _Observation:
 
 class HysrOneBall:
     def __init__(self, hysr_config, reward_function):
-
         self._hysr_config = hysr_config
 
         # we will track the episode number
@@ -510,11 +546,9 @@ class HysrOneBall:
             hysr_config.extra_balls_sets is not None
             and hysr_config.extra_balls_sets > 0
         ):
-
             self._extra_balls = []
 
             for setid in range(hysr_config.extra_balls_sets):
-
                 # balls: list of instances of _ExtraBalls (defined in this file)
                 # mirroring : for sending mirroring command to the robot
                 #             of the set (joint controlled)
@@ -593,7 +627,7 @@ class HysrOneBall:
             joint_positions,
             joint_velocities,
         ) = self._pressure_commands.read()
-        ball_position, ball_velocity = self._ball_communication.get()
+        _, ball_position, ball_velocity = self._ball_communication.get()
         observation = _Observation(
             joint_positions,
             joint_velocities,
@@ -710,7 +744,6 @@ class HysrOneBall:
         self._move_to_position(self._hysr_config.reference_posture)
 
     def _do_instant_reset(self):
-
         # "instant": reset all mujoco instances
         # to their starting state. Not applicable
         # to real robot
@@ -780,11 +813,12 @@ class HysrOneBall:
 
         def control():
 
-            # configuration for real time
-            if not self._accelerated_time:
-                frequency_manager = o80.FrequencyManager(1.0 / TIME_STEP)
-            
-            # starting position
+        # configuration for real time
+        if not self._accelerated_time:
+            frequency_manager = o80.FrequencyManager(1.0 / TIME_STEP)
+
+        # applying the controller twice yields better results
+        for _ in range(2):
             _, _, q_current, _ = self._pressure_commands.read()
 
             controller = position_controller_factory.get(q_current,target_position)
@@ -844,7 +878,6 @@ class HysrOneBall:
                 break
 
     def reset(self):
-
         # what happens during reset does not correspond
         # to any episode (-1 means: no active episode)
         self._share_episode_number(-1)
@@ -940,29 +973,7 @@ class HysrOneBall:
         self._share_episode_number(self._episode_number)
 
         # returning an observation
-        observation = self._create_observation()
-
-        if self._extra_balls_frontend is not None:
-            nb_balls = self._hysr_config.extra_balls_per_set
-
-            observation_extra = self._extra_balls_frontend.latest()
-            states = observation_extra.get_observed_states()
-            extra_ball_positions = [states.get(index).get_position() for index in range(nb_balls)]
-            extra_ball_velocities = [states.get(index).get_velocity() for index in range(nb_balls)]
-            extra_observations = [ _Observation(
-                                observation.joint_positions,
-                                observation.joint_velocities,
-                                observation.pressures,
-                                extra_ball_positions[index],
-                                extra_ball_velocities[index],)
-                                for index in range(nb_balls)]
-
-            #returning with extra transitions
-            return observation, extra_observations
-        
-        return observation, []
-
-
+        return self._create_observation()
 
     def _episode_over(self):
 
@@ -992,12 +1003,11 @@ class HysrOneBall:
 
     def get_ball_position(self):
         # returning current ball position
-        ball_position, _ = self._ball_communication.get()
+        _, ball_position, _ = self._ball_communication.get()
         return ball_position
 
     # action assumed to be np.array(ago1,antago1,ago2,antago2,...)
     def step(self, action):
-
         # reading current real (or pseudo real) robot state
         (
             pressures_ago,
@@ -1007,7 +1017,7 @@ class HysrOneBall:
         ) = self._pressure_commands.read()
 
         # getting information about simulated ball
-        ball_position, ball_velocity = self._ball_communication.get()
+        _, ball_position, ball_velocity = self._ball_communication.get()
 
         # getting information about extra simulated balls
         if self._extra_balls_frontend is not None:

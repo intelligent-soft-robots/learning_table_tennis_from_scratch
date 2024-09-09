@@ -1,6 +1,7 @@
 *~
 __pycache__
 mjkey.txt
+MUJOCO_LOG.TXT
 run
 build
 learning_table_tennis_from_scratch.egg-info

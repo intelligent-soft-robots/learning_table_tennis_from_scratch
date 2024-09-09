@@ -62,7 +62,6 @@ class HysrTest(unittest.TestCase):
             self.assertTrue(r == sorted_r)
 
     def test_ball_status_min_z_max_y(self):
-
         ball_status = context.BallStatus([0, 0, 0])
         ci = _ContactInfo()
 
@@ -73,7 +72,6 @@ class HysrTest(unittest.TestCase):
         self.assertTrue(ball_status.max_y == +1)
 
     def test_ball_status_min_position_ball_target(self):
-
         ball_status = context.BallStatus([0, 0, 0])
         ci = _ContactInfo()
         ci.contact_occured = True
@@ -87,7 +85,6 @@ class HysrTest(unittest.TestCase):
         )
 
     def test_ball_status_min_distance_ball_target(self):
-
         ball_status = context.BallStatus([0, 0, 0])
         ci = _ContactInfo()
         ci.contact_occured = True
@@ -103,7 +100,6 @@ class HysrTest(unittest.TestCase):
         self.assertTrue(d2 == d3)
 
     def test_ball_status_contact_occured(self):
-
         ball_status = context.BallStatus([0, 0, 0])
         ci = _ContactInfo()
         ci.contact_occured = True
@@ -112,7 +108,6 @@ class HysrTest(unittest.TestCase):
         self.assertTrue(d1 is None)
 
     def test_action_formatting(self):
-
         p_in = [1, 2, 1, 3, 1, 4]
         p_out = [(1, 2), (1, 3), (1, 4)]
         p = hysr_one_ball._convert_pressures_in(p_in)

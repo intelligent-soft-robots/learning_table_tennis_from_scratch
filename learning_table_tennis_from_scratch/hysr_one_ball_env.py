@@ -16,7 +16,6 @@ def sat(x,lmin,lmax):
         return y
 
 class _ObservationSpace:
-
     # the model does not support gym Dict or Tuple spaces
     # which is very inconvenient. This class implements
     # something similar to a Dict space, but which can
@@ -79,7 +78,6 @@ class HysrOneBallEnv(gym.Env):
         log_episodes=False,
         logger=None,
     ):
-
         super().__init__()
 
         self._log_episodes = log_episodes
@@ -136,8 +134,8 @@ class HysrOneBallEnv(gym.Env):
 
         self._obs_boxes.add_box(
             "ball_position",
-            min(hysr_one_ball_config.world_boundaries["min"]),
-            max(hysr_one_ball_config.world_boundaries["max"]),
+            min(hysr_one_ball_config.world_boundaries.min),
+            max(hysr_one_ball_config.world_boundaries.max),
             3,
         )
         self._obs_boxes.add_box("ball_velocity", -10.0, +10.0, 3)
