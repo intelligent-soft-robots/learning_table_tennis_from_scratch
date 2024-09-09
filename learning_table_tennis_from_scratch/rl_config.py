@@ -67,10 +67,8 @@ class RLConfig:
         "save_and_load_buffer", #If set true, the buffer is saved/loaded together with the model.
         "delete_buffer_file_after_loading", #If set true, the buffer file is deleted after loading it.
         "load_path", #If set a pretrained model is loaded from the given path.
-        "policy_network", #E.g. MLP or CNN
         "num_layers",  # Number of layers in the network
         "num_hidden",  # Size of each layer (all layers have same size)
-        "n_critics", # Number of critics
         "log_path",  # Destination for checkpoints and log files
     )
 

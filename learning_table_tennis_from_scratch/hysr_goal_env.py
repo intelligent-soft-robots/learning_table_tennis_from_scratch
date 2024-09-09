@@ -9,12 +9,13 @@ import gym_robotics
 import numpy as np
 import o80
 import pam_interface
+import random
 
 from .hysr_one_ball import HysrOneBall, HysrOneBallConfig
 from .rewards import JsonReward
 
 
-def distance(p1, p2):
+def _distance(p1, p2):
     return math.sqrt(sum([(a - b) ** 2 for a, b in zip(p1, p2)]))
 
 class _ObservationSpace:
@@ -99,6 +100,8 @@ class HysrGoalEnv(gym_robotics.GoalEnv):
         self._algo_time_step = hysr_one_ball_config.algo_time_step
         self._pressure_change_range = hysr_one_ball_config.pressure_change_range
         self._accelerated_time = hysr_one_ball_config.accelerated_time
+        self._action_in_state = hysr_one_ball_config.action_in_state
+        self._action_repeat_counter = hysr_one_ball_config.action_repeat_counter
 
         self._hysr = HysrOneBall(hysr_one_ball_config, reward_function)
 
@@ -109,6 +112,9 @@ class HysrGoalEnv(gym_robotics.GoalEnv):
         self._obs_boxes = _ObservationSpace()
         self._goal_boxes = _ObservationSpace()
 
+        if self._action_in_state:
+            self._obs_boxes.add_box("action_copy", -1, +1, self._nb_dofs * 2)
+
         self._obs_boxes.add_box("robot_position", -math.pi, +math.pi, self._nb_dofs)
         self._obs_boxes.add_box("robot_velocity", 0.0, 10.0, self._nb_dofs)
         self._obs_boxes.add_box(
@@ -118,21 +124,30 @@ class HysrGoalEnv(gym_robotics.GoalEnv):
             self._nb_dofs * 2,
         )
 
+        self._obs_boxes.add_box(
+            "ball_position",
+            min(hysr_one_ball_config.world_boundaries.min),
+            max(hysr_one_ball_config.world_boundaries.max),
+            3,
+        )
+
         self._obs_boxes.add_box("ball_velocity", -10.0, +10.0, 3)
+
 
         self._goal_boxes.add_box(
             "ball_position",
-            min(hysr_one_ball_config.world_boundaries["min"]),
-            max(hysr_one_ball_config.world_boundaries["max"]),
+            min(hysr_one_ball_config.world_boundaries.min),
+            max(hysr_one_ball_config.world_boundaries.max),
             3,
         )
 
-        self._goal_boxes.add_box(
-            "reward_info",
-            min(hysr_one_ball_config.world_boundaries["min"]),
-            max(hysr_one_ball_config.world_boundaries["max"]),
-            3,
-        )
+        # self._goal_boxes.add_box(
+        #     "reward_info",
+        #     0,
+        #     1,
+        #     2,
+        # )
+
 
         self.observation_space = gym.spaces.Dict(
             {
@@ -156,15 +171,24 @@ class HysrGoalEnv(gym_robotics.GoalEnv):
             self.data_buffer = []
 
         # initialize initial action (for action diffs)
-        self.last_action = np.zeros(self._nb_dofs * 2, dtype=np.float32)
+                # initialize initial action (for action diffs)
+        self.last_action = self.get_init_action()
+
+    def sample_goal(self):
+        return self._hysr.sample_goal()
+
+    def get_init_action(self):
+        init_action = np.zeros(self._nb_dofs * 2, dtype=np.float32)
         starting_pressures = self._hysr.get_starting_pressures()
         for dof in range(self._nb_dofs):
-            self.last_action[2 * dof] = self._reverse_scale_pressure(
+            init_action[2 * dof] = self._reverse_scale_pressure(
                 dof, True, starting_pressures[dof][0]
             )
-            self.last_action[2 * dof + 1] = self._reverse_scale_pressure(
+            init_action[2 * dof + 1] = self._reverse_scale_pressure(
                 dof, False, starting_pressures[dof][1]
             )
+        return init_action
+    
 
     def _bound_pressure(self, dof, ago, value):
         if ago:
@@ -214,7 +238,7 @@ class HysrGoalEnv(gym_robotics.GoalEnv):
                 - self._config.min_pressures_antago[dof]
             )
 
-    def _convert_observation(self, observation):
+    def _convert_observation(self, observation, action_casted):
         self._obs_boxes.set_values_non_norm(
             "robot_position", observation.joint_positions
         )
@@ -224,19 +248,30 @@ class HysrGoalEnv(gym_robotics.GoalEnv):
         self._obs_boxes.set_values_pressures(
             "robot_pressure", observation.pressures, self
         )
+        self._obs_boxes.set_values_non_norm("ball_position", observation.ball_position)
         self._obs_boxes.set_values_non_norm("ball_velocity", observation.ball_velocity)
+        if self._action_in_state:
+            self._obs_boxes.set_values_non_norm("action_copy", action_casted)
+        self.last_observation = self._obs_boxes.get_normalized_values()
 
-        return self._obs_boxes.get_normalized_values()
+        return self.last_observation.copy()
 
     def _convert_achieved_goal(self, observation, done):
         self._goal_boxes.set_values_non_norm(
             "ball_position", observation.ball_position
         )
-        min_distance_ball_target = min(self._hysr._ball_status.min_distance_ball_target, 4.0)
-        min_distance_ball_racket = min(self._hysr._ball_status.min_distance_ball_racket, 4.0)
-        self._goal_boxes.set_values_non_norm(
-            "reward_info", [min_distance_ball_target, min_distance_ball_racket, done*1.0]
-        )
+        # if self._hysr._ball_status.min_distance_ball_target:
+        #     min_distance_ball_target = min(self._hysr._ball_status.min_distance_ball_target, 4.0)
+        # else:
+        #     min_distance_ball_target = 4.0
+
+        # if self._hysr._ball_status.min_distance_ball_racket:
+        #     min_distance_ball_racket = min(self._hysr._ball_status.min_distance_ball_racket, 4.0)
+        # else:
+        #     min_distance_ball_racket = 0.0
+        # self._goal_boxes.set_values_non_norm(
+        #     "reward_info", [min_distance_ball_racket, done*1.0])
+        
         return self._goal_boxes.get_normalized_values()
 
     
@@ -245,23 +280,21 @@ class HysrGoalEnv(gym_robotics.GoalEnv):
         self._goal_boxes.set_values_non_norm(
             "ball_position", self._hysr._ball_status.target_position
         )
-        min_distance_ball_target = 0
-        min_distance_ball_racket = 0
-        self._goal_boxes.set_values_non_norm(
-            "reward_info", [min_distance_ball_target, min_distance_ball_racket, 1.0]
-        )
+        # self._goal_boxes.set_values_non_norm(
+        #     "reward_info", [0.0, 1.0]
+        # )
         return self._goal_boxes.get_normalized_values()
 
     
 
-    def _get_obs(self, observation, done) -> Dict[str, Union[int, np.ndarray]]:
+    def _get_obs(self, observation, action_casted, done) -> Dict[str, Union[int, np.ndarray]]:
         """
         Helper to create the observation.
         :return: The current observation.
         """
         return OrderedDict(
             [
-                ("observation", self._convert_observation(observation)),
+                ("observation", self._convert_observation(observation, action_casted)),
                 ("achieved_goal", self._convert_achieved_goal(observation, done)),
                 ("desired_goal", self._convert_desired_goal()),
             ]
@@ -273,30 +306,52 @@ class HysrGoalEnv(gym_robotics.GoalEnv):
             rewards = [0] * len(achieved_goal)
             idx = 0
             for achieved_goal, desired_goal in zip(achieved_goal, desired_goal):
-                rewards[idx] = self.compute_single_reward(achieved_goal, desired_goal)
+                rewards[idx] = self.compute_single_reward_ball_binary(achieved_goal, desired_goal)
                 idx += 1
             return rewards
         else:
-            reward = self.compute_single_reward(achieved_goal, desired_goal)
+            reward = self.compute_single_reward_ball_binary(achieved_goal, desired_goal)
             return reward
 
-    def compute_single_reward(self, achieved_goal, desired_goal):
-        pos_x, pos_y, pos_z, min_distance_ball_racket, min_distance_ball_target, done = achieved_goal
-        pos_x_des, pos_y_des, pos_z_des, min_distance_ball_racket_des, min_distance_ball_target_des, done_des = desired_goal
+    def compute_single_reward_shaped(self, achieved_goal, desired_goal):
+        pos_x, pos_y, pos_z, min_distance_ball_racket, done = achieved_goal
+        pos_x_des, pos_y_des, pos_z_des, min_distance_ball_racket_des, done_des = desired_goal
         if done:
-            min_distance_ball_racket_rew = distance([min_distance_ball_racket], [min_distance_ball_racket_des])
-            min_distance_ball_target_final_pos = distance((pos_x, pos_y, pos_z), (pos_x_des, pos_y_des, pos_z_des))
-            min_distance_ball_target_rew = distance([min_distance_ball_target_final_pos], [min_distance_ball_racket_des])
-            #NOT implemented
+            min_distance_ball_racket_rew = _distance([min_distance_ball_racket], [min_distance_ball_racket_des])
+            if min_distance_ball_racket_rew<0.01:
+                min_distance_ball_racket_rew = None
+            min_distance_ball_target_final_pos = _distance((pos_x, pos_y, 0.0), (pos_x_des, pos_y_des, 0.0))
+            #!!Smash reward NOT implemented
             max_ball_velocity_rew = 0
             reward = self._hysr._reward_function(
                     min_distance_ball_racket_rew,
-                    min_distance_ball_target_rew,
+                    min_distance_ball_target_final_pos,
                     max_ball_velocity_rew,
                 )
+            if random.random()>0.99:
+                print("dist rack:", min_distance_ball_racket, "dist target:", min_distance_ball_target_final_pos, "final pos:", (pos_x, pos_y, pos_z), "des pos", (pos_x_des, pos_y_des, pos_z_des), "reward:", reward)
         else:
             reward = 0
         return reward
+    
+    def compute_single_reward_ball_binary(self, achieved_goal, desired_goal):
+        pos_x, pos_y, pos_z = achieved_goal
+        pos_x_des, pos_y_des, pos_z_des = desired_goal
+        min_distance_ball_target_final_pos = _distance((pos_x, pos_y, 0.0), (pos_x_des, pos_y_des, 0.0))
+
+        if pos_y>0.0:
+            min_distance_ball_racket = 0
+        else:
+            min_distance_ball_racket = 0.1
+
+        reward = self._hysr._reward_function(
+                    min_distance_ball_racket,
+                    min_distance_ball_target_final_pos,
+                    0,
+                )
+        
+        return reward
+
 
     def step(self, action):
 
@@ -336,7 +391,18 @@ class HysrGoalEnv(gym_robotics.GoalEnv):
         action = [int(a) for a in action]
 
         # performing a step
-        observation, reward, episode_over, *extrainfo = self._hysr.step(list(action))
+        for _ in range(self._action_repeat_counter):
+            observation, reward, episode_over = self._hysr.step(list(action))
+            if episode_over:
+                break
+
+        if self._hysr.linear_approx_hitting_point_set:
+            # replace ball position with linear approx hitting point
+            observation.ball_position = self._hysr.linear_approx_hitting_point
+            # print("observation.ball_position", observation.ball_position)
+
+        # formatting observation in a format suitable for gym
+        obs = self._get_obs(observation, action_casted, episode_over)
 
         # imposing frequency to learning agent
         if not self._accelerated_time:
@@ -349,10 +415,9 @@ class HysrGoalEnv(gym_robotics.GoalEnv):
         # logging
         self.n_steps += 1
         if self._log_episodes:
-            observation_log = self._convert_observation(observation)
             self.data_buffer.append(
                 (
-                    observation_log.copy(),
+                    observation.copy(),
                     action_orig,
                     action_casted,
                     action.copy(),
@@ -362,7 +427,7 @@ class HysrGoalEnv(gym_robotics.GoalEnv):
             )
         if episode_over:
             if self._log_episodes:
-                self.dump_data(self.data_buffer)
+                self.dump_data(self.data_buffer)    
             self.n_eps += 1
             if self._logger:
                 self._logger.record("eprew", reward)
@@ -375,15 +440,15 @@ class HysrGoalEnv(gym_robotics.GoalEnv):
                 # self._logger.dump()
 
         # formatting observation in a format suitable for gym goal env
-        obs = self._get_obs(observation, episode_over)
         return obs, reward, episode_over, {}
 
     def reset(self):
+        # print("--- reset goal env ---")
         self.init_episode()
-        observation, *extrainfo = self._hysr.reset()
+        observation = self._hysr.reset()
         if not self._accelerated_time:
             self._frequency_manager = None
-        obs = self._get_obs(observation, False)
+        obs = self._get_obs(observation, self.last_action, False)
         return obs
 
     def dump_data(self, data_buffer):

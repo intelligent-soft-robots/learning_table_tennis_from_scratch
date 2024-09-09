@@ -138,8 +138,8 @@ class HysrManyBallEnv(gym.Env):
 
         self._obs_boxes.add_box(
             "ball_position",
-            min(hysr_one_ball_config.world_boundaries["min"]),
-            max(hysr_one_ball_config.world_boundaries["max"]),
+            min(hysr_one_ball_config.world_boundaries.min),
+            max(hysr_one_ball_config.world_boundaries.max),
             3,
         )
         self._obs_boxes.add_box("ball_velocity", -10.0, +10.0, 3)
