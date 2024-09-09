@@ -79,25 +79,23 @@ def run_stable_baselines(
     else:
         if algorithm in ["ppo", "sac"]:
             model = model_type[algorithm](
-                    rl_config.policy_network,
+                    "MlpPolicy",
                     env,
                     seed=seed,
                     policy_kwargs={
-                        "net_arch": [rl_config.num_hidden] * rl_config.num_layers,
-                        "n_critics": rl_config.n_critics
+                        "net_arch": [rl_config.num_hidden] * rl_config.num_layers
                 },
                     **rl_config.get_rl_params(),
                 )
             continue_training = False
         elif algorithm in ["sac_her"]:
             model = model_type[algorithm](
-                rl_config.policy_network,
+                "MultiInputPolicy",
                 env,
                 replay_buffer_class=HerReplayBuffer,
                 seed=seed,
                 policy_kwargs={
-                    "net_arch": [rl_config.num_hidden] * rl_config.num_layers,
-                    "n_critics": rl_config.n_critics
+                    "net_arch": [rl_config.num_hidden] * rl_config.num_layers
                 },
                 replay_buffer_kwargs=dict(
                     n_sampled_goal = rl_config.n_sampled_goal,
@@ -109,13 +107,12 @@ def run_stable_baselines(
             )
         elif algorithm in ["sac_hsm"]:
             model = model_type[algorithm](
-                rl_config.policy_network,
+                "MultiInputPolicy",
                 env,
                 replay_buffer_class=HerReplayBuffer,
                 seed=seed,
                 policy_kwargs={
-                    "net_arch": [rl_config.num_hidden] * rl_config.num_layers,
-                    "n_critics": rl_config.n_critics
+                    "net_arch": [rl_config.num_hidden] * rl_config.num_layers
                 },
                 replay_buffer_kwargs=dict(
                     n_sampled_hindsight_states = rl_config.n_sampled_hindsight_states,
@@ -139,13 +136,12 @@ def run_stable_baselines(
             )
         elif algorithm in ["sac_hsm_her"]:
             model = model_type[algorithm](
-                rl_config.policy_network,
+                "MultiInputPolicy",
                 env,
                 replay_buffer_class=HerReplayBuffer,
                 seed=seed,
                 policy_kwargs={
                     "net_arch": [rl_config.num_hidden] * rl_config.num_layers,
-                    "n_critics": rl_config.n_critics
                 },
                 replay_buffer_kwargs=dict(
                     n_sampled_hindsight_states = rl_config.n_sampled_hindsight_states,

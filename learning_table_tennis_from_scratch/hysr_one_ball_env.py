@@ -11,6 +11,12 @@ import pam_interface
 from .hysr_one_ball import HysrOneBall, HysrOneBallConfig
 from .rewards import JsonReward
 
+from sklearn.gaussian_process import GaussianProcessRegressor
+from sklearn.gaussian_process.kernels import Matern
+from scipy.optimize import minimize
+from scipy.stats import norm
+from noise import pnoise1
+
 def sat(x,lmin,lmax):
         y=min(max(x, lmin), lmax)
         return y
@@ -96,32 +102,18 @@ class HysrOneBallEnv(gym.Env):
         self._accelerated_time = hysr_one_ball_config.accelerated_time
         self._action_in_state = hysr_one_ball_config.action_in_state
         self._action_repeat_counter = hysr_one_ball_config.action_repeat_counter
-        self._pd_control = hysr_one_ball_config.pd_control
-        self._pd_control_T = hysr_one_ball_config.pd_control_T
-        self._pd_control_K_p = hysr_one_ball_config.pd_control_K_p
-        self._pd_control_K_d = hysr_one_ball_config.pd_control_K_d
 
         self._hysr = HysrOneBall(hysr_one_ball_config, reward_function)
 
-        self.delta_p = hysr_one_ball_config.delta_p
-        self.delta_p_p0_is_action = hysr_one_ball_config.delta_p_p0_is_action
-        self.delta_p_p0_value = hysr_one_ball_config.delta_p_p0_value
-        self.delta_u_init = hysr_one_ball_config.delta_u_init
 
         self._obs_boxes = _ObservationSpace()
 
-        if (self.delta_p and not self.delta_p_p0_is_action) or self._pd_control:
-            self.action_space = gym.spaces.Box(
-                low=-1.0, high=+1.0, shape=(self._nb_dofs,), dtype=np.float32
-            )
-            if self._action_in_state:
-                self._obs_boxes.add_box("action_copy", -1, +1, self._nb_dofs)
-        else:
-            self.action_space = gym.spaces.Box(
-                low=-1.0, high=+1.0, shape=(self._nb_dofs * 2,), dtype=np.float32
-            )
-            if self._action_in_state:
-                self._obs_boxes.add_box("action_copy", -1, +1, self._nb_dofs * 2)
+        
+        self.action_space = gym.spaces.Box(
+            low=-1.0, high=+1.0, shape=(self._nb_dofs * 2,), dtype=np.float32
+        )
+        if self._action_in_state:
+            self._obs_boxes.add_box("action_copy", -1, +1, self._nb_dofs * 2)
 
         self._obs_boxes.add_box("robot_position", -math.pi, +math.pi, self._nb_dofs)
         self._obs_boxes.add_box("robot_velocity", 0.0, 10.0, self._nb_dofs)
@@ -149,8 +141,15 @@ class HysrOneBallEnv(gym.Env):
                 1.0 / hysr_one_ball_config.algo_time_step
             )
 
+        self.opt_data = []
+        self.last_sample_plus_noise = 0
+
         self.n_eps = 0
         self.init_episode()
+        self.noise_facor = 0.02
+
+        self.motion_gen = self.MotionGenerator()
+
 
     def init_episode(self):
         self.n_steps = 0
@@ -158,26 +157,17 @@ class HysrOneBallEnv(gym.Env):
             self.data_buffer = []
         # initialize initial action (for action diffs)
         self.last_action = self.get_init_action()
-        if self._pd_control:
-            self.q_target_list = []
 
     def get_init_action(self):
         init_action = np.zeros(self._nb_dofs * 2, dtype=np.float32)
         starting_pressures = self._hysr.get_starting_pressures()
         for dof in range(self._nb_dofs):
-            if self.delta_p:
-                if self.delta_p_p0_is_action:
-                    init_action[2 * dof] = self.delta_u_init[dof] #+ self.n_eps/1000 * (dof == 1)
-                else:
-                    init_action[dof] = self.delta_u_init[dof] #+ self.n_eps/1000 * (dof == 1)
-
-            else:
-                init_action[2 * dof] = self._reverse_scale_pressure(
-                    dof, True, starting_pressures[dof][0]
-                )
-                init_action[2 * dof + 1] = self._reverse_scale_pressure(
-                    dof, False, starting_pressures[dof][1]
-                )
+            init_action[2 * dof] = self._reverse_scale_pressure(
+                dof, True, starting_pressures[dof][0]
+            )
+            init_action[2 * dof + 1] = self._reverse_scale_pressure(
+                dof, False, starting_pressures[dof][1]
+            )
         return init_action
         
 
@@ -229,26 +219,6 @@ class HysrOneBallEnv(gym.Env):
                 - self._config.min_pressures_antago[dof]
             )
 
-    def _scale_pressure_delta_p(self, dof, ago, u, p0):
-        incorr = True
-        if ago:
-            pmin = self._config.min_pressures_ago[dof]
-            pmax = self._config.max_pressures_ago[dof]
-        else:
-            pmin = self._config.min_pressures_antago[dof]
-            pmax = self._config.max_pressures_antago[dof]
-        m=pmax-pmin
-        if incorr:
-            ddp=.5-sat(abs(p0-.5),0,.5)
-        else:
-            ddp=0
-        if ago:
-            p=sat(m*(p0+(1-ddp)*sat(u,-1,1))+pmin,pmin,pmax)
-        else:
-            p=sat(m*(p0-(1-ddp)*sat(u,-1,1))+pmin,pmin,pmax)
-        return p
-
-
     def _convert_observation(self, observation, action_casted):
         self._obs_boxes.set_values_non_norm(
             "robot_position", observation.joint_positions
@@ -266,14 +236,199 @@ class HysrOneBallEnv(gym.Env):
         self.last_observation = self._obs_boxes.get_normalized_values()
         return self.last_observation.copy()
 
+
+    def get_action_motion1(self):
+        # motion 1: fixed pressure for dof 2,3,4 and changing pressure for dof 1
+
+        if self.n_steps == 0:
+            self.n_steps_motion_change = np.random.randint(15, 50)
+            # self.n_steps_motion_change = int(self.n_steps_motion_change)
+
+            self.action_dof_1 = np.random.uniform(0.05, 0.075)
+
+            self.action_dof3 = np.random.uniform(-0.2, 0.2)
+
+            self.action_dof4 = np.random.uniform(-0.2, 0.2)
+            # self.action_dof_1 = float(self.action_dof_1)
+
+        if self.n_steps < self.n_steps_motion_change:
+            action = np.array([0.2, -0.2, -0.05, 0.05, self.action_dof3, -self.action_dof3,  self.action_dof4,  -self.action_dof4])
+        else:
+            action = np.array([-self.action_dof_1 , self.action_dof_1 , 0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
+
+        print(".", end="")
+
+        # time.sleep(0.02)
+
+        return action
+
+
+    def get_action_motion2(self):
+
+        if self.n_steps == 0:
+            self.n_steps_motion_change = np.random.randint(40, 80)
+
+            self.n_steps_hit_motion_steps = np.random.randint(10, 30)
+
+            self.action_dof_1 = np.random.uniform(0.04, 0.10)
+
+            self.action_dof3 = np.random.uniform(-0.3, 0.3)
+
+            self.action_dof4 = np.random.uniform(-0.2, 0.2)
+
+        change_rate = 1/self.n_steps_motion_change
+        w1 = change_rate * self.n_steps
+
+        w2 = 1 / self.n_steps_motion_change * np.clip(self.n_steps - self.n_steps_motion_change, 0, self.n_steps_hit_motion_steps)
+        
+        action = \
+            np.clip(1-w1, 0, 1) * 2 * np.array([0.2, -0.2, -0.07, 0.07, self.action_dof3, -self.action_dof3,  self.action_dof4,  -self.action_dof4]) + \
+            np.clip(w1-w2, 0, 1) * 2 * np.array([-self.action_dof_1 , self.action_dof_1 , 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]) + \
+            np.clip(w2-w1, 0, 1) * 0.5 * np.array([self.action_dof_1 , -self.action_dof_1 , 0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
+
+        #action = action + self.motion_gen.get_noise()
+
+        # print(".", end="")
+
+        # time.sleep(0.02)
+
+        return action
+    
+    # def acquisition_function(params, gp=gp, xi=0.01, kappa=0.01):
+    #     params = np.array(params).reshape(1, -1)
+    #     mean, std = gp.predict(params, return_std=True)
+        
+    #     current_best = np.max(y)
+
+    #     # Calculate Expected Improvement
+    #     ei = mean - current_best - xi
+    #     ei[ei < 0] = 0
+    #     ei = ei * norm.cdf((mean - current_best - xi) / (std + 1e-9))
+
+    #     # Calculate Entropy (using standard deviation as a proxy for uncertainty)
+    #     entropy = std
+
+    #     # Combine EI and entropy
+    #     combined_acquisition = ei + kappa * entropy # Expected Improvement + Entropy
+
+    #     return combined_acquisition
+
+
+    def perform_bayesian_optimization(self):
+        # Reshape and prepare data for Gaussian Process
+        
+        # first two entries are X, third entry is y
+        X = np.array([np.concatenate([Amp, phi]) for Amp, phi, _ in self.opt_data])
+        y = np.array([rew for _, _, rew in self.opt_data])
+
+        # Define and train Gaussian Process
+        kernel = Matern(nu=2.5)
+        gp = GaussianProcessRegressor(kernel=kernel)
+        gp.fit(X, y)
+
+        def acquisition_function(params):
+            params = np.array(params).reshape(1, -1)
+            mean, std = gp.predict(params, return_std=True)
+            return mean + 0.6 * std  # Expected Improvement (std weighted less)
+
+        # Optimize acquisition function
+        result = minimize(lambda params: -acquisition_function(params), 
+                          x0=np.random.rand(16),  # Initial guess, 16 = 8 Amp + 8 phi
+                          bounds=[(-1, 1)] * 16) 
+
+        # Extract optimized Amp and phi
+        optimized_params = result.x
+        Amp_optimized = optimized_params[:8]
+        phi_optimized = optimized_params[8:]
+
+        # print("noise: ", self.noise_facor)
+        # self.noise = np.random.uniform(-self.noise_facor, self.noise_facor, 8)
+
+        # Amp_optimized += self.noise
+        # phi_optimized += self.noise
+
+        return Amp_optimized, phi_optimized
+
+
+    def get_action_motion3(self):
+
+        if self.n_steps == 0:
+            if len(self.opt_data) < 50:
+                self.Amp, self.phi = np.random.uniform(-1, 1, 8), np.random.uniform(-1, 1, 8)
+                self.opt_data.append([self.Amp, self.phi])
+            else:
+                if np.random.random() < 0.5:
+                    self.Amp, self.phi = self.perform_bayesian_optimization()
+                    
+                    self.add_noise = np.zeros(8)
+                    self.opt_data.append([self.Amp, self.phi])
+                    
+                else:
+                    # sample from 5% best data
+                    best_data = sorted(self.opt_data, key=lambda x: x[2], reverse=True)
+                    random_index = np.random.randint(0, int(len(best_data)*0.05))
+                    self.Amp, self.phi = best_data[random_index][0], best_data[random_index][1]
+                    
+                    print("best data: ", best_data[random_index][2], "Amp: ", self.Amp, "phi: ", self.phi)
+                    # self.add_noise = np.random.uniform(-self.noise_facor, self.noise_facor, 8)
+
+                    # if self.last_sample_plus_noise > 0.5:
+                    #     self.noise_facor*=1.2
+                    # else:
+                    #     self.noise_facor/=1.1
+                    #     self.noise_facor = max(self.noise_facor, 0.001)
+
+                    # print("noise: ", self.noise_facor)
+                
+
+        action = np.sin(np.array([self.n_steps * 0.02 + self.phi[i] for i in range(8)])) * self.Amp
+
+        action = action + self.motion_gen.get_noise()
+
+        # if len(self.opt_data) > 100:
+        #     action += self.add_noise
+        
+        # action += self.noise
+
+        return action
+    
+
+        
+    class MotionGenerator:
+        def __init__(self, scale=0.5, octaves=1, persistence=0.5, lacunarity=2.0):
+            self.scale = scale
+            self.octaves = octaves
+            self.persistence = persistence
+            self.lacunarity = lacunarity
+            self.steps = np.random.rand(8) * 10000  # Independent step for each DOF
+
+        def get_noise(self):
+            action = np.zeros(8)
+            for i in range(8):
+                self.steps[i] += 1  # Increment step for each DOF independently
+
+                # Generate independent Perlin noise for amplitude and phase
+                amp = pnoise1(self.steps[i] * self.scale, octaves=self.octaves, persistence=self.persistence, lacunarity=self.lacunarity)
+                phi = pnoise1((self.steps[i] + 5000) * self.scale, octaves=self.octaves, persistence=self.persistence, lacunarity=self.lacunarity)
+
+                # Scale amp and phi
+                amp = np.interp(amp, [-1, 1], [-1, 1])
+                phi = np.interp(phi, [-1, 1], [0, 2 * np.pi])  # Scale phi to [0, 2π] for full sine wave cycle
+
+                # Generate action
+                action[i] = np.sin(self.steps[i] * 0.02 + phi) * amp
+            # print("a", action)
+            return action
+    
+
+
+
     def step(self, action):
+
+        action = self.get_action_motion2()
+
         if not self._accelerated_time and self._frequency_manager is None:
             self._frequency_manager = o80.FrequencyManager(1.0 / self._algo_time_step)
-
-        # pad action with zeros in case of delta_p approach to keep dimension of action
-        if self.delta_p and not self.delta_p_p0_is_action:
-            action_orig_delta_p = action
-            action = np.concatenate([action, np.zeros(np.shape(action))])
 
         action_orig = action.copy()
 
@@ -292,40 +447,12 @@ class HysrOneBallEnv(gym.Env):
         self.last_action = action.copy()
         action_casted = action.copy()
 
-        if self._pd_control:
-            q = self.last_observation[0:4]
-            dq = self.last_observation[4:8]
-            q_target_from_action_casted = np.array(action_casted[0:4]) * 2 * np.pi - np.pi
-            self.q_target_list.append(q_target_from_action_casted)
-            if self.n_steps>=self._pd_control_T:
-                q_target = self.q_target_list[self.n_steps-self._pd_control_T]
-            else:
-                q_target = q
-            u = self._pd_control_K_p * (q - q_target) + self._pd_control_K_d * dq
-            u = np.clip(u, -1, 1)
-            action_casted = u
-            action = np.concatenate([np.zeros(np.shape(action)), np.zeros(np.shape(action))])
-
         # put pressure in range as defined in parameters file
-        if not self.delta_p and not self._pd_control:
-            for dof in range(self._nb_dofs):
-                action[2 * dof] = self._scale_pressure(dof, True, action_casted[2 * dof])
-                action[2 * dof + 1] = (
-                    self._scale_pressure(dof, False, action_casted[2 * dof + 1])
-                )
-        else:
-            for dof in range(self._nb_dofs):
-                if self.delta_p_p0_is_action:
-                    p0 = action_casted[2*dof+1]
-                    value = action_casted[2*dof] * 2 - 1
-                else:
-                    p0 = self.delta_p_p0_value[dof]
-                    if self.delta_p:
-                        value = action_casted[dof] * 2 - 1
-                    else:
-                        value = action_casted[dof]
-                action[2 * dof] = self._scale_pressure_delta_p(dof, True, value, p0)
-                action[2 * dof+1] = self._scale_pressure_delta_p(dof, False, value, p0)
+        for dof in range(self._nb_dofs):
+            action[2 * dof] = self._scale_pressure(dof, True, action_casted[2 * dof])
+            action[2 * dof + 1] = (
+                self._scale_pressure(dof, False, action_casted[2 * dof + 1])
+            )
 
         # final target pressure (make sure that it is within bounds)
         for dof in range(self._nb_dofs):
@@ -337,7 +464,7 @@ class HysrOneBallEnv(gym.Env):
 
         # performing a step
         for _ in range(self._action_repeat_counter):
-            observation, reward, episode_over, *extrainfo = self._hysr.step(list(action))
+            observation, reward, episode_over = self._hysr.step(list(action))
             if episode_over:
                 break
 
@@ -350,25 +477,39 @@ class HysrOneBallEnv(gym.Env):
 
         # Ignore steps after hitting the ball
         if not episode_over and not self._hysr._ball_status.min_distance_ball_racket:
-            if self.delta_p and not self.delta_p_p0_is_action:
-                return self.step(action_orig_delta_p)
-            else:
-                return self.step(action_orig)
+            return self.step(action_orig)
 
         # logging
         self.n_steps += 1
         if self._log_episodes:
+            fk = self._hysr._mirrorings[0].get_fk()
+            rob_pos = fk[0]
+            rob_vel = fk[1]
+            racket_pos = fk[2]
+            racket_vel = fk[3]
+            racket_ori = fk[4]
+            timestamp = fk[5]
+            # print("racket pos", racket_pos, "racket vel", racket_vel, "racket ori", racket_ori)
+
             self.data_buffer.append(
                 (
-                    observation.copy(),
+                    self.previous_observation.copy(),
                     action_orig,
                     action_casted,
                     action.copy(),
                     reward,
                     episode_over,
+                    (rob_pos, rob_vel, racket_pos, racket_vel, racket_ori, timestamp),
+                    observation.copy(),
                 )
             )
+
         if episode_over:
+            # if len(self.opt_data[-1]) < 3:
+            #    self.opt_data[-1].append(reward)
+            #else:
+            #    self.last_sample_plus_noise = reward
+            # print("phi", self.phi, "Amp", self.Amp, "rew", reward)
             if self._log_episodes:
                 self.dump_data(self.data_buffer)
             self.n_eps += 1
@@ -382,26 +523,36 @@ class HysrOneBallEnv(gym.Env):
                         self._hysr._reward_function.config.normalization_constant))
                 self._logger.record("max_ball_velocity", self._hysr._ball_status.max_ball_velocity)
                 self._logger.dump()
+            if reward > 0:
+                print("SUCCESS")
+
+        self.previous_observation = observation.copy()
+
         return observation, reward, episode_over, {}
 
     def reset(self):
         self.init_episode()
-        observation, *extrainfo = self._hysr.reset()
+        observation = self._hysr.reset()
         observation = self._convert_observation(observation, self.last_action)
         if not self._accelerated_time:
             self._frequency_manager = None
+
+        self.previous_observation = observation.copy()
         return observation
 
     def dump_data(self, data_buffer):
-        filename = "/tmp/ep_" + time.strftime("%Y%m%d-%H%M%S")
+        filename = "/tmp/ep_m2_peril" + time.strftime("%Y%m%d-%H%M%S")
         dict_data = dict()
         with open(filename, "w") as json_data:
             dict_data["ob"] = [x[0].tolist() for x in data_buffer]
+            dict_data["next_ob"] = [x[7].tolist() for x in data_buffer]
             dict_data["action_orig"] = [x[1].tolist() for x in data_buffer]
             dict_data["action_casted"] = [x[2] for x in data_buffer]
             dict_data["prdes"] = [x[3] for x in data_buffer]
             dict_data["reward"] = [x[4] for x in data_buffer]
             dict_data["episode_over"] = [x[5] for x in data_buffer]
+            dict_data["fk"] = [x[6] for x in data_buffer]
+            dict_data["random_traj_index"] = self._hysr._ball_behavior._random_traj_index
             json.dump(dict_data, json_data)
 
     def close(self):

@@ -1,7 +1,7 @@
 {
-    "environment": "HysrManyBallEnv",
-    "algorithm": "sac_hsm",
+    "environment": "HysrOneBallEnv",
+    "algorithm": "ppo",
     "use_openai_baselines": false,
-    "log_episodes": false,
+    "log_episodes": true,
     "random_seed": null
 }
