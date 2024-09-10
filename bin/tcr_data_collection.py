@@ -16,7 +16,8 @@ from learning_table_tennis_from_scratch.hysr_one_ball_env import HysrOneBallEnv
 from learning_table_tennis_from_scratch.rl_config import RLConfig
 
 def get_outpath(outdir: Path, job_id: str, intervention: int) -> Path:
-    return outdir / f"data_job{job_id}_intervention{intervention}.pkl"
+    job_str = f"job{job_id}" if job_id != "" else ""
+    return outdir / f"data_{job_str}_intervention{intervention}.pkl"
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
