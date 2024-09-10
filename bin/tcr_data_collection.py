@@ -3,6 +3,7 @@ import itertools
 import json
 import pickle
 import re
+import traceback
 from pathlib import Path
 
 import numpy as np
@@ -92,27 +93,33 @@ if __name__ == "__main__":
             size=args.num_episodes_per_intervention,
             replace=False,
         )
-        for ball_traj_idx in ball_trajectory_indices:
-            env.unwrapped._hysr._ball_behavior.type = (
-                env.unwrapped._hysr._ball_behavior.INDEX
-            )
-            env.unwrapped._hysr._ball_behavior.value = ball_traj_idx
-            obs = env.reset()
-            observations = [obs]
-            actions = []
-            rewards = []
-            for k in itertools.count():
-                action, _ = agent.predict(obs, deterministic=True)
-                obs, reward, done, _ = env.step(action + intervention_trajectory[k])
-                observations.append(obs)
-                actions.append(action)
-                rewards.append(reward)
-                if done:
-                    break
-            observation_trajectories.append(np.stack(observations, axis=0))
-            action_trajectories.append(np.stack(actions, axis=0))
-            reward_trajectories.append(np.stack(rewards, axis=0))
-
+        i = 0
+        while i < len(ball_trajectory_indices):
+            ball_traj_idx = ball_trajectory_indices[i]
+            try:
+                env.unwrapped._hysr._ball_behavior.type = (
+                    env.unwrapped._hysr._ball_behavior.INDEX
+                )
+                env.unwrapped._hysr._ball_behavior.value = ball_traj_idx
+                obs = env.reset()
+                observations = [obs]
+                actions = []
+                rewards = []
+                for k in itertools.count():
+                    action, _ = agent.predict(obs, deterministic=True)
+                    obs, reward, done, _ = env.step(action + intervention_trajectory[k])
+                    observations.append(obs)
+                    actions.append(action)
+                    rewards.append(reward)
+                    if done:
+                        break
+                observation_trajectories.append(np.stack(observations, axis=0))
+                action_trajectories.append(np.stack(actions, axis=0))
+                reward_trajectories.append(np.stack(rewards, axis=0))
+                i += 1
+            except:
+                print(f"Encountered exception for ball trajectory index: {ball_traj_idx}: \n{traceback.format_exc()}. "
+                      f"Retrying...")
         num_rec_int = i - start_intervention
         avg_reward = avg_reward * num_rec_int / (num_rec_int + 1) + np.mean([np.sum(r) for r in reward_trajectories]) / (num_rec_int + 1)
         print(f"Average reward: {avg_reward}")
