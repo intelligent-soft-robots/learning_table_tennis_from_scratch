@@ -93,9 +93,9 @@ if __name__ == "__main__":
             size=args.num_episodes_per_intervention,
             replace=False,
         )
-        i = 0
-        while i < len(ball_trajectory_indices):
-            ball_traj_idx = ball_trajectory_indices[i]
+        j = 0
+        while j < len(ball_trajectory_indices):
+            ball_traj_idx = ball_trajectory_indices[j]
             try:
                 env.unwrapped._hysr._ball_behavior.type = (
                     env.unwrapped._hysr._ball_behavior.INDEX
