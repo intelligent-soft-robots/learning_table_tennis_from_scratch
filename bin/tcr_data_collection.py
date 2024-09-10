@@ -16,8 +16,8 @@ from learning_table_tennis_from_scratch.hysr_one_ball_env import HysrOneBallEnv
 from learning_table_tennis_from_scratch.rl_config import RLConfig
 
 def get_outpath(outdir: Path, job_id: str, intervention: int) -> Path:
-    job_str = f"job{job_id}" if job_id != "" else ""
-    return outdir / f"data_{job_str}_intervention{intervention}.pkl"
+    job_str = f"_job{job_id}" if job_id != "" else ""
+    return outdir / f"data{job_str}_intervention{intervention}.pkl"
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -117,7 +117,7 @@ if __name__ == "__main__":
                 observation_trajectories.append(np.stack(observations, axis=0))
                 action_trajectories.append(np.stack(actions, axis=0))
                 reward_trajectories.append(np.stack(rewards, axis=0))
-                i += 1
+                j += 1
             except:
                 print(f"Encountered exception for ball trajectory index: {ball_traj_idx}: \n{traceback.format_exc()}. "
                       f"Retrying...")
