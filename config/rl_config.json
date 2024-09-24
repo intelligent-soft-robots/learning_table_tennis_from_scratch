@@ -1,0 +1,25 @@
+{
+    "gamma": 0.9999,
+    "n_steps": 8192,
+    "ent_coef": 0.001,
+    "learning_rate": 0.001,
+    "learning_rate_schedule": true,
+    "vf_coef": 0.66023,
+    "max_grad_norm": 0.05,
+    "gae_lambda": 0.98438,
+    "batch_size": 1024,
+    "n_epochs": 32,
+    "clip_range": 0.4,
+    "clip_range_vf": 0.4,
+    "log_path": "./training_log",
+    "load_path": "",
+    "save_and_load_buffer": false,
+    "delete_buffer_file_after_loading": true,
+    "num_timesteps": 3000000,
+    "save_path": "./training_log",
+    "num_layers": 1,
+    "num_hidden": 512,
+    "policy_network": "MlpPolicy",
+    "n_critics": 1
+
+}

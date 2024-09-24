@@ -1,0 +1,7 @@
+{
+    "environment": "HysrOneBallEnv",
+    "algorithm": "ppo",
+    "use_openai_baselines": false,
+    "log_episodes": true,
+    "random_seed": null
+}
