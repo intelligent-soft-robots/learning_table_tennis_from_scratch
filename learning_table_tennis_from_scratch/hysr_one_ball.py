@@ -27,7 +27,6 @@ import ast
 import random
 
 import sys
-sys.path.append('/home/sguist/Software/o80_kalman_filter')
 from ball import Ball
 import matplotlib.pyplot as plt
 import json
