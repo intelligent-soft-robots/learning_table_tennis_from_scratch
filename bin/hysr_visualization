@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+import argparse
+import logging
+import pathlib
 
 import signal_handler
 import o80
@@ -247,7 +250,18 @@ def _execute_visualization(config):
 
 def execute():
 
-    files = get_json_config(expected_keys=["hysr_config"])
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "config",
+        type=pathlib.Path,
+        nargs="?",  # this is optional
+        help="""Optional path to config JSON file.  If not set, the file is
+            searched for in the current working directory.
+        """,
+    )
+    args = parser.parse_args()
+
+    files = get_json_config(expected_keys=["hysr_config"], config_file=args.config)
     hysr_path = files["hysr_config"]
     print("\nusing configuration file:\n- {}\n".format(hysr_path))
     hysr_config = HysrOneBallConfig.from_json(hysr_path)
