@@ -1,4 +1,5 @@
 import pathlib
+import shutil
 
 from learning_table_tennis_from_scratch.hysr_one_ball_env import HysrOneBallEnv
 from learning_table_tennis_from_scratch.rl_config import RLConfig
@@ -37,10 +38,17 @@ def run_stable_baselines(
         # not exist (e.g. SAC)
         save_freq = getattr(rl_config, "n_steps", 10000)
 
+        log_path = pathlib.Path(rl_config.log_path)
         checkpoint_callback = CheckpointCallback(
             save_freq=save_freq,
-            save_path=pathlib.Path(rl_config.log_path) / "checkpoints",
+            save_path=log_path / "checkpoints",
         )
+        # Log the RL config
+        config_dir = log_path / "config"
+        config_dir.mkdir(exist_ok=True)
+        shutil.copy(reward_config_file, config_dir / "reward_config.json")
+        shutil.copy(hysr_one_ball_config_file, config_dir / "hysr_config.json")
+        shutil.copy(rl_config_file, config_dir / "rl_config.json")
 
     env_config = {
         "reward_config_file": reward_config_file,
