@@ -78,7 +78,7 @@ class HysrOneBallConfig:
     # oc.MISSING indicates that the value is mandatory (i.e. must be provided by the
     # user).
 
-    real_robot: str = oc.MISSING
+    real_robot: bool = oc.MISSING
     real_ball: bool = oc.MISSING
     ball_from_file: bool = oc.MISSING
     robot_type: pam_mujoco.RobotType = oc.MISSING
