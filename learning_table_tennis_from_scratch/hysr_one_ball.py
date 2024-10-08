@@ -799,9 +799,9 @@ class HysrOneBall:
         self._simulated_robot_handle.reset()
         for handle in _ExtraBall.handles.values():
             handle.reset()
-        self._move_to_pressure(self._hysr_config.starting_pressures)
+        self._move_to_pressure(self._hysr_config.starting_pressures, timeout=2.5)
 
-    def _move_to_pressure(self, pressures):
+    def _move_to_pressure(self, pressures, timeout=0.5):
         # moves to pseudo-real robot to desired pressure in synchronization
         # with the simulated robot(s)
         if self._accelerated_time:
@@ -816,7 +816,6 @@ class HysrOneBall:
             self._pressure_commands.set(pressures, burst=False)
         time_start = self._real_robot_frontend.latest().get_time_stamp() * 1e-9
         current_time = time_start
-        timeout = 0.5
         while current_time - time_start < timeout:
             current_time = self._real_robot_frontend.latest().get_time_stamp() * 1e-9
             _, _, joint_positions, joint_velocities = self._pressure_commands.read()
