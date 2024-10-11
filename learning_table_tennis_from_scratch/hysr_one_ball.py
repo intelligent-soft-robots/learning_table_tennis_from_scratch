@@ -936,11 +936,11 @@ class HysrOneBall:
         # otherwise exiting based on a threshold on the
         # z position of the ball
 
-        # ball falled below the table
+        # ball fell below the table
         # note : all prerecorded trajectories are added a last ball position
         # with z = -10.0, to insure this always occurs.
         # see: function reset
-        if self._ball_status.ball_position[2] < 0.8:
+        if self._ball_status.ball_position[2] < self._hysr_config.target_position[2]:
             return True
         # in case the user called the method
         # force_episode_over
