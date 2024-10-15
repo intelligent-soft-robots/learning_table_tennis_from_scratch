@@ -1,5 +1,5 @@
 {
-    "real_robot":"real_robot",
+    "real_robot":true,
     "real_ball":false,
     "robot_type":"PAMY2",
     "o80_pam_time_step":0.002,

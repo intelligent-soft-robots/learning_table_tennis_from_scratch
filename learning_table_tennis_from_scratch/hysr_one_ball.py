@@ -535,7 +535,7 @@ class HysrOneBall:
             ]
         else:
             print("REAL ROBOT")
-            self._real_robot_frontend = o80_pam.FrontEnd(hysr_config.real_robot)
+            self._real_robot_frontend = o80_pam.FrontEnd("real_robot")
             self._pressure_commands = o80_pam.o80Pressures(
                 hysr_config.real_robot, frontend=self._real_robot_frontend
             )
