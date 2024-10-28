@@ -12,7 +12,7 @@
     "clip_range": 0.4,
     "clip_range_vf": 0.4,
     "log_path": "./training_log",
-    "load_path": "./24-09-25_after_ball_trajectory_bugfix/checkpoints/rl_model_1163264_steps.zip",
+    "load_path": "./24-10-18_real_aimy_03_ball_dataset/checkpoints/rl_model_1998848_steps.zip",
     "save_and_load_buffer": false,
     "delete_buffer_file_after_loading": true,
     "num_timesteps": 3000000,
