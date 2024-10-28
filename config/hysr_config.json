@@ -6,11 +6,11 @@
     "mujoco_time_step":0.002,
     "algo_time_step":0.01,
     "pam_config_file":"~/.mpi-is/pam/pam_interface/pamy2/config/pam.json",
-    "robot_position": [0.23481061, -3.38250561, -0.95063758],
-    "robot_orientation":[-0.02615020044781693, 0.021959215361716973, -0.008822280253092582, 0.999377870101381],
+    "robot_position": [0.24172509, -3.38384842, -0.95054469],
+    "robot_orientation":[-0.03136496, 0.02863854, -0.0100406, 0.99904718],
     "table_position": [1.03, -1.49, -1.4],
     "table_orientation":[0, 0, 0, 1],
-    "target_position": [1.03, -0.8, -1.39],
+    "target_position": [1.03, -0.8, -1.375],
     "reference_posture":[0.0,0.785,0.0,0.0],
     "starting_pressures":[[19000, 19000], [19000, 19000], [18000, 18000], [18000, 18000]],
     "world_boundaries":{
@@ -18,7 +18,7 @@
         "max":[1.6,3.5,1.5]
     },
     "pressure_change_range":2500,
-    "trajectory_group":"aimy_049_075_035",
+    "trajectory_group":"aimy_049_075_035_03",
     "trajectory":-1,
     "accelerated_time":false,
     "instant_reset":false,
@@ -34,5 +34,6 @@
     "frequency_monitoring_step":false,
     "robot_integrity_check":false,
     "robot_integrity_threshold":0.6,
-    "ball_from_file": false
+    "ball_from_file": false,
+    "use_vicon": false
 }
