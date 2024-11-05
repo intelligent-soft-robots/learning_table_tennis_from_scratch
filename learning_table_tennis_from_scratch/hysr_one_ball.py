@@ -845,7 +845,8 @@ class HysrOneBall:
 
     def reset(self):
         # what happens during reset does not correspond
-        # to any episode (-1 means: no active episode)
+        # to any step/episode (-1 means: no active step/episode)
+        self._share_step_number(-1)
         self._share_episode_number(-1)
 
         # resetting the measure of step frequency monitoring
