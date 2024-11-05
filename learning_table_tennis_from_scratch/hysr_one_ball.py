@@ -629,6 +629,12 @@ class HysrOneBall:
         for mujoco_id in self._mujoco_ids:
             shared_memory.set_long_int(mujoco_id, "episode", episode_number)
 
+    def _share_step_number(self, step_number):
+        # write the step number in a memory shared
+        # with the instances of mujoco
+        for mujoco_id in self._mujoco_ids:
+            shared_memory.set_long_int(mujoco_id, "step", step_number)
+
     def force_episode_over(self):
         # will trigger the method _episode_over
         # (called in the step method) to return True
@@ -970,6 +976,7 @@ class HysrOneBall:
 
         # a new episode starts
         self._step_number = 0
+        self._share_step_number(self._step_number)
         self._episode_number += 1
         self._share_episode_number(self._episode_number)
 
@@ -1445,6 +1452,7 @@ class HysrOneBall:
 
         # this step is done
         self._step_number += 1
+        self._share_step_number(self._step_number)
 
         # returning
         return observation, reward, episode_over
