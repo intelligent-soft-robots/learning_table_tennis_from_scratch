@@ -757,11 +757,11 @@ class HysrOneBall:
             handle.reset()
         self._move_to_pressure(self._hysr_config.reference_posture)
 
-    def _move_to_pressure(self, pressures):
+    def _move_to_pressure(self, pressures, timeout: float = 0.5):
         # moves to pseudo-real robot to desired pressure in synchronization
         # with the simulated robot(s)
         if self._accelerated_time:
-            for _ in range(self._nb_robot_bursts):
+            for _ in range(int(timeout / self._o80_time_step)):
                 self._pressure_commands.set(pressures, burst=1)
                 _, _, joint_positions, joint_velocities = self._pressure_commands.read()
                 for mirroring_ in self._mirrorings:
@@ -772,7 +772,6 @@ class HysrOneBall:
             self._pressure_commands.set(pressures, burst=False)
         time_start = self._real_robot_frontend.latest().get_time_stamp() * 1e-9
         current_time = time_start
-        timeout = 0.5
         while current_time - time_start < timeout:
             current_time = self._real_robot_frontend.latest().get_time_stamp() * 1e-9
             _, _, joint_positions, joint_velocities = self._pressure_commands.read()
