@@ -926,6 +926,12 @@ class HysrOneBall:
         else:
             return self._target_position
 
+    def set_ball_id(self, ball_id):
+        # print(";", ball_id, ";", end=" ")
+        self.set_ball_behavior(index=ball_id)
+
+    def set_goal(self, goal):
+        self._target_position = goal
 
     def reset(self):
         # what happens during reset does not correspond

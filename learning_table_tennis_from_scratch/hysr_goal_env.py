@@ -275,6 +275,12 @@ class HysrGoalEnv(gym_robotics.GoalEnv):
         return self._goal_boxes.get_normalized_values()
 
     
+    def set_ball_id(self, ball_id):
+        self._hysr.set_ball_id(ball_id)
+
+    def set_goal(self, goal):
+        self._hysr.set_goal(goal)
+
     def _convert_desired_goal(self):
         
         self._goal_boxes.set_values_non_norm(

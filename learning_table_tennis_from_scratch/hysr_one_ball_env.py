@@ -235,6 +235,12 @@ class HysrOneBallEnv(gym.Env):
             self._obs_boxes.set_values_non_norm("action_copy", action_casted)
         self.last_observation = self._obs_boxes.get_normalized_values()
         return self.last_observation.copy()
+    
+    def set_ball_id(self, ball_id):
+        self._hysr.set_ball_id(ball_id)
+
+    def set_goal(self, goal):
+        self._hysr.set_goal(goal)
 
 
     def get_action_motion1(self):
