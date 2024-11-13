@@ -13,7 +13,7 @@
     "table_position":[0.4, 1.57, 0.755],
     "table_orientation": [0, 0, 0, 1],
     "starting_pressures":[[18000,18000],[18000,18000],[18000,18000],[18000,18000]],
-    "target_position":[0.0,2.5,1.78],
+    "target_position":[0.4,2.5,0.78],
     "reference_posture":[[19900,16000],[16800,19100],[18700,17300],[18000,18000]],
     "world_boundaries":{
         "min":[0.0,-1.0,0.17],

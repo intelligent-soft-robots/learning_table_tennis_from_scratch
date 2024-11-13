@@ -3,7 +3,7 @@ import math
 import time
 from collections import OrderedDict
 
-import gym
+import gymnasium as gym
 import numpy as np
 import o80
 import pam_interface
@@ -274,15 +274,17 @@ class HysrOneBallEnv(gym.Env):
                 self._logger.record("eprew", reward)
                 self._logger.dump()
 
-        return observation, reward, episode_over, {}
+        return observation, reward, episode_over, False, {}
 
-    def reset(self):
+    def reset(self, *, seed=None, options=None):
+        np.random.seed(seed)
+
         self.init_episode()
         observation = self._hysr.reset()
         observation = self._convert_observation(observation)
         if not self._accelerated_time:
             self._frequency_manager = None
-        return observation
+        return observation, {}
 
     def dump_data(self, data_buffer):
         filename = "/tmp/ep_" + time.strftime("%Y%m%d-%H%M%S")
