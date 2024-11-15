@@ -11,7 +11,7 @@
     "clip_range": 0.4,
     "clip_range_vf": 0.3,
     "log_path": "/tmp/training_log",
-    "num_timesteps": 500000,
+    "num_timesteps": 3000000,
     "load_path": "",
     "save_path": "/tmp/model",
     "num_layers": 1,
