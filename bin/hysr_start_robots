@@ -172,7 +172,7 @@ for mujoco_id in "${mujoco_ids[@]}"; do
 done
 
 if [ ! "$command_visualization" = "" ]; then
-    ${command_visualization} &
+    ${command_visualization} ${json_file} &
     pids+=($!)
     echo "Run ${command_visualization} with PID ${pids[-1]}"
 fi
