@@ -6,9 +6,11 @@ import numpy as np
 from matplotlib import pyplot as plt
 
 if __name__ == "__main__":
+    outdir = Path(__file__).parents[1] / "out"
+
     parser = argparse.ArgumentParser()
     parser.add_argument(
-        "--datafile", type=Path, default=Path(__file__).parents[1] / "out" / "tcr_intervention_scales.pkl"
+        "--datafile", type=Path, default=outdir / "tcr_intervention_scales.pkl"
     )
     args = parser.parse_args()
 
@@ -21,19 +23,24 @@ if __name__ == "__main__":
     plt.bar(intervention_stds, rewards_mean, width=intervention_stds[1] - intervention_stds[0])
     plt.xlabel("Intervention standard deviation")
     plt.ylabel("Mean cumulative reward")
+    plt.savefig(args.datafile.parent / (args.datafile.stem + "_reward.pdf"))
     plt.show()
-
+    plt.close()
 
     success_rates = [1 - np.mean((np.isinf(distances)).astype(float)) for distances in data["distances_to_target"].values()]
     plt.title("Hit rates for different intervention scales")
     plt.bar(intervention_stds, success_rates, width=intervention_stds[1] - intervention_stds[0])
     plt.xlabel("Intervention standard deviation")
     plt.ylabel("Hit rate")
+    plt.savefig(args.datafile.parent / (args.datafile.stem + "_hit_rate.pdf"))
     plt.show()
+    plt.close()
 
     success_rates = [np.mean((np.array(distances) < 0.65).astype(float)) for distances in data["distances_to_target"].values()]
     plt.title("Success rates for different intervention scales")
     plt.bar(intervention_stds, success_rates, width=intervention_stds[1] - intervention_stds[0])
     plt.xlabel("Intervention standard deviation")
+    plt.savefig(args.datafile.parent / (args.datafile.stem + "_success_rate.pdf"))
     plt.ylabel("Success rate")
     plt.show()
+    plt.close()
