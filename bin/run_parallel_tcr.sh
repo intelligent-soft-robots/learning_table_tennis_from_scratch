@@ -4,11 +4,14 @@
 pids=()
 
 source /home/jschneider/isr_workspace/workspace/install/setup.bash
-for (( i=0; i<$1; i++ ))
+
+count=$1
+
+for ((i = 1; i <= count; i++));
 do
   launch_pam_mujoco "simulation$i" & pids+=($!)
   launch_pam_mujoco "pseudo-real$i" & pids+=($!)
-  python ../bin/tcr_data_collection.py ../logs/master_return_default_hyperparameters_3M --outdir ../out/test --num-episodes-per-intervention 100  --num-interventions $2 --job-id "$i" & pids+=($!)
+  python ../bin/tcr_data_collection.py ../logs/master_return_default_hyperparameters_3M_contact_model_fix --env-config ../example/config.json --outdir ../out/test --num-episodes-per-intervention 100  --num-interventions $2 --max-episode-length 200 --job-id "$i" & pids+=($!)
 done
 
 # monitor processes until one of them terminates or Ctrl+C is pressed
