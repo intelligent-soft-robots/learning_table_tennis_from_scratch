@@ -221,22 +221,31 @@ class _BallBehavior:
     def read_trajectories(cls, group: str) -> None:
         cls._trajectory_reader = context.BallTrajectories(group)
 
-    def __init__(self, line=False, index=False, random=False):
+    def __init__(
+        self,
+        line: t.Optional[
+            t.Tuple[t.Sequence[float], t.Sequence[float], float, float]
+        ] = None,
+        index: t.Optional[int] = None,
+        random: bool = False,
+    ):
         if not hasattr(self.__class__, "_trajectory_reader"):
             raise UnboundLocalError(
                 "_BallBehavior: the classmethod read_trajectories(group:str) "
                 "has to be called before the constructor"
             )
 
-        not_false = [a for a in (line, index, random) if a]
-        if not not_false:
+        not_false = [a for a in (line, index) if a is not None] + (
+            [random] if random else []
+        )
+        if len(not_false) == 0:
             raise ValueError("type of ball behavior not specified")
         if len(not_false) > 1:
             raise ValueError("type of ball behavior over-specified")
-        if line:
+        if line is not None:
             self.type = self.LINE
             self.value = line
-        elif index:
+        elif index is not None:
             self.type = self.INDEX
             self.value = index
         elif random:
@@ -681,9 +690,11 @@ class HysrOneBall:
         # If set_extra_ball_behavior has not been called for a given
         # extra ball, this trajectory will be None
         trajectories = [
-            extra_ball.ball_behavior.get_trajectory()
-            if extra_ball.ball_behavior is not None
-            else None
+            (
+                extra_ball.ball_behavior.get_trajectory()
+                if extra_ball.ball_behavior is not None
+                else None
+            )
             for extra_ball in self._extra_balls
         ]
         # None trajectories (i.e. set_extra_ball_behavior uncalled) then
