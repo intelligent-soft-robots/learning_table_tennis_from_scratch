@@ -1,3 +1,5 @@
+from typing import Optional
+
 import o80_pam
 import pam_mujoco
 
@@ -99,11 +101,11 @@ def configure_pseudo_real(
     save_data,
     save_folder="/tmp",
     mujoco_id="pseudo-real",
-    job_id="",
+    id_suffix: str = "",
     graphics=True,
     accelerated_time=False,
 ):
-    sement_id_pseudo_real_robot = SEGMENT_ID_PSEUDO_REAL_ROBOT + job_id
+    sement_id_pseudo_real_robot = SEGMENT_ID_PSEUDO_REAL_ROBOT + id_suffix
     if accelerated_time:
         burst_mode = True
     else:
@@ -116,7 +118,7 @@ def configure_pseudo_real(
         json_control_path=pam_config_file,
     )
     handle = pam_mujoco.MujocoHandle(
-        mujoco_id + job_id,
+        mujoco_id + id_suffix,
         graphics=graphics,
         accelerated_time=accelerated_time,
         burst_mode=burst_mode,
@@ -130,12 +132,12 @@ def configure_pseudo_real(
     return handle, frontend
 
 
-def configure_simulation(hysr_config, mujoco_id="simulation", job_id=""):
-    segment_id_robot_mirror = SEGMENT_ID_ROBOT_MIRROR + job_id
-    segment_id_table = SEGMENT_ID_TABLE + job_id
-    segment_id_ball = SEGMENT_ID_BALL + job_id
-    segment_id_hit_point = SEGMENT_ID_HIT_POINT + job_id
-    segment_id_goal = SEGMENT_ID_GOAL + job_id
+def configure_simulation(hysr_config, mujoco_id="simulation", id_suffix: str = ""):
+    segment_id_robot_mirror = SEGMENT_ID_ROBOT_MIRROR + id_suffix
+    segment_id_table = SEGMENT_ID_TABLE + id_suffix
+    segment_id_ball = SEGMENT_ID_BALL + id_suffix
+    segment_id_hit_point = SEGMENT_ID_HIT_POINT + id_suffix
+    segment_id_goal = SEGMENT_ID_GOAL + id_suffix
     accelerated_time = True
     burst_mode = True
     graphics = hysr_config.graphics_simulation
@@ -166,7 +168,7 @@ def configure_simulation(hysr_config, mujoco_id="simulation", job_id=""):
         segment_id_goal, control=pam_mujoco.MujocoItem.CONSTANT_CONTROL
     )
     handle = pam_mujoco.MujocoHandle(
-        mujoco_id + job_id,
+        mujoco_id + id_suffix,
         graphics=graphics,
         accelerated_time=accelerated_time,
         burst_mode=burst_mode,

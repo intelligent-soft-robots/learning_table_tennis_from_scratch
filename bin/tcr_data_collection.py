@@ -24,13 +24,14 @@ def get_outpath(outdir: Path, job_id: str, intervention: int) -> Path:
 
 
 def make_env(
-    env_config: Union[Path, str],
+    env: str,
     job_id: str = "",
     seed: Optional[int] = None,
+    tabletennis_config: Optional[Path] = None,
     **gym_kwargs,
 ):
-    if isinstance(env_config, Path):
-        with env_config.open() as f:
+    if env == "tabletennis":
+        with tabletennis_config.open() as f:
             config = json.load(f)
 
         dict_config = {
@@ -42,7 +43,7 @@ def make_env(
         }
         return make_vec_env(HysrOneBallEnv, env_kwargs=dict_config, seed=seed)
     else:
-        vec_env = DummyVecEnv([lambda: gym.make(env_config, **gym_kwargs)])
+        vec_env = DummyVecEnv([lambda: gym.make(env, **gym_kwargs)])
         if seed is not None:
             vec_env.seed(seed)
         return vec_env
@@ -51,25 +52,19 @@ def make_env(
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("train_logs", type=Path)
-    parser.add_argument("--env-config", type=Path)
+    parser.add_argument("env", type=str)
+    parser.add_argument("intervention_std", type=float)
+    parser.add_argument("--tt-config", type=Path)
     parser.add_argument("--env-name", type=str)
     parser.add_argument("--seed", type=int)
     parser.add_argument("--num-interventions", type=int, default=100)
     parser.add_argument("--num-episodes-per-intervention", type=int, default=20)
-    parser.add_argument("--intervention-std", type=float, default=0.01)
     parser.add_argument("--max-episode-length", type=int)
     parser.add_argument(
         "--outdir", type=Path, default=Path(__file__).parents[1] / "out" / "tcr_dataset"
     )
-    parser.add_argument("--job-id", type=str, default="")
+    parser.add_argument("--job-id", type=str)
     args = parser.parse_args()
-
-    if args.env_config is not None:
-        env_config = args.env_config
-    elif args.env_name is not None:
-        env_config = args.env_name
-    else:
-        raise ValueError("Either --env-config or --env-name must be specified")
 
     if not args.outdir.exists():
         args.outdir.mkdir(parents=True)
@@ -83,7 +78,7 @@ if __name__ == "__main__":
     if args.seed is not None:
         set_random_seed(args.seed)
 
-    vec_env = make_env(env_config, args.job_id)
+    vec_env = make_env(args.env, args.job_id, args.seed, args.tt_config)
     checkpoints_dir = args.train_logs / "checkpoints"
     checkpoint_path = sorted(
         [p for p in checkpoints_dir.iterdir()],

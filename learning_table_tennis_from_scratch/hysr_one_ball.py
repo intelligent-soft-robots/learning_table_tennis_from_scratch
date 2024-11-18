@@ -359,8 +359,13 @@ class _Observation:
 
 
 class HysrOneBall:
-    def __init__(self, hysr_config, reward_function, job_id):
+    def __init__(self, hysr_config, reward_function, job_id: t.Optional[str]):
         self._hysr_config = hysr_config
+
+        if job_id is not None:
+            job_id = "_" + job_id
+        else:
+            job_id = ""
 
         self.segment_id_ball = SEGMENT_ID_BALL + job_id
         self.segment_id_goal = SEGMENT_ID_GOAL + job_id
@@ -408,7 +413,7 @@ class HysrOneBall:
                 graphics=hysr_config.graphics_pseudo_real,
                 accelerated_time=hysr_config.accelerated_time,
                 mujoco_id="pseudo-real",
-                job_id=job_id
+                id_suffix=job_id
             )
             self._mujoco_ids.append(self._real_robot_handle.get_mujoco_id())
         else:

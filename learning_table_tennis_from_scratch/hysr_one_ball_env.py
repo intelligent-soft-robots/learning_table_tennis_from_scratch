@@ -2,6 +2,7 @@ import json
 import math
 import time
 from collections import OrderedDict
+from typing import Optional
 
 import gymnasium as gym
 import numpy as np
@@ -74,7 +75,7 @@ class HysrOneBallEnv(gym.Env):
         hysr_one_ball_config_file=None,
         log_episodes=False,
         logger=None,
-        job_id: str = "",
+        job_id: Optional[str] = None,
     ):
         super().__init__()
 
