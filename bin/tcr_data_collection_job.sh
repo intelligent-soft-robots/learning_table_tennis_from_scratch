@@ -8,11 +8,14 @@ source /home/jschneider/isr_workspace/workspace/install/setup.bash
 echo $1 $2 $3 $4 $5 $6
 
 pids=()
-launch_pam_mujoco "simulation_$1" & pids+=($!)
-launch_pam_mujoco "pseudo-real_$1" & pids+=($!)
+
+if [ "$2" == "tabletennis" ]; then
+    launch_pam_mujoco "simulation_$1" & pids+=($!)
+    launch_pam_mujoco "pseudo-real_$1" & pids+=($!)
+fi
 dataset_name=$(echo "$2" | tr 'A-Z' 'a-z' | tr '-' '_')_std$4 # TODO: The file name should not contain a dot
 echo "$dataset_name"
-python ../bin/tcr_data_collection.py ../logs/master_return_default_hyperparameters_3M_contact_model_fix $2 $3 $4 --outdir /scratch/tcr_datasets/$dataset_name --job-id "$1" "${@:5:99}" & pids+=($!)
+python ../bin/tcr_data_collection.py $2 $3 $4 --outdir /scratch/tcr_datasets/$dataset_name --job-id "$1" "${@:5:99}" & pids+=($!)
 
 # monitor processes until one of them terminates or Ctrl+C is pressed
 shutdown_requested=0
