@@ -52,7 +52,7 @@ if __name__ == "__main__":
         intervention_std = 1.4
         cpus = 1
         memory = 2.0 # TODO
-        time_per_intervention_h = None # TODO
+        time_per_intervention_h = 0.02 # TODO
     else:
         raise ValueError(f"Unkown environment {args.env}.")
     interventions_per_job = math.floor(args.job_length_h / time_per_intervention_h)
