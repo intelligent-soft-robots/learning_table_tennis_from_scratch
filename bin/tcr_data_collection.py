@@ -1,11 +1,10 @@
 import argparse
 import itertools
-import json
 import pickle
 import re
 import traceback
 from pathlib import Path
-from typing import Optional, Union
+from typing import Optional
 
 import gymnasium as gym
 import numpy as np
@@ -27,16 +26,13 @@ def make_env(
     env: str,
     job_id: str = "",
     seed: Optional[int] = None,
-    tabletennis_config: Optional[Path] = None,
+    tabletennis_config_dir: Optional[Path] = None,
     **gym_kwargs,
 ):
     if env == "tabletennis":
-        with tabletennis_config.open() as f:
-            config = json.load(f)
-
         dict_config = {
-            "reward_config_file": config["reward_config"],
-            "hysr_one_ball_config_file": config["hysr_config"],
+            "reward_config_file": tabletennis_config_dir / "reward_config.json",
+            "hysr_one_ball_config_file": tabletennis_config_dir / "hysr_config.json",
             "log_episodes": False,
             "logger": None,
             "job_id": job_id,
@@ -54,7 +50,6 @@ if __name__ == "__main__":
     parser.add_argument("train_logs", type=Path)
     parser.add_argument("env", type=str)
     parser.add_argument("intervention_std", type=float)
-    parser.add_argument("--tt-config", type=Path)
     parser.add_argument("--env-name", type=str)
     parser.add_argument("--seed", type=int)
     parser.add_argument("--num-interventions", type=int, default=100)
@@ -78,7 +73,7 @@ if __name__ == "__main__":
     if args.seed is not None:
         set_random_seed(args.seed)
 
-    vec_env = make_env(args.env, args.job_id, args.seed, args.tt_config)
+    vec_env = make_env(args.env, args.job_id, args.seed, args.train_logs / "config")
     checkpoints_dir = args.train_logs / "checkpoints"
     checkpoint_path = sorted(
         [p for p in checkpoints_dir.iterdir()],
