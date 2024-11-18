@@ -35,9 +35,9 @@ def submit_jobs(jobs: Sequence[Tuple[int, int]], env: str, train_logs: str, inte
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("num_interventions", type=int)
     parser.add_argument("env", type=str)
     parser.add_argument("train_logs", type=str)
+    parser.add_argument("num_interventions", type=int)
     parser.add_argument("--job-length_h", type=float, default=1.0)
     parser.add_argument("kwargs", nargs=argparse.REMAINDER)
     args = parser.parse_args()
