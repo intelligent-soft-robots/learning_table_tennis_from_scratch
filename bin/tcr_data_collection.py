@@ -47,8 +47,8 @@ def make_env(
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("train_logs", type=Path)
     parser.add_argument("env", type=str)
+    parser.add_argument("train_logs", type=Path)
     parser.add_argument("intervention_std", type=float)
     parser.add_argument("--env-name", type=str)
     parser.add_argument("--seed", type=int)
