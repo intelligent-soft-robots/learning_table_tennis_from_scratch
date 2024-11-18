@@ -11,28 +11,29 @@ import classad
 def submit_jobs(jobs: Sequence[Tuple[int, int]], env: str, train_logs: str, intervention_std: float, cpus: int, memory: float, kwargs_str: str) -> None:
     # Initialize the HTCondor submit object
     repo_path = Path(__file__).parents[1]
-    submit = htcondor.Submit(
-        {
-            "executable": repo_path / "bin" / "tcr_data_collection_job.sh",  # The Python script to run
-            "arguments": "$(ClusterId) $(Process)",  # Pass ClusterId and Process as arguments
-            "output":  repo_path / "htcondor_logs" / "output" / "$(ClusterId)_$(Process).txt",  # Standard output log file
-            "error": repo_path / "htcondor_logs" / "error" / "$(ClusterId)_$(Process).txt",  # Standard error log file
-            "log": repo_path / "htcondor_logs" / "log" / "$(ClusterId)_$(Process).txt",  # Condor log file
-            "request_cpus": "1",  # Number of CPUs requested
-            "request_memory": f"{memory}GB",  # Amount of memory requested
-            "universe": "vanilla",  # Type of job (standard vanilla job)
-            "getenv": "True",  # Inherit environment variables
-        }
-    )
-    
-    # Create a new HTCondor schedd (scheduler) object
-    schedd = htcondor.Schedd()
-    schedd.submit(submit)
-
     job_script_path = Path(__file__).parent / "tcr_data_collection_job.sh"
 
-    print(f"{job_script_path} {env} {train_logs} {intervention_std} {' '.join(kwargs_str)}")
+    for num_interventions, num_jobs in jobs:
+        if num_interventions > 0:
+            submit = htcondor.Submit(
+                {
+                    "executable": repo_path / "bin" / "tcr_data_collection_job.sh",  # The Python script to run
+                    "arguments": f"$(ClusterId)_$(Process) {env} {train_logs} {intervention_std} {num_interventions} {kwargs_str}",  # Pass ClusterId and Process as arguments
+                    "output":  repo_path / "htcondor_logs" / "output" / "$(ClusterId)_$(Process).txt",  # Standard output log file
+                    "error": repo_path / "htcondor_logs" / "error" / "$(ClusterId)_$(Process).txt",  # Standard error log file
+                    "log": repo_path / "htcondor_logs" / "log" / "$(ClusterId)_$(Process).txt",  # Condor log file
+                    "request_cpus": str(cpus),  # Number of CPUs requested
+                    "request_memory": f"{memory}GB",  # Amount of memory requested
+                    "universe": "vanilla",  # Type of job (standard vanilla job)
+                    "getenv": "True",  # Inherit environment variables
+                }
+            )
 
+            # Create a new HTCondor schedd (scheduler) object
+            schedd = htcondor.Schedd()
+            schedd.submit(submit, count=num_jobs)
+    else:
+        print("Skipping jobs with count 0.")
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -57,12 +58,15 @@ if __name__ == "__main__":
     else:
         raise ValueError(f"Unkown environment {args.env}.")
     interventions_per_job = math.floor(args.job_length_h / time_per_intervention_h)
-    num_jobs = math.ceil(args.num_interventions / interventions_per_job)
-    num_less_intervention_jobs = num_jobs * math.floor(interventions_per_job) - args.num_interventions
-    jobs = [
-        (interventions_per_job - 1, num_less_intervention_jobs),
-        (interventions_per_job, num_jobs - num_less_intervention_jobs)
-    ]
+    if interventions_per_job < args.num_interventions:
+        num_jobs = math.ceil(args.num_interventions / interventions_per_job)
+        num_less_intervention_jobs = num_jobs * math.floor(interventions_per_job) - args.num_interventions
+        jobs = [
+            (interventions_per_job - 1, num_less_intervention_jobs),
+            (interventions_per_job, num_jobs - num_less_intervention_jobs)
+        ]
+    else:
+        jobs = [(args.num_interventions, 1)]
     assert sum([i * j for i, j in jobs]) == args.num_interventions
 
     print(f"Starting {len(jobs)} jobs.")
