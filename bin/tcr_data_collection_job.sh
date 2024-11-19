@@ -1,21 +1,26 @@
 #!/bin/bash
 
-# Arguments: job_id, env, train_logs, intervention_std, **kwargs
+# Arguments: job_id, env, train_logs, intervention_std, num_interventions **kwargs
+job_id=$1
+env=$2
+train_logs=$3
+dataset_name=$4
+intervention_std=$5
+num_interventions=$6
 
+source $HOME/isr_workspace/workspace/install/setup.bash
 
-source /home/jschneider/isr_workspace/workspace/install/setup.bash
-
-echo $1 $2 $3 $4 $5 $6
+CONTAINER_PATH="${BASH_SOURCE[0]}"/../../../../"learning_table_tennis_from_scratch.sif"
 
 pids=()
 
 if [ "$2" == "tabletennis" ]; then
-    launch_pam_mujoco "simulation_$1" & pids+=($!)
-    launch_pam_mujoco "pseudo-real_$1" & pids+=($!)
+    apptainer exec $CONTAINER_PATH bash -c "source $HOME/isr_workspace/workspace/install/setup.bash && launch_pam_mujoco simulation_$job_id" & pids+=($!)
+    apptainer exec $CONTAINER_PATH bash -c "source $HOME/isr_workspace/workspace/install/setup.bash && launch_pam_mujoco pseudo-real_$job_id" & pids+=($!)
 fi
-dataset_name=$(echo "$2" | tr 'A-Z' 'a-z' | tr '-' '_')_std$4 # TODO: The file name should not contain a dot
-echo "$dataset_name"
-python ../bin/tcr_data_collection.py $2 $3 $4 --outdir /scratch/tcr_datasets/$dataset_name --job-id "$1" "${@:5:99}" & pids+=($!)
+tcr_command="source $HOME/isr_workspace/workspace/install/setup.bash && python ../bin/tcr_data_collection.py $env $train_logs $intervention_std --num-interventions $num_interventions --outdir /tcr_datasets/$dataset_name --job-id $job_id ${@:6:99}"
+echo $tcr_command
+apptainer exec -B /fast/jschneider/tcr_datasets:/tcr_datasets $CONTAINER_PATH bash -c "$tcr_command" & pids+=($!)
 
 # monitor processes until one of them terminates or Ctrl+C is pressed
 shutdown_requested=0
