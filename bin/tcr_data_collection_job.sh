@@ -18,7 +18,7 @@ if [ "$2" == "tabletennis" ]; then
     apptainer exec $CONTAINER_PATH bash -c "source $HOME/isr_workspace/workspace/install/setup.bash && launch_pam_mujoco simulation_$job_id" & pids+=($!)
     apptainer exec $CONTAINER_PATH bash -c "source $HOME/isr_workspace/workspace/install/setup.bash && launch_pam_mujoco pseudo-real_$job_id" & pids+=($!)
 fi
-tcr_command="source $HOME/isr_workspace/workspace/install/setup.bash && python ../bin/tcr_data_collection.py $env $train_logs $intervention_std --num-interventions $num_interventions --outdir /tcr_datasets/$dataset_name --job-id $job_id ${@:6:99}"
+tcr_command="source $HOME/isr_workspace/workspace/install/setup.bash && python ../bin/tcr_data_collection.py $env $train_logs $intervention_std --num-interventions $num_interventions --outdir /tcr_datasets/$dataset_name --job-id $job_id ${@:7:99}"
 echo $tcr_command
 apptainer exec -B /fast/jschneider/tcr_datasets:/tcr_datasets $CONTAINER_PATH bash -c "$tcr_command" & pids+=($!)
 
