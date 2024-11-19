@@ -53,7 +53,7 @@ if __name__ == "__main__":
     parser.add_argument("--env-name", type=str)
     parser.add_argument("--seed", type=int)
     parser.add_argument("--num-interventions", type=int, default=100)
-    parser.add_argument("--num-episodes-per-intervention", type=int, default=20)
+    parser.add_argument("--num-episodes-per-intervention", type=int, default=100)
     parser.add_argument("--max-episode-length", type=int)
     parser.add_argument(
         "--outdir", type=Path, default=Path(__file__).parents[1] / "out" / "tcr_dataset"
