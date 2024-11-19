@@ -19,7 +19,7 @@ from learning_table_tennis_from_scratch.hysr_one_ball_env import HysrOneBallEnv
 
 def get_outpath(outdir: Path, job_id: str, intervention: int) -> Path:
     job_str = f"_job{job_id}" if job_id != "" else ""
-    return outdir / f"data{job_str}_intervention{intervention}.pkl"
+    return outdir / f"data{job_str}_intervention{intervention:04d}.pkl"
 
 
 def make_env(
@@ -169,10 +169,9 @@ if __name__ == "__main__":
                 )
 
         num_rec_int = i - start_intervention
-        avg_reward = avg_reward * num_rec_int / (num_rec_int + 1) + np.mean(
-            [np.sum(r) for r in reward_trajectories]
-        ) / (num_rec_int + 1)
-        print(f"Average reward: {avg_reward}")
+        last_reward = np.mean([np.sum(r) for r in reward_trajectories])
+        avg_reward = avg_reward * num_rec_int / (num_rec_int + 1) + last_reward / (num_rec_int + 1)
+        print(f"Last intervention reward: {last_reward}, Average intervention reward: {avg_reward}")
         outpath = get_outpath(args.outdir, args.job_id, i)
         with outpath.open("wb") as outfile:
             episode_data = {
