@@ -49,13 +49,13 @@ if __name__ == "__main__":
         intervention_std = 0.5
         cpus = 2 # TODO: Check if used
         memory = 15.0 # TODO
-        time_per_intervention_min = 0.25
-        args.kwargs.append("--max-episode-length 200")  # TODO: This should only happen if --max-episode-length is not already in kwargs
+        time_per_intervention_min = 1.5
+        args.kwargs.append("--max-episode-length 150")  # TODO: This should only happen if --max-episode-length is not already in kwargs
     elif args.env == "Pendulum-v1":
         intervention_std = 1.4
         cpus = 1
         memory = 2.0 # TODO
-        time_per_intervention_min = 0.1 # TODO
+        time_per_intervention_min = 0.5 # TODO
     else:
         raise ValueError(f"Unkown environment {args.env}.")
     time_per_intervention_h = time_per_intervention_min / 60
