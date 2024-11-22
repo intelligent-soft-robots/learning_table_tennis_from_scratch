@@ -39,5 +39,6 @@ setup(
         "bin/hysr_display_extra_balls",
         "bin/hysr_extra_balls",
         "bin/hysr_stop",
+        "bin/trim_o80_log_ball_trajectory"
     ],
 )
