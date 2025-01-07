@@ -185,23 +185,25 @@ def run_stable_baselines(
     # set custom logger, so we also get CSV output
     model.set_logger(tensorboard_logger)
 
-    model.learn(
-        total_timesteps=rl_config.num_timesteps,
-        callback=checkpoint_callback,
-        reset_num_timesteps=not continue_training,
-    )
-    model.learn(
-        total_timesteps=rl_config.num_timesteps,
-        callback=checkpoint_callback,
-        reset_num_timesteps=not continue_training,
-    )
+    if rl_config.eval:
+        print("-- Evaluating policy --")
+        mean_reward, std_reward = evaluate_policy(model, env, n_eval_episodes=rl_config.eval_episodes)
+        print(f"mean_reward:{mean_reward:.2f} +/- {std_reward:.2f}")
 
-    if rl_config.save_path:
-        model.save(rl_config.save_path)
-        print("policy saved to", rl_config.save_path)
-        if rl_config.save_and_load_buffer:
-            model.save_replay_buffer(rl_config.save_path+"_buf")
-            print("buffer saved to", rl_config.save_path+"_buf")
+    else:
+        model.learn(
+            total_timesteps=rl_config.num_timesteps,
+            callback=checkpoint_callback,
+            reset_num_timesteps=not continue_training,
+        )
+        
+
+        if rl_config.save_path:
+            model.save(rl_config.save_path)
+            print("policy saved to", rl_config.save_path)
+            if rl_config.save_and_load_buffer:
+                model.save_replay_buffer(rl_config.save_path+"_buf")
+                print("buffer saved to", rl_config.save_path+"_buf")
 
     env.close()
 

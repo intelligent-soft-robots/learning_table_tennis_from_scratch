@@ -30,6 +30,7 @@ class _ObservationSpace:
             self.low = low
             self.high = high
             self.size = size
+            self.shape = (size,)
 
         def normalize(self, value):
             return (value - self.low) / (self.high - self.low)
@@ -47,8 +48,10 @@ class _ObservationSpace:
 
     def get_gym_box(self):
         size = sum([b.size for b in self._obs_boxes.values()])
-        return gym.spaces.Box(low=0.0, high=1.0, shape=(size,), dtype=np.float32)
-
+        box = gym.spaces.Box(low=0.0, high=1.0, shape=(size,), dtype=np.float32)
+        if not hasattr(box, 'shape'):
+            box.shape = (size,)
+        return box
 
     def set_values(self, name, values):
         normalize = self._obs_boxes[name].normalize
@@ -364,6 +367,10 @@ class HysrGoalEnv(gym_robotics.GoalEnv):
         if not self._accelerated_time and self._frequency_manager is None:
             self._frequency_manager = o80.FrequencyManager(1.0 / self._algo_time_step)
 
+        # if not self.episode_over and not self._hysr._ball_status.min_distance_ball_racket:
+        #     assert self.action_orig is not None
+        #     action = self.action_orig.copy()
+
         action_orig = action.copy()
 
         # casting similar to old code
@@ -415,8 +422,8 @@ class HysrGoalEnv(gym_robotics.GoalEnv):
             self._frequency_manager.wait()
 
         # Ignore steps after hitting the ball
-        if not episode_over and not self._hysr._ball_status.min_distance_ball_racket:
-            return self.step(action_orig)
+        # if not episode_over and not self._hysr._ball_status.min_distance_ball_racket:
+        #     return self.step(action_orig)
 
         # logging
         self.n_steps += 1
@@ -445,6 +452,9 @@ class HysrGoalEnv(gym_robotics.GoalEnv):
                 self._logger.record("max_ball_velocity", self._hysr._ball_status.max_ball_velocity)
                 # self._logger.dump()
 
+        self.episode_over = episode_over
+        self.action_orig = action_orig.copy()
+
         # formatting observation in a format suitable for gym goal env
         return obs, reward, episode_over, {}
 
@@ -455,6 +465,8 @@ class HysrGoalEnv(gym_robotics.GoalEnv):
         if not self._accelerated_time:
             self._frequency_manager = None
         obs = self._get_obs(observation, self.last_action, False)
+        self.episode_over = False
+        self.action_orig = None
         return obs
 
     def dump_data(self, data_buffer):

@@ -71,6 +71,8 @@ class RLConfig:
         "num_layers",  # Number of layers in the network
         "num_hidden",  # Size of each layer (all layers have same size)
         "log_path",  # Destination for checkpoints and log files
+        "eval", # If set, the model is evaluated
+        "eval_episodes", # Number of episodes to evaluate the model
     )
 
     _params_ppo = _algo_params_ppo + _additional_params

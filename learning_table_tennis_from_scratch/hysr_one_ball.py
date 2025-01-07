@@ -270,15 +270,16 @@ class _BallBehavior:
             raise ValueError("type of ball behavior not specified")
         if len(not_false) > 1:
             raise ValueError("type of ball behavior over-specified")
-        if line:
+
+        if line is not False:
             self.type = self.LINE
             self.value = line
-        elif index:
+        elif index is not False:
             self.type = self.INDEX
             self.value = index
-        elif random:
+        elif random is not False:
             self.type = self.RANDOM
-        
+
         self._random_traj_index = index
 
     def get_trajectory(self):
@@ -297,7 +298,7 @@ class _BallBehavior:
             return trajectory
         # ball behavior is a randomly selected pre-recorded trajectory
         if self.type == self.RANDOM:
-            trajectory, self._random_traj_index = self._trajectory_reader.random_trajectory_index()
+            trajectory = self._trajectory_reader.random_trajectory()
             return trajectory
 
     def get(self):
@@ -1049,14 +1050,68 @@ class HysrOneBall:
         # with z = -10.0, to insure this always occurs.
         # see: function reset
         if self._ball_status.ball_position[2] < 0.75 or self._ball_status.ball_position[1] < -0.5:
-            if self._ball_status.ball_position[2] < 0.75:
-                v_ball = self._ball_status.ball_velocity
-                t_ball_since_075 = (0.75 - self._ball_status.ball_position[2]) / v_ball[2]
 
-                self.linear_approx_hitting_point = [self._ball_status.ball_position[i] +  v_ball[i] * t_ball_since_075 for i in range(3)]
-                # print("ball pos:", self._ball_status.ball_position)
-                # print("approx:", self.linear_approx_hitting_point)
-                self.linear_approx_hitting_point_set = True
+            print("vx:", np.round(self._ball_status.ball_velocity[0], 4), end=" ")
+            print("vy:", np.round(self._ball_status.ball_velocity[1], 4), end=" ")
+            print("vx / vy:", np.round(self._ball_status.ball_velocity[0] / self._ball_status.ball_velocity[1], 4), end=" ")
+
+            # if self._ball_status.ball_position[2] < 0.75:
+            #     v_ball = self._ball_status.ball_velocity
+            #     t_ball_since_075 = (0.75 - self._ball_status.ball_position[2]) / v_ball[2]
+
+            #     self.linear_approx_hitting_point = [self._ball_status.ball_position[i] +  v_ball[i] * t_ball_since_075 for i in range(3)]
+            #     # print("ball pos:", self._ball_status.ball_position)
+            #     # print("approx:", self.linear_approx_hitting_point)
+            #     self.linear_approx_hitting_point_set = True
+
+            # Consider gravity in the calculation
+            g = -9.81  # gravity constant
+            v0 = self._ball_status.ball_velocity[2]
+            y0 = self._ball_status.ball_position[2]
+            target_height = 0.75
+            
+            # Quadratic equation: y = y0 + v0*t + 0.5*g*t^2
+            # Solve for t when y = target_height
+            # Use the smaller positive time solution
+            a = 0.5 * g
+            b = v0
+            c = y0 - target_height
+            
+            discriminant = b*b - 4*a*c
+            if discriminant < 0:
+                return None  # Ball won't reach target height
+                
+            t1 = (-b + math.sqrt(discriminant)) / (2*a)
+            t2 = (-b - math.sqrt(discriminant)) / (2*a)
+            
+            # keep t with smaller absolute value
+            t = min(t1, t2, key=abs)
+
+            print("t:", np.round(t, 4), end=" ")
+            
+            # Calculate x, y positions considering gravity only affects z
+            hitting_point = [
+                self._ball_status.ball_position[0] + self._ball_status.ball_velocity[0] * t,
+                self._ball_status.ball_position[1] + self._ball_status.ball_velocity[1] * t,
+                target_height
+            ]
+
+            # calculate and set min_distance_ball_target
+            landing_distance_ball_target = _distance(hitting_point, self._ball_status.target_position)
+            if landing_distance_ball_target < self._ball_status.min_distance_ball_target:
+                self._ball_status.min_distance_ball_target = landing_distance_ball_target
+                print("min_ld:", np.round(landing_distance_ball_target, 4), end=" ")
+            else:
+                print("ld:", np.round(landing_distance_ball_target, 4), end=" ")
+
+            # print dx, dy, dz
+            print("dx:", np.round(hitting_point[0] - self._ball_status.ball_position[0], 4), end=" ")
+            print("dy:", np.round(hitting_point[1] - self._ball_status.ball_position[1], 4), end=" ")
+            print("dz:", np.round(hitting_point[2] - self._ball_status.ball_position[2], 4), end=" ")
+            print("dx / dy:", np.round((hitting_point[0] - self._ball_status.ball_position[0]) / (hitting_point[1] - self._ball_status.ball_position[1]), 4))
+
+            # set ball state to landing state
+            self._ball_status.ball_position = hitting_point
 
             return True
 
@@ -1191,10 +1246,21 @@ class HysrOneBall:
 
         # if episode over, computing related reward
         if episode_over:
+            print("epo", np.round(self._ball_status.min_distance_ball_target, 5), end=" ")
             reward = self._reward_function(
                 self._ball_status.min_distance_ball_racket,
                 self._ball_status.min_distance_ball_target,
                 self._ball_status.max_ball_velocity,
+            )
+
+        # recreate observation if episode is over
+        if episode_over:
+            observation = _Observation(
+                joint_positions,
+                joint_velocities,
+                _convert_pressures_out(pressures_ago, pressures_antago),
+                self._ball_status.ball_position,
+                self._ball_status.ball_velocity,
             )
 
         # next step can not be the first one
