@@ -412,7 +412,6 @@ class HysrGoalEnv(gym_robotics.GoalEnv):
         if self._hysr.linear_approx_hitting_point_set:
             # replace ball position with linear approx hitting point
             observation.ball_position = self._hysr.linear_approx_hitting_point
-            # print("observation.ball_position", observation.ball_position)
 
         # formatting observation in a format suitable for gym
         obs = self._get_obs(observation, action_casted, episode_over)
@@ -459,9 +458,8 @@ class HysrGoalEnv(gym_robotics.GoalEnv):
         return obs, reward, episode_over, {}
 
     def reset(self):
-        # print("--- reset goal env ---")
         self.init_episode()
-        observation = self._hysr.reset()
+        observation, _ = self._hysr.reset()
         if not self._accelerated_time:
             self._frequency_manager = None
         obs = self._get_obs(observation, self.last_action, False)

@@ -5,6 +5,7 @@ import json
 import os
 import pathlib
 import time
+import random
 
 from learning_table_tennis_from_scratch.models import run_stable_baselines
 from learning_table_tennis_from_scratch.models import run_openai_baselines

@@ -74,6 +74,19 @@ class RLConfig:
         "eval_episodes", # Number of episodes to evaluate the model
     )
 
+    _default_additional_params = {
+        "num_timesteps": 1e5,
+        "save_path": "",
+        "save_and_load_buffer": False,
+        "delete_buffer_file_after_loading": False,
+        "load_path": "",
+        "num_layers": 2,
+        "num_hidden": 64,
+        "log_path": "",
+        "eval": False,
+        "eval_episodes": 100,
+    }
+
     _params_ppo = _algo_params_ppo + _additional_params
     _params_sac = _algo_params_sac + _additional_params
     _params_sac_her = _algo_params_sac + _params_her + _additional_params
@@ -144,9 +157,13 @@ class RLConfig:
             try:
                 setattr(instance, s, conf[s])
             except Exception:
-                raise ValueError(
-                    "failed to find the attribute {} " "in {}".format(s, jsonpath)
-                )
+                if s in cls._default_additional_params:
+                    setattr(instance, s, cls._default_additional_params[s])
+                    print("Using default value '{}' for parameter '{}'.".format(cls._default_additional_params[s], s))
+                else:
+                    raise ValueError(
+                        "failed to find the attribute {} " "in {}".format(s, jsonpath)
+                    )
         return instance
 
     # FIXME Is this used anywhere?

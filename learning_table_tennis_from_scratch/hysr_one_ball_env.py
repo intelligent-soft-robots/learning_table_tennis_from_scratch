@@ -104,6 +104,7 @@ class HysrOneBallEnv(gym.Env):
         self._pressure_change_range = hysr_one_ball_config.pressure_change_range
         self._accelerated_time = hysr_one_ball_config.accelerated_time
         self._action_in_state = hysr_one_ball_config.action_in_state
+        self._goal_in_state = (hysr_one_ball_config.target_position_sampling_radius != 0)
         self._action_repeat_counter = hysr_one_ball_config.action_repeat_counter
 
         self._hysr = HysrOneBall(hysr_one_ball_config, reward_function)
@@ -135,6 +136,9 @@ class HysrOneBallEnv(gym.Env):
         )
         self._obs_boxes.add_box("ball_velocity", -10.0, +10.0, 3)
 
+        if self._goal_in_state:
+            self._obs_boxes.add_box("goal", -10.0, +10.0, 3)
+
         
 
         self.observation_space = self._obs_boxes.get_gym_box()
@@ -152,9 +156,6 @@ class HysrOneBallEnv(gym.Env):
         self.noise_facor = 0.02
 
         self.motion_gen = self.MotionGenerator()
-
-        self.running_mean_rew = 0
-
 
     def init_episode(self):
         self.n_steps = 0
@@ -241,6 +242,8 @@ class HysrOneBallEnv(gym.Env):
         self._obs_boxes.set_values_non_norm("ball_velocity", observation.ball_velocity)
         if self._action_in_state:
             self._obs_boxes.set_values_non_norm("action_copy", action_casted)
+        if self._goal_in_state:
+            self._obs_boxes.set_values_non_norm("goal", self._hysr._ball_status.target_position)
         self.last_observation = self._obs_boxes.get_normalized_values()
         return self.last_observation.copy()
 
@@ -249,6 +252,7 @@ class HysrOneBallEnv(gym.Env):
 
 
     def set_ball_id(self, ball_id):
+        # print("set ball id env", ball_id)
         self._hysr.set_ball_id(ball_id)
 
     def set_goal(self, goal):
@@ -635,14 +639,12 @@ class HysrOneBallEnv(gym.Env):
 
 
         if episode_over:
-            self.running_mean_rew = 0.95 * self.running_mean_rew + 0.05 * reward
-            print("running mean reward: ", self.running_mean_rew)
             # if len(self.opt_data[-1]) < 3:
             #    self.opt_data[-1].append(reward)
             #else:
             #    self.last_sample_plus_noise = reward
             # print("phi", self.phi, "Amp", self.Amp, "rew", reward)
-            if self._log_episodes: # and self.running_mean_rew > 0.65:
+            if self._log_episodes:
                 self.dump_data(self.data_buffer, self.data_buffer_short)
             self.n_eps += 1
             print("ep:", self.n_eps, " steps:", self.n_steps, " rew:", reward)
@@ -656,19 +658,21 @@ class HysrOneBallEnv(gym.Env):
                 self._logger.record("max_ball_velocity", self._hysr._ball_status.max_ball_velocity)
                 # self._logger.dump()
 
+        self.previous_observation = observation.copy()
+
         return observation, reward, episode_over, False, {}
 
     def reset(self, *, seed=None, options=None):
         if seed is not None:
             np.random.seed(seed)
         self.init_episode()
-        observation = self._hysr.reset()
+        observation, _ = self._hysr.reset()
         observation = self._convert_observation(observation, self.last_action)
         if not self._accelerated_time:
             self._frequency_manager = None
 
         self.previous_observation = observation.copy()
-        return observation
+        return observation, {}
 
     def dump_data(self, data_buffer, data_buffer_short=None):
         # Dump full trajectory

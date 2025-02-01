@@ -6,23 +6,61 @@
     "o80_pam_time_step":0.002,
     "mujoco_time_step":0.002,
     "algo_time_step":0.01,
-    "robot_position":[-0.05, 0.0, 1.21],
+    "use_vicon": false,
+    "robot_position": [
+        -0.025,
+        -0.025,
+        1.21
+    ],
     "robot_orientation": [0, 0, 0, 1],
     "table_position":[0.4, 1.57, 0.755],
     "table_orientation": [0, 0, 0, 1],
-    "starting_pressures":[[18000,18000],[10000,20000],[18000,18000],[18000,18000]],
+    "starting_pressures": [
+        [
+            15000,
+            15000
+        ],
+        [
+            11000,
+            20000
+        ],
+        [
+            13000,
+            17000
+        ],
+        [
+            15000,
+            15000
+        ]
+    ],
     "target_position":[0.0,2.5,0.78],
-    "target_position_sampling_radius":0.0,
-    "discrete_target_positions": false,
-    "reference_posture":[[15000,15000],[15000,15800],[15000,15000],[15000,15000]],
+    "target_position_sampling_radius":-1,
+    "reference_posture": [
+        [
+            15000,
+            15000
+        ],
+        [
+            11000,
+            20000
+        ],
+        [
+            13000,
+            17000
+        ],
+        [
+            15000,
+            15000
+        ]
+    ],
     "world_boundaries":{
         "min":[0.0,-1.0,0.17],
         "max":[1.6,3.5,1.5]
     },
-    "pam_config_file":"/home/sguist/Software/workspace/src/pam_configuration/config/pam_interface/pamy1/config/pam_sim.json",
-    "pressure_change_range":900,
+    "pam_config_file":"~/.mpi-is/pam/pam_interface/pamy1/config/pam_sim.json",
+    "pressure_change_range": 1800,
     "action_in_state":false,
-    "action_repeat_counter":1,
+    "action_repeat_counter": 2,
     "trajectory":-1,
     "accelerated_time":true,
     "instant_reset":true,

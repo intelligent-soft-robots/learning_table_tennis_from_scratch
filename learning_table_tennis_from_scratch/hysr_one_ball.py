@@ -76,8 +76,6 @@ def _sample_point_fixed(center):
     x_offset = random.choice(x_offsets)
     y_offset = random.choice(y_offsets)
     
-    print("x_offset: ", x_offset, "y_offset: ", y_offset)
-
     return [center[0] + x_offset, center[1] + y_offset, center[2]]
 
 def velocity_norm(velocity):
@@ -133,11 +131,12 @@ class HysrOneBallConfig:
     table_orientation: t.Any = oc.MISSING  # Rotation
     target_position: t.List[float] = oc.MISSING
     target_position_sampling_radius: float = oc.MISSING
-    discrete_target_positions: bool = oc.MISSING
     reference_posture: t.List[t.Any] = oc.MISSING  # t.List[t.Tuple[float, float]]
     starting_pressures: t.List[t.Any] = oc.MISSING  # t.List[t.Tuple[float, float]]
     world_boundaries: Boundaries3d = oc.MISSING
     pressure_change_range: int = oc.MISSING
+    action_in_state: bool = oc.MISSING
+    action_repeat_counter: int = oc.MISSING
     trajectory: int = oc.MISSING
     accelerated_time: bool = oc.MISSING
     save_data: bool = oc.MISSING
@@ -291,22 +290,21 @@ class _BallBehavior:
                 "_BallBehavior: the classmethod read_trajectories(group:str) "
                 "has to be called before the constructor"
             )
+        
+        not_false = [a for a in (line, index) if a is not None and a is not False] + ([random] if random else [])
 
-        not_false = [a for a in (line, index) if a is not None] + (
-            [random] if random else []
-        )
         if len(not_false) == 0:
             raise ValueError("type of ball behavior not specified")
         if len(not_false) > 1:
             raise ValueError("type of ball behavior over-specified")
 
-        if line is not False:
+        if line is not None and line is not False:
             self.type = self.LINE
             self.value = line
-        elif index is not False:
+        elif index is not None and index is not False:
             self.type = self.INDEX
             self.value = index
-        elif random is not False:
+        elif random is not None and random is not False:
             self.type = self.RANDOM
 
         self._random_traj_index = index
@@ -324,10 +322,11 @@ class _BallBehavior:
         # ball behavior is a specified pre-recorded trajectory
         if self.type == self.INDEX:
             trajectory = self._trajectory_reader.get_trajectory(self.value)
+            self._random_traj_index = self.value
             return trajectory
         # ball behavior is a randomly selected pre-recorded trajectory
         if self.type == self.RANDOM:
-            trajectory = self._trajectory_reader.random_trajectory()
+            trajectory, self._random_traj_index = self._trajectory_reader.random_trajectory(return_index = True)
             return trajectory
 
     def get(self):
@@ -503,7 +502,6 @@ class HysrOneBall:
         # where we want to shoot the ball
         self._target_position = hysr_config.target_position
         self._target_position_sampling_radius = hysr_config.target_position_sampling_radius
-        self._discrete_target_positions = hysr_config.discrete_target_positions
         self._goal = self._simulated_robot_handle.interfaces[SEGMENT_ID_GOAL]
 
         # to read all recorded trajectory files
@@ -998,15 +996,26 @@ class HysrOneBall:
                     break
 
     def sample_goal(self):
-        if self._discrete_target_positions:
-            return _sample_point_fixed(self._target_position)
-        elif self._target_position_sampling_radius > 0:
+        if self._target_position_sampling_radius > 0:
             return _sample_point_circle(self._target_position, self._target_position_sampling_radius)
+        elif self._target_position_sampling_radius <-0.0001:
+            # sample a point randomly on the opposite side of the table
+            x_table_center = self._hysr_config.table_position[0]
+            y_table_center = self._hysr_config.table_position[1]
+            # pick some delta around x_table_center
+            x_min = x_table_center - 0.7625
+            x_max = x_table_center + 0.7625
+            # keep some distance from the net
+            y_min = y_table_center + 0.1
+            y_max = y_table_center + 0.685 * 2
+            x_random = random.uniform(x_min, x_max)
+            y_random = random.uniform(y_min, y_max)
+            z_fixed = self._target_position[2]
+            return [x_random, y_random, z_fixed]
         else:
             return self._target_position
 
     def set_ball_id(self, ball_id):
-        # print(";", ball_id, ";", end=" ")
         self.set_ball_behavior(index=ball_id)
 
     def set_goal(self, goal):
@@ -1182,8 +1191,6 @@ class HysrOneBall:
             
             # keep t with smaller absolute value
             t = min(t1, t2, key=abs)
-
-            print("t:", np.round(t, 4), end=" ")
             
             # Calculate x, y positions considering gravity only affects z
             hitting_point = [
@@ -1196,15 +1203,6 @@ class HysrOneBall:
             landing_distance_ball_target = _distance(hitting_point, self._ball_status.target_position)
             if landing_distance_ball_target < self._ball_status.min_distance_ball_target:
                 self._ball_status.min_distance_ball_target = landing_distance_ball_target
-                print("min_ld:", np.round(landing_distance_ball_target, 4), end=" ")
-            else:
-                print("ld:", np.round(landing_distance_ball_target, 4), end=" ")
-
-            # print dx, dy, dz
-            print("dx:", np.round(hitting_point[0] - self._ball_status.ball_position[0], 4), end=" ")
-            print("dy:", np.round(hitting_point[1] - self._ball_status.ball_position[1], 4), end=" ")
-            print("dz:", np.round(hitting_point[2] - self._ball_status.ball_position[2], 4), end=" ")
-            print("dx / dy:", np.round((hitting_point[0] - self._ball_status.ball_position[0]) / (hitting_point[1] - self._ball_status.ball_position[1]), 4))
 
             # set ball state to landing state
             self._ball_status.ball_position = hitting_point
@@ -1291,12 +1289,26 @@ class HysrOneBall:
             self._pressure_commands.set(pressures, burst=False)
 
 
-        for _ in range(self._nb_robot_bursts):
-            # sending action pressures to real (or pseudo real) robot.
-            if self._accelerated_time:
-                # if accelerated times, running the pseudo real robot iterations
-                # (note : o80_pam expected to have started in bursting mode)
-                self._pressure_commands.set(pressures, burst=1) #self._nb_robot_bursts
+        assert self._nb_sim_bursts == 5
+
+        if self._accelerated_time:
+            for _ in range(self._nb_robot_bursts):
+                # sending action pressures to real (or pseudo real) robot.
+                if self._accelerated_time:
+                    # if accelerated times, running the pseudo real robot iterations
+                    # (note : o80_pam expected to have started in bursting mode)
+                    self._pressure_commands.set(pressures, burst=1) #self._nb_robot_bursts
+
+                # sending mirroring state to simulated robot(s)
+                _, _, joint_positions, joint_velocities = self._pressure_commands.read()
+                for mirroring_ in self._mirrorings:
+                    mirroring_.set(joint_positions, joint_velocities)
+
+                # having the simulated robot(s)/ball(s) performing the right number of
+                # iterations (note: simulated expected to run accelerated time)
+                self._parallel_burst.burst(1)   # self._nb_sim_bursts)
+        else:
+            self._pressure_commands.set(pressures, burst=False)
 
             # sending mirroring state to simulated robot(s)
             _, _, joint_positions, joint_velocities = self._pressure_commands.read()
@@ -1305,7 +1317,8 @@ class HysrOneBall:
 
             # having the simulated robot(s)/ball(s) performing the right number of
             # iterations (note: simulated expected to run accelerated time)
-            self._parallel_burst.burst(1)   # self._nb_sim_bursts)
+            self._parallel_burst.burst(self._nb_sim_bursts)
+
 
         def _update_ball_status(handle, segment_id, ball_status):
             # getting ball/racket contact information
@@ -1342,7 +1355,6 @@ class HysrOneBall:
 
         # if episode over, computing related reward
         if episode_over:
-            print("epo", np.round(self._ball_status.min_distance_ball_target, 5), end=" ")
             reward = self._reward_function(
                 self._ball_status.min_distance_ball_racket,
                 self._ball_status.min_distance_ball_target,

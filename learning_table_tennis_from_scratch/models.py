@@ -195,11 +195,8 @@ def run_stable_baselines(
     #     if done:
     #         obs = env.reset()
     #         i+=1
-    if rl_config.eval:
-        print("-- Evaluating policy --")
-        mean_reward, std_reward = evaluate_policy(model, env, n_eval_episodes=rl_config.eval_episodes)
-        print(f"mean_reward:{mean_reward:.2f} +/- {std_reward:.2f}")
-    else:
+
+    if rl_config.num_timesteps > 0:
         model.learn(
         total_timesteps=rl_config.num_timesteps,
         callback=checkpoint_callback,
@@ -213,6 +210,12 @@ def run_stable_baselines(
             if rl_config.save_and_load_buffer:
                 model.save_replay_buffer(rl_config.save_path+"_buf")
                 print("buffer saved to", rl_config.save_path+"_buf")
+
+    if rl_config.eval:
+        print("-- Evaluating policy --")
+        mean_reward, std_reward = evaluate_policy(model, env, n_eval_episodes=rl_config.eval_episodes)
+        print("-- Evaluation finished --")
+        print(f"Mean reward: {mean_reward:.2f} ± {std_reward:.2f} (std)")
 
     env.close()
 
