@@ -16,7 +16,6 @@ from tqdm import trange
 
 from learning_table_tennis_from_scratch.hysr_one_ball_env import HysrOneBallEnv
 
-
 def get_outpath(outdir: Path, job_id: str, intervention: int) -> Path:
     job_str = f"_job{job_id}" if job_id != "" else ""
     return outdir / f"data{job_str}_intervention{intervention:04d}.pkl"
@@ -100,7 +99,7 @@ if __name__ == "__main__":
             else env.get_wrapper_attr("_max_episode_steps")
         )
         intervention_trajectory = np.random.normal(
-            scale=args.intervention_std, size=(max_episode_length, 8)
+            scale=args.intervention_std, size=(max_episode_length, *env.action_space.shape)
         )
         observation_trajectories = []
         action_trajectories = []
