@@ -57,7 +57,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--outdir", type=Path, default=Path(__file__).parents[1] / "out" / "tcr_dataset"
     )
-    parser.add_argument("--job-id", type=str)
+    parser.add_argument("--job-id", type=str, default="")
     args = parser.parse_args()
 
     if not args.outdir.exists():
