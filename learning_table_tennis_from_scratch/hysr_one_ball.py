@@ -374,7 +374,7 @@ class _Observation:
 class HysrOneBall:
     def __init__(self, hysr_config, reward_function):
         
-        self.adjust_real_ball_into_future = True
+        self.adjust_real_ball_into_future = False
 
         self._hysr_config = hysr_config
 
@@ -1130,7 +1130,6 @@ class HysrOneBall:
     def init_real_ball_kalman_filter(self):
         # initialize tennicam client
         self.tennicam_frontend = tennicam_client.FrontEnd(TENNICAM_CLIENT_DEFAULT_SEGMENT_ID)
-        
         # # read first observation
         # iteration = self.tennicam_frontend.latest().get_iteration()
         # obs = self.tennicam_frontend.read(iteration)
