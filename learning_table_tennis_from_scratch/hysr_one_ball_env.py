@@ -109,7 +109,6 @@ class HysrOneBallEnv(gym.Env):
 
         self._hysr = HysrOneBall(hysr_one_ball_config, reward_function)
 
-
         self._obs_boxes = _ObservationSpace()
 
         
@@ -120,7 +119,7 @@ class HysrOneBallEnv(gym.Env):
             self._obs_boxes.add_box("action_copy", -1, +1, self._nb_dofs * 2)
 
         self._obs_boxes.add_box("robot_position", -math.pi, +math.pi, self._nb_dofs)
-        self._obs_boxes.add_box("robot_velocity", 0.0, 10.0, self._nb_dofs)
+        self._obs_boxes.add_box("robot_velocity", -10.0, 10.0, self._nb_dofs)
         self._obs_boxes.add_box(
             "robot_pressure",
             self._config.min_pressure(),
@@ -164,7 +163,7 @@ class HysrOneBallEnv(gym.Env):
             self.data_buffer_short = []
         # initialize initial action (for action diffs)
         self.last_action = self.get_init_action()
-        self._ball_hit = False  # To track if the ball has been hit
+        self._ball_hit = False
         self.first_step_after_hit = True
 
     def get_init_action(self):
@@ -577,65 +576,79 @@ class HysrOneBallEnv(gym.Env):
         # performing a step
         for _ in range(self._action_repeat_counter):
             observation, reward, episode_over = self._hysr.step(list(action))
+            
+
+            # formatting observation in a format suitable for gym
+            observation = self._convert_observation(observation, action_casted)
+
+            # imposing frequency to learning agent
+            if not self._accelerated_time:
+                self._frequency_manager.wait()
+
+            # Update ball hit status
+            if not self._ball_hit and self._hysr._ball_status.min_distance_ball_racket:
+                self._ball_hit = True
+
+            # Skip steps after hitting the ball if continue_after_hit is False
+            if not self._continue_after_hit and not episode_over and not self._hysr._ball_status.min_distance_ball_racket:
+                return self.step(action_orig)
+
+            # logging
+            self.n_steps += 1
+            if self._log_episodes:
+                # Prepare data to log
+                fk = self._hysr._mirrorings[0].get_fk()
+                rob_pos = fk[0]
+                rob_vel = fk[1]
+                racket_pos = fk[2]
+                racket_vel = fk[3]
+                racket_ori = fk[4]
+                timestamp = fk[5]
+                data_entry = (
+                    self.previous_observation.copy(),
+                    action_orig,
+                    action_casted,
+                    action.copy(),
+                    reward,
+                    episode_over,
+                    (rob_pos, rob_vel, racket_pos, racket_vel, racket_ori, timestamp),
+                    observation.copy(),
+                )
+                # Append to full trajectory
+                self.data_buffer.append(data_entry)
+                # Append to short trajectory if before hit, or first step after hit
+                if self._hysr._ball_status.min_distance_ball_racket or self.first_step_after_hit:
+                    if not self._hysr._ball_status.min_distance_ball_racket:
+                        self.first_step_after_hit = False
+                    self.data_buffer_short.append(data_entry)
+
+                # in final transition, keep the last observation and action, but replace reward, next observation and episode_over
+                if episode_over:
+                    self.data_buffer_short[-1] = (
+                        self.data_buffer_short[-1][0],
+                        self.data_buffer_short[-1][1],
+                        self.data_buffer_short[-1][2],
+                        self.data_buffer_short[-1][3],
+                        reward,
+                        episode_over,
+                        self.data_buffer_short[-1][6],
+                        observation.copy(),
+                    )
+
+            self.previous_observation = observation.copy()
+
             if episode_over:
                 break
 
-        # formatting observation in a format suitable for gym
-        observation = self._convert_observation(observation, action_casted)
+            
 
-        # imposing frequency to learning agent
-        if not self._accelerated_time:
-            self._frequency_manager.wait()
-
-        # Update ball hit status
-        if not self._ball_hit and self._hysr._ball_status.min_distance_ball_racket:
-            self._ball_hit = True
-
-        # Skip steps after hitting the ball if continue_after_hit is False
-        if not self._continue_after_hit and not episode_over and not self._hysr._ball_status.min_distance_ball_racket:
-            return self.step(action_orig)
-
-        # logging
-        self.n_steps += 1
-        if self._log_episodes:
-            # Prepare data to log
-            data_entry = (
-                self.previous_observation.copy(),
-                action_orig,
-                action_casted,
-                action.copy(),
-                reward,
-                episode_over,
-                # (rob_pos, rob_vel, racket_pos, racket_vel, racket_ori, timestamp),
-                observation.copy(),
-            )
-            # Append to full trajectory
-            self.data_buffer.append(data_entry)
-            # Append to short trajectory if before hit, or first step after hit
-            if self._hysr._ball_status.min_distance_ball_racket or self.first_step_after_hit:
-                if not self._hysr._ball_status.min_distance_ball_racket:
-                    self.first_step_after_hit = False
-                self.data_buffer_short.append(data_entry)
-
-            # in final transition, keep the last observation and action, but replace reward, next observation and episode_over
-            if episode_over:
-                self.data_buffer_short[-1] = (
-                    self.data_buffer_short[-1][0],
-                    self.data_buffer_short[-1][1],
-                    self.data_buffer_short[-1][2],
-                    self.data_buffer_short[-1][3],
-                    reward,
-                    episode_over,
-                    observation.copy(),
+            if self._continue_after_hit_with_smooth_approximation and not episode_over and not self._hysr._ball_status.min_distance_ball_racket:
+                new_action_orig = self.get_continued_action(
+                    hit_window=10,
+                    method='exp_decay'
                 )
-
-        if self._continue_after_hit_with_smooth_approximation and not episode_over and not self._hysr._ball_status.min_distance_ball_racket:
-            new_action_orig = self.get_continued_action(
-                hit_window=10,
-                method='exp_decay'
-            )
-            if new_action_orig is not None:
-                return self.step(new_action_orig)
+                if new_action_orig is not None:
+                    return self.step(new_action_orig)
 
 
         if episode_over:
@@ -658,7 +671,6 @@ class HysrOneBallEnv(gym.Env):
                 self._logger.record("max_ball_velocity", self._hysr._ball_status.max_ball_velocity)
                 # self._logger.dump()
 
-        self.previous_observation = observation.copy()
 
         return observation, reward, episode_over, False, {}
 
@@ -676,7 +688,7 @@ class HysrOneBallEnv(gym.Env):
 
     def dump_data(self, data_buffer, data_buffer_short=None):
         # Dump full trajectory
-        filename_full = "/tmp/ep_full_test_" + time.strftime("%Y%m%d-%H%M%S")
+        filename_full = "/tmp/ep_full_ppo_" + time.strftime("%Y%m%d-%H%M%S")
         dict_data_full = dict()
         with open(filename_full, "w") as json_data_full:
             dict_data_full["ob"] = [x[0].tolist() for x in data_buffer]
@@ -686,7 +698,7 @@ class HysrOneBallEnv(gym.Env):
             dict_data_full["prdes"] = [x[3] for x in data_buffer]
             dict_data_full["reward"] = [x[4] for x in data_buffer]
             dict_data_full["episode_over"] = [x[5] for x in data_buffer]
-            # dict_data_full["fk"] = [x[6] for x in data_buffer]
+            dict_data_full["fk"] = [x[6] for x in data_buffer]
             dict_data_full["random_traj_index"] = self._hysr._ball_behavior._random_traj_index
             json.dump(dict_data_full, json_data_full)
 
@@ -702,7 +714,7 @@ class HysrOneBallEnv(gym.Env):
                 dict_data_short["prdes"] = [x[3] for x in data_buffer_short]
                 dict_data_short["reward"] = [x[4] for x in data_buffer_short]
                 dict_data_short["episode_over"] = [x[5] for x in data_buffer_short]
-                # dict_data_short["fk"] = [x[6] for x in data_buffer_short]
+                dict_data_short["fk"] = [x[6] for x in data_buffer_short]
                 dict_data_short["random_traj_index"] = self._hysr._ball_behavior._random_traj_index
                 json.dump(dict_data_short, json_data_short)
 

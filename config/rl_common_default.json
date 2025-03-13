@@ -1,5 +1,5 @@
 {
-    "environment": "HysrOneBallEnv",
+    "environment": "HysrManyBallEnv",
     "algorithm": "ppo",
     "use_openai_baselines": false,
     "log_episodes": true,

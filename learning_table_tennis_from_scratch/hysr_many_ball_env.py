@@ -1,11 +1,10 @@
 import json
 import math
 import time
-from typing import Dict, Union
 from collections import OrderedDict
-from typing import Any, Dict, Optional, Union
+from typing import Dict, Union
 
-import gym
+import gymnasium as gym
 import numpy as np
 import o80
 import pam_interface
@@ -13,13 +12,13 @@ import pam_interface
 from .hysr_one_ball import HysrOneBall, HysrOneBallConfig
 from .rewards import JsonReward
 
+from scipy.interpolate import make_interp_spline
 
 def sat(x,lmin,lmax):
         y=min(max(x, lmin), lmax)
         return y
 
 class _ObservationSpace:
-
     # the model does not support gym Dict or Tuple spaces
     # which is very inconvenient. This class implements
     # something similar to a Dict space, but which can
@@ -89,7 +88,6 @@ class HysrManyBallEnv(gym.Env):
         log_episodes=False,
         logger=None,
     ):
-
         super().__init__()
 
         self._log_episodes = log_episodes
@@ -106,26 +104,16 @@ class HysrManyBallEnv(gym.Env):
         self._algo_time_step = hysr_one_ball_config.algo_time_step
         self._pressure_change_range = hysr_one_ball_config.pressure_change_range
         self._accelerated_time = hysr_one_ball_config.accelerated_time
+        self._goal_in_state = (hysr_one_ball_config.target_position_sampling_radius != 0)
         self._action_repeat_counter = hysr_one_ball_config.action_repeat_counter
 
         self._hysr = HysrOneBall(hysr_one_ball_config, reward_function)
 
-        self.delta_p = hysr_one_ball_config.delta_p
-        self.delta_p_p0_is_action = hysr_one_ball_config.delta_p_p0_is_action
-        self.delta_p_p0_value = hysr_one_ball_config.delta_p_p0_value
-        self.delta_u_init = hysr_one_ball_config.delta_u_init
-
-        if self.delta_p and not self.delta_p_p0_is_action:
-            self.action_space = gym.spaces.Box(
-                low=-1.0, high=+1.0, shape=(self._nb_dofs,), dtype=np.float32
-            )
-        else:
-            self.action_space = gym.spaces.Box(
-                low=-1.0, high=+1.0, shape=(self._nb_dofs * 2,), dtype=np.float32
-            )
-
         self._obs_boxes = _ObservationSpace()
-        self._hs_boxes = _ObservationSpace()
+        
+        self.action_space = gym.spaces.Box(
+            low=-1.0, high=+1.0, shape=(self._nb_dofs * 2,), dtype=np.float32
+        )
 
         self._obs_boxes.add_box("robot_position", -math.pi, +math.pi, self._nb_dofs)
         self._obs_boxes.add_box("robot_velocity", -10.0, 10.0, self._nb_dofs)
@@ -144,11 +132,12 @@ class HysrManyBallEnv(gym.Env):
         )
         self._obs_boxes.add_box("ball_velocity", -10.0, +10.0, 3)
 
-        self.observation_space = gym.spaces.Dict(
-            {
-            "observation": self._obs_boxes.get_gym_box(),
-            }
-        )
+        if self._goal_in_state:
+            self._obs_boxes.add_box("goal", -10.0, +10.0, 3)
+
+        
+
+        self.observation_space = self._obs_boxes.get_gym_box()
 
         if not self._accelerated_time:
             self._frequency_manager = o80.FrequencyManager(
@@ -161,26 +150,30 @@ class HysrManyBallEnv(gym.Env):
 
     def init_episode(self):
         self.n_steps = 0
-        self.data_buffer = []
-        self.extra_data_buffer = [[] for _ in range(self._hysr._hysr_config.extra_balls_per_set)]
+
+        if self._log_episodes:
+            self.data_buffer = []
+            self.extra_data_buffer = [[] for _ in range(self._hysr._hysr_config.extra_balls_per_set)]
+
+        if self.n_eps == 0:
+            print("---HysrManyBallEnv with {} extra balls---".format(self._hysr._hysr_config.extra_balls_per_set))
 
         # initialize initial action (for action diffs)
-        self.last_action = np.zeros(self._nb_dofs * 2, dtype=np.float32)
+        self.last_action = self.get_init_action()
+        self._ball_hit = False
+
+    def get_init_action(self):
+        init_action = np.zeros(self._nb_dofs * 2, dtype=np.float32)
         starting_pressures = self._hysr.get_starting_pressures()
         for dof in range(self._nb_dofs):
-            if self.delta_p:
-                if self.delta_p_p0_is_action:
-                    self.last_action[2 * dof] = self.delta_u_init[dof] #+ self.n_eps/1000 * (dof == 1)
-                else:
-                    self.last_action[dof] = self.delta_u_init[dof] #+ self.n_eps/1000 * (dof == 1)
-
-            else:
-                self.last_action[2 * dof] = self._reverse_scale_pressure(
-                    dof, True, starting_pressures[dof][0]
-                )
-                self.last_action[2 * dof + 1] = self._reverse_scale_pressure(
-                    dof, False, starting_pressures[dof][1]
-                )
+            init_action[2 * dof] = self._reverse_scale_pressure(
+                dof, True, starting_pressures[dof][0]
+            )
+            init_action[2 * dof + 1] = self._reverse_scale_pressure(
+                dof, False, starting_pressures[dof][1]
+            )
+        return init_action
+        
 
     def _bound_pressure(self, dof, ago, value):
         if ago:
@@ -230,26 +223,6 @@ class HysrManyBallEnv(gym.Env):
                 - self._config.min_pressures_antago[dof]
             )
 
-    def _scale_pressure_delta_p(self, dof, ago, u, p0):
-        incorr = True
-        if ago:
-            pmin = self._config.min_pressures_ago[dof]
-            pmax = self._config.max_pressures_ago[dof]
-        else:
-            pmin = self._config.min_pressures_antago[dof]
-            pmax = self._config.max_pressures_antago[dof]
-        m=pmax-pmin
-        if incorr:
-            ddp=.5-sat(abs(p0-.5),0,.5)
-        else:
-            ddp=0
-        if ago:
-            p=sat(m*(p0+(1-ddp)*sat(u,-1,1))+pmin,pmin,pmax)
-        else:
-            p=sat(m*(p0-(1-ddp)*sat(u,-1,1))+pmin,pmin,pmax)
-        return p
-
-
     def _convert_observation(self, observation):
         self._obs_boxes.set_values_non_norm(
             "robot_position", observation.joint_positions
@@ -262,7 +235,21 @@ class HysrManyBallEnv(gym.Env):
         )
         self._obs_boxes.set_values_non_norm("ball_position", observation.ball_position)
         self._obs_boxes.set_values_non_norm("ball_velocity", observation.ball_velocity)
-        return self._obs_boxes.get_normalized_values()
+        if self._goal_in_state:
+            self._obs_boxes.set_values_non_norm("goal", self._hysr._ball_status.target_position)
+        self.last_observation = self._obs_boxes.get_normalized_values()
+        return self.last_observation.copy()
+
+
+
+
+
+    def set_ball_id(self, ball_id):
+        # print("set ball id env", ball_id)
+        self._hysr.set_ball_id(ball_id)
+
+    def set_goal(self, goal):
+        self._hysr.set_goal(goal)
 
     def _get_obs(self, state) -> Dict[str, Union[int, np.ndarray]]:
             """
@@ -270,11 +257,12 @@ class HysrManyBallEnv(gym.Env):
 
             :return: The current observation.
             """
-            return OrderedDict(
-                [
-                    ("observation", self._convert_observation(state)),
-                ]
-            )
+            # return OrderedDict(
+            #     [
+            #         ("observation", self._convert_observation(state)),
+            #     ]
+            # )
+            return self._convert_observation(state)
 
     def _get_extra_obs(self, extra_states) -> Dict[str, Union[int, np.ndarray]]:
             """
@@ -282,13 +270,14 @@ class HysrManyBallEnv(gym.Env):
 
             :return: The current observation.
             """
-            return [OrderedDict(
-                [
-                    ("observation", self._convert_observation(extra_state) ),
-                ]
-            )
-                for extra_state in extra_states
-            ]
+            # return [OrderedDict(
+            #     [
+            #         ("observation", self._convert_observation(extra_state) ),
+            #     ]
+            # )
+            #     for extra_state in extra_states
+            # ]
+            return [self._convert_observation(extra_state) for extra_state in extra_states]
 
 
     # remove transitions between the ball hitting the racket and the ball hitting the table as well as transitions after the end of the episode
@@ -299,17 +288,17 @@ class HysrManyBallEnv(gym.Env):
         for data_buffer in self.extra_data_buffer:
             obs_before_racket_hit = None
             action_before_racket_hit = None
-            for obs, action, reward, episode_over, previous_obs, min_distance_ball_racket in data_buffer:
+            for obs, action, _, _, reward, episode_over, _, previous_obs, min_distance_ball_racket in data_buffer:
                 if not episode_over and min_distance_ball_racket:   # normal transition
                     all_trans[idx].append((previous_obs, obs, action, reward, episode_over, [{}]))
                 elif not episode_over and not self._hysr._ball_status.min_distance_ball_racket:   # ball hit racket, but didn't cross table plane (episode_over is FALSE) -> do not add
-                    if not obs_before_racket_hit:
+                    if obs_before_racket_hit is None:
                         obs_before_racket_hit = previous_obs
                         action_before_racket_hit = action
-                elif episode_over and obs_before_racket_hit:  # episode over and ball hit
+                elif episode_over and obs_before_racket_hit is not None:  # episode over and ball hit
                     all_trans[idx].append((obs_before_racket_hit, obs, action_before_racket_hit, reward, episode_over, [{}]))
                     break
-                elif episode_over and not obs_before_racket_hit:  # episode over and ball not hit
+                elif episode_over and obs_before_racket_hit is None:  # episode over and ball not hit
                     all_trans[idx].append((previous_obs, obs, action, reward, episode_over, [{}]))
                     break
             idx += 1
@@ -326,11 +315,6 @@ class HysrManyBallEnv(gym.Env):
 
         if not self._accelerated_time and self._frequency_manager is None:
             self._frequency_manager = o80.FrequencyManager(1.0 / self._algo_time_step)
-
-        # pad action with zeros in case of delta_p approach to keep dimension of action
-        if self.delta_p and not self.delta_p_p0_is_action:
-            action_orig_delta_p = action
-            action = np.concatenate([action, np.zeros(np.shape(action))])
 
         action_orig = action.copy()
 
@@ -350,22 +334,11 @@ class HysrManyBallEnv(gym.Env):
         action_casted = action.copy()
 
         # put pressure in range as defined in parameters file
-        if not self.delta_p:
-            for dof in range(self._nb_dofs):
-                action[2 * dof] = self._scale_pressure(dof, True, action_casted[2 * dof])
-                action[2 * dof + 1] = (
-                    self._scale_pressure(dof, False, action_casted[2 * dof + 1])
-                )
-        else:
-            for dof in range(self._nb_dofs):
-                if self.delta_p_p0_is_action:
-                    p0 = action_casted[2*dof+1]
-                    value = action_casted[2*dof] * 2 - 1
-                else:
-                    p0 = self.delta_p_p0_value[dof]
-                    value = action_casted[dof] * 2 - 1
-                action[2 * dof] = self._scale_pressure_delta_p(dof, True, value, p0)
-                action[2 * dof+1] = self._scale_pressure_delta_p(dof, False, value, p0)
+        for dof in range(self._nb_dofs):
+            action[2 * dof] = self._scale_pressure(dof, True, action_casted[2 * dof])
+            action[2 * dof + 1] = (
+                self._scale_pressure(dof, False, action_casted[2 * dof + 1])
+            )
 
         # final target pressure (make sure that it is within bounds)
         for dof in range(self._nb_dofs):
@@ -375,69 +348,95 @@ class HysrManyBallEnv(gym.Env):
         # hysr takes a list of int, not float, as input
         action = [int(a) for a in action]
 
+        infos = {}
+        idx_ball_still_active = -1
+
+        obs = None
+        extra_obs = None
+
         # performing a step
         for _ in range(self._action_repeat_counter):
             observation, reward, episode_over, extra_observations, extra_rewards, extra_dones = self._hysr.step(list(action))
             all_episodes_over = episode_over and all(extra_dones)
+
+            # imposing frequency to learning agent
+            if not self._accelerated_time:
+                self._frequency_manager.wait()
+
+            # Ignore steps after hitting/missing all balls
+            idx_ball_still_active = -1
+            if not episode_over and not self._hysr._ball_status.min_distance_ball_racket:
+                idx = 0
+                for episode_over, min_distance_ball_racket in zip(extra_dones, self._hysr.extra_min_distance_ball_racket):
+                    if not episode_over and min_distance_ball_racket:
+                        idx_ball_still_active = idx
+                        break
+                    idx += 1
+                
+                if idx_ball_still_active == -1: # non of the balls can still be hit anymore 
+                    if not episode_over and not self._hysr._ball_status.min_distance_ball_racket:
+                        return self.step(action_orig)
+
+            obs = self._get_obs(observation)
+            extra_obs = self._get_extra_obs(extra_observations)
+
+            # logging
+            self.n_steps += 1
+            if self._log_episodes:
+                # Prepare data to log
+                fk = self._hysr._mirrorings[0].get_fk()
+                rob_pos = fk[0]
+                rob_vel = fk[1]
+                racket_pos = fk[2]
+                racket_vel = fk[3]
+                racket_ori = fk[4]
+                timestamp = fk[5]
+                data_entry = (
+                    self.previous_obs.copy(),
+                    action_orig,
+                    action_casted,
+                    action.copy(),
+                    reward,
+                    episode_over,
+                    (rob_pos, rob_vel, racket_pos, racket_vel, racket_ori, timestamp),
+                    obs.copy(),
+                    self._hysr._ball_status.min_distance_ball_racket
+                )
+                # Append to full trajectory
+                self.data_buffer.append(data_entry)
+
+                # add extra transitions
+                idx = 0
+                for extra_ob, extra_reward, extra_episode_over, extra_previous_obs, extra_min_distance_ball_racket in \
+                    zip(extra_obs, extra_rewards, extra_dones, self.previous_extra_obs, self._hysr.extra_min_distance_ball_racket):
+                    self.extra_data_buffer[idx].append(
+                        (
+                            extra_previous_obs.copy(),
+                            action_orig,
+                            None,
+                            None,
+                            extra_reward,
+                            extra_episode_over,
+                            None,
+                            extra_ob,
+                            extra_min_distance_ball_racket
+                        )
+                    )
+                    idx += 1
+                infos = {}
+
+            self.previous_extra_obs = extra_obs.copy()
+            self.previous_obs = obs = obs.copy()           
+
+            all_episodes_over = episode_over and all(extra_dones)
+
+            # temporary fix for ppo: also use old action if main ball was hit
+            if not self._hysr._ball_status.min_distance_ball_racket and not episode_over:
+                return self.step(action_orig)
+
             if all_episodes_over:
                 break
 
-        # imposing frequency to learning agent
-        if not self._accelerated_time:
-            self._frequency_manager.wait()
-
-        # Ignore steps after hitting/missing all balls
-        idx_ball_still_active = -1
-        if not episode_over and not self._hysr._ball_status.min_distance_ball_racket:
-            idx = 0
-            for episode_over, min_distance_ball_racket in zip(extra_dones, self._hysr.extra_min_distance_ball_racket):
-                if not episode_over and min_distance_ball_racket:
-                    idx_ball_still_active = idx
-                    break
-                idx += 1
-            
-            if idx_ball_still_active == -1: # non of the balls still can be hit anymore 
-                if not episode_over and not self._hysr._ball_status.min_distance_ball_racket:
-                    if self.delta_p and not self.delta_p_p0_is_action:
-                        return self.step(action_orig_delta_p)
-                    else:
-                        return self.step(action_orig)
-
-        obs = self._get_obs(observation)
-        extra_obs = self._get_extra_obs(extra_observations)
-
-        # logging
-        self.n_steps += 1
-        self.data_buffer.append(
-            (
-                obs,
-                action_orig_delta_p if self.delta_p and not self.delta_p_p0_is_action else action_orig,
-                reward,
-                episode_over,
-                self.previous_obs,
-                self._hysr._ball_status.min_distance_ball_racket
-            )
-        )
-
-        # add extra transitions
-        idx = 0
-        for extra_ob, extra_reward, extra_episode_over, extra_previous_obs, extra_min_distance_ball_racket in \
-            zip(extra_obs, extra_rewards, extra_dones, self.previous_extra_obs, self._hysr.extra_min_distance_ball_racket):
-            self.extra_data_buffer[idx].append(
-                (extra_ob,
-                action_orig_delta_p if self.delta_p and not self.delta_p_p0_is_action else action_orig,
-                extra_reward,
-                extra_episode_over,
-                extra_previous_obs,
-                extra_min_distance_ball_racket)
-            )
-            idx += 1
-        infos = {}
-
-        self.previous_extra_obs = extra_obs
-        self.previous_obs = obs           
-
-        all_episodes_over = episode_over and all(extra_dones)
 
         if all_episodes_over:
             print("ep:", self.n_eps, " rew:", reward)
@@ -459,36 +458,42 @@ class HysrManyBallEnv(gym.Env):
         # use different ball for observation if main ball not active anymore
         if idx_ball_still_active!=-1:
             obs = extra_obs[idx_ball_still_active]
-            reward = extra_rewards[idx_ball_still_active]
+            # reward = 0 #extra_rewards[idx_ball_still_active]
         else:
             self.n_steps_on_policy += 1
-
 
         if not all_episodes_over:
             reward = 0
 
-        return obs, reward, all_episodes_over, infos
+        return obs, reward, all_episodes_over, False, infos
 
-    def reset(self):
+    def reset(self, *, seed=None, options=None):
+        if seed is not None:
+            np.random.seed(seed)
         self.init_episode()
         observation, extra_observations = self._hysr.reset()
         obs = self._get_obs(observation)
         extra_obs = self._get_extra_obs(extra_observations)
         if not self._accelerated_time:
             self._frequency_manager = None
-        self.previous_extra_obs = extra_obs
-        self.previous_obs = obs
-        return obs
+        self.previous_extra_obs = extra_obs.copy()
+        self.previous_obs = obs.copy()
+        return obs, {}
 
     def dump_data(self, data_buffer):
-        filename = "/tmp/ep_" + time.strftime("%Y%m%d-%H%M%S")
-        dict_data = dict()
+        filename = "/tmp/ep_ppo_" + time.strftime("%Y%m%d-%H%M%S")
+        dict_data_full = dict()
         with open(filename, "w") as json_data:
-            dict_data["ob"] = [x[0].tolist() for x in data_buffer]
-            dict_data["action_orig"] = [x[1].tolist() for x in data_buffer]
-            dict_data["reward"] = [x[2] for x in data_buffer]
-            dict_data["episode_over"] = [x[3] for x in data_buffer]
-            json.dump(dict_data, json_data)
+            dict_data_full["ob"] = [x[0].tolist() for x in data_buffer]
+            dict_data_full["next_ob"] = [x[7].tolist() for x in data_buffer]
+            dict_data_full["action_orig"] = [x[1].tolist() for x in data_buffer]
+            dict_data_full["action_casted"] = [x[2] for x in data_buffer]
+            dict_data_full["prdes"] = [x[3] for x in data_buffer]
+            dict_data_full["reward"] = [x[4] for x in data_buffer]
+            dict_data_full["episode_over"] = [x[5] for x in data_buffer]
+            dict_data_full["fk"] = [x[6] for x in data_buffer]
+            dict_data_full["random_traj_index"] = self._hysr._ball_behavior._random_traj_index
+            json.dump(dict_data_full, json_data)
 
     def close(self):
         self._hysr.close()

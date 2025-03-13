@@ -1143,7 +1143,9 @@ class HysrOneBall:
 
 
 
-    def _episode_over(self):
+    def _episode_over(self, ball_status=None):
+        if ball_status is None:
+            ball_status = self._ball_status
         # if self._nb_steps_per_episode is positive,
         # exiting based on the number of steps
         if self._nb_steps_per_episode > 0:
@@ -1159,20 +1161,18 @@ class HysrOneBall:
         # note : all prerecorded trajectories are added a last ball position
         # with z = -10.0, to insure this always occurs.
         # see: function reset
-        if self._ball_status.ball_position[2] < self._hysr_config.target_position[2] - 0.01:
-            # if self._ball_status.ball_position[2] < 0.75:
-            #     v_ball = self._ball_status.ball_velocity
-            #     t_ball_since_075 = (0.75 - self._ball_status.ball_position[2]) / v_ball[2]
+        if ball_status.ball_position[2] < self._hysr_config.target_position[2] - 0.01:
+            # if ball_status.ball_position[2] < 0.75:
+            #     v_ball = ball_status.ball_velocity
+            #     t_ball_since_075 = (0.75 - ball_status.ball_position[2]) / v_ball[2]
 
-            #     self.linear_approx_hitting_point = [self._ball_status.ball_position[i] +  v_ball[i] * t_ball_since_075 for i in range(3)]
-            #     # print("ball pos:", self._ball_status.ball_position)
-            #     # print("approx:", self.linear_approx_hitting_point)
+            #     self.linear_approx_hitting_point = [ball_status.ball_position[i] +  v_ball[i] * t_ball_since_075 for i in range(3)]
             #     self.linear_approx_hitting_point_set = True
 
             # Consider gravity in the calculation
             g = -9.81  # gravity constant
-            v0 = self._ball_status.ball_velocity[2]
-            y0 = self._ball_status.ball_position[2]
+            v0 = ball_status.ball_velocity[2]
+            y0 = ball_status.ball_position[2]
             target_height = 0.75
             
             # Quadratic equation: y = y0 + v0*t + 0.5*g*t^2
@@ -1194,18 +1194,18 @@ class HysrOneBall:
             
             # Calculate x, y positions considering gravity only affects z
             hitting_point = [
-                self._ball_status.ball_position[0] + self._ball_status.ball_velocity[0] * t,
-                self._ball_status.ball_position[1] + self._ball_status.ball_velocity[1] * t,
+                ball_status.ball_position[0] + ball_status.ball_velocity[0] * t,
+                ball_status.ball_position[1] + ball_status.ball_velocity[1] * t,
                 target_height
             ]
 
             # calculate and set min_distance_ball_target
-            landing_distance_ball_target = _distance(hitting_point, self._ball_status.target_position)
-            if landing_distance_ball_target < self._ball_status.min_distance_ball_target:
-                self._ball_status.min_distance_ball_target = landing_distance_ball_target
+            landing_distance_ball_target = _distance(hitting_point, ball_status.target_position)
+            if landing_distance_ball_target < ball_status.min_distance_ball_target:
+                ball_status.min_distance_ball_target = landing_distance_ball_target
 
             # set ball state to landing state
-            self._ball_status.ball_position = hitting_point
+            ball_status.ball_position = hitting_point
 
             return True
 
@@ -1237,47 +1237,7 @@ class HysrOneBall:
         # getting information about simulated ball
         _, ball_position, ball_velocity = self._ball_communication.get()
 
-        # getting information about extra simulated balls
-        if self._extra_balls_frontend is not None:
-
-            nb_balls = self._hysr_config.extra_balls_per_set
-
-            observation = self._extra_balls_frontend.latest()
-
-            robot_cartesian_position = observation.get_extended_state().robot_position
-            states = observation.get_observed_states()
-            contacts = observation.get_extended_state().contacts
-            extra_ball_positions = [states.get(index).get_position() for index in range(nb_balls)]
-            extra_ball_velocities = [states.get(index).get_velocity() for index in range(nb_balls)]
-
-            self.extra_contacts = [self.extra_contacts[index] or contacts[index] for index in range(nb_balls) ]
-            self.extra_min_distance_ball_racket = [None if self.extra_contacts[index]
-                                            else _distance(extra_ball_positions[index], robot_cartesian_position) if not self.extra_min_distance_ball_racket[index] 
-                                            else min([distance(extra_ball_positions[index], robot_cartesian_position), self.extra_min_distance_ball_racket[index]])
-                                            for index in range(nb_balls)]
-
-            self.extra_min_distance_ball_target = [None if not self.extra_contacts[index]
-                                            else _distance(extra_ball_positions[index], self._target_position) if not self.extra_min_distance_ball_racket[index] 
-                                            else min([_distance(extra_ball_positions[index], self._target_position), self.extra_min_distance_ball_racket[index]])
-                                            for index in range(nb_balls)]
-
-            self.extra_max_ball_velocity = [None if not self.extra_contacts[index]
-                                            else _velocity_norm(extra_ball_velocities[index]) if not self.extra_max_ball_velocity[index] 
-                                            else max([_velocity_norm(extra_ball_velocities[index]), self.extra_max_ball_velocity[index]])
-                                            for index in range(nb_balls)]
-
-
-            extra_dones =   [(self._nb_steps_per_episode>0 and self._step_number>= self._nb_steps_per_episode)
-                        or (self._nb_steps_per_episode<=0 and (states.get(index).get_position()[2] < 0.75 or states.get(index).get_position()[2] < -0.5))
-                        or self.extra_dones_before[index]
-                        for index in range(nb_balls)]
-
-            self.extra_dones_before = extra_dones.copy()
-
-            extra_rewards = [0 if not extra_dones[index]
-                    else self._reward_function(self.extra_min_distance_ball_racket[index], self.extra_min_distance_ball_target[index], self.extra_max_ball_velocity[index])
-                        for index in range(nb_balls)
-                ]
+        
 
         # convert action [ago1,antago1,ago2] to list suitable for
         # o80 ([(ago1,antago1),(),...])
@@ -1289,7 +1249,7 @@ class HysrOneBall:
             self._pressure_commands.set(pressures, burst=False)
 
 
-        assert self._nb_sim_bursts == 5
+        # assert self._nb_sim_bursts == 5
 
         if self._accelerated_time:
             for _ in range(self._nb_robot_bursts):
@@ -1334,6 +1294,46 @@ class HysrOneBall:
         )
         for ball in self._extra_balls:
             _update_ball_status(ball.handle, ball.segment_id, ball.ball_status)
+
+        # getting information about extra simulated balls
+        if self._extra_balls_frontend is not None:
+
+            nb_balls = self._hysr_config.extra_balls_per_set
+
+            observation = self._extra_balls_frontend.latest()
+
+            robot_cartesian_position = observation.get_extended_state().robot_position
+            states = observation.get_observed_states()
+            contacts = observation.get_extended_state().contacts
+            extra_ball_positions = [states.get(index).get_position() for index in range(nb_balls)]
+            extra_ball_velocities = [states.get(index).get_velocity() for index in range(nb_balls)]
+
+            self.extra_contacts = [self.extra_contacts[index] or contacts[index] for index in range(nb_balls) ]
+            self.extra_min_distance_ball_racket = [None if self.extra_contacts[index]
+                                            else _distance(extra_ball_positions[index], robot_cartesian_position) if not self.extra_min_distance_ball_racket[index] 
+                                            else min([distance(extra_ball_positions[index], robot_cartesian_position), self.extra_min_distance_ball_racket[index]])
+                                            for index in range(nb_balls)]
+
+            self.extra_min_distance_ball_target = [None if not self.extra_contacts[index]
+                                            else _distance(extra_ball_positions[index], self._target_position) if not self.extra_min_distance_ball_racket[index] 
+                                            else min([_distance(extra_ball_positions[index], self._target_position), self.extra_min_distance_ball_racket[index]])
+                                            for index in range(nb_balls)]
+
+            self.extra_max_ball_velocity = [None if not self.extra_contacts[index]
+                                            else _velocity_norm(extra_ball_velocities[index]) if not self.extra_max_ball_velocity[index] 
+                                            else max([_velocity_norm(extra_ball_velocities[index]), self.extra_max_ball_velocity[index]])
+                                            for index in range(nb_balls)]
+
+            extra_dones =   [self._episode_over(ball.ball_status) for ball in self._extra_balls]
+
+            extra_dones = [self.extra_dones_before[index] or extra_dones[index] for index in range(nb_balls)]
+                        
+            self.extra_dones_before = extra_dones.copy()
+
+            extra_rewards = [0 if not extra_dones[index]
+                    else self._reward_function(self.extra_min_distance_ball_racket[index], self.extra_min_distance_ball_target[index], self.extra_max_ball_velocity[index])
+                        for index in range(nb_balls)
+                ]
 
         # moving the hit point to the minimal observed distance
         # between ball and target (post racket hit)
