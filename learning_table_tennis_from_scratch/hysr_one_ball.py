@@ -560,6 +560,26 @@ class HysrOneBall:
 
         # reward configuration
         self._reward_function = reward_function
+        if hasattr(reward_function, 'reward_function_type'):
+            self._reward_function_type = reward_function.reward_function_type
+        else:
+            self._reward_function_type = "one_ball_reward"  # default to standard rewards
+
+        # If using exploration rewards, update the table bounds based on table position
+        if self._reward_function_type == "reward_many_balls_exploration":
+            table_length = 2.74
+            table_width = 1.525
+            table_center_x = hysr_config.table_position[0]
+            table_center_y = hysr_config.table_position[1]
+            x_min = table_center_x - 0.7625
+            x_max = table_center_x + 0.7625
+            # keep some distance from the net
+            y_min = table_center_y + 0.1
+            y_max = table_center_y + 0.685 * 2
+
+            # Update the table bounds in the reward function
+            table_bounds = ((x_min, x_max), (y_min, y_max))
+            self._reward_function.table_bounds = table_bounds
 
         # to get information regarding the ball
         # (instance of o80_pam.o80_ball.o80Ball)
@@ -1097,6 +1117,23 @@ class HysrOneBall:
         self.extra_max_ball_velocity = [0]*self._hysr_config.extra_balls_per_set
         self.extra_dones_before = [False]*self._hysr_config.extra_balls_per_set
 
+        # Initialize storage for landing positions for reward calculation
+        # {ball_id: {"landing_position": [x,y,z], "min_distance_ball_racket": value, "max_ball_velocity": value}}
+        self.ball_landing_data = {}
+        # Main ball has ID 0
+        self.ball_landing_data[0] = {
+            "landing_position": None,
+            "min_distance_ball_racket": None,
+            "max_ball_velocity": None
+        }
+        # Extra balls start at ID 1
+        for i in range(self._hysr_config.extra_balls_per_set):
+            self.ball_landing_data[i+1] = {
+                "landing_position": None,
+                "min_distance_ball_racket": None,
+                "max_ball_velocity": None
+            }
+
         # checking the position of the robot, to see if it drifts
         # as episode increase (or if it not what is expected at all).
         # raise an exception if drifted too much).
@@ -1146,22 +1183,20 @@ class HysrOneBall:
     def _episode_over(self, ball_status=None):
         if ball_status is None:
             ball_status = self._ball_status
-        # if self._nb_steps_per_episode is positive,
-        # exiting based on the number of steps
-        if self._nb_steps_per_episode > 0:
-            if self._step_number >= self._nb_steps_per_episode:
-                return True
-            else:
-                return False
 
-        # otherwise exiting based on a threshold on the
-        # z position of the ball
+        # Determine the ball ID (0 for main ball, 1+ for extra balls)
+        ball_id = 0  # Default to main ball
+        for i, ball in enumerate(self._extra_balls):
+            if ball.ball_status == ball_status:
+                ball_id = i + 1
+                break
+ 
 
         # ball fell below the table
         # note : all prerecorded trajectories are added a last ball position
         # with z = -10.0, to insure this always occurs.
         # see: function reset
-        if ball_status.ball_position[2] < self._hysr_config.target_position[2] - 0.01:
+        if ball_status.ball_position[2] < self._hysr_config.target_position[2] - 0.01 or self.ball_landing_data[ball_id]["landing_position"] is not None:
             # if ball_status.ball_position[2] < 0.75:
             #     v_ball = ball_status.ball_velocity
             #     t_ball_since_075 = (0.75 - ball_status.ball_position[2]) / v_ball[2]
@@ -1184,7 +1219,7 @@ class HysrOneBall:
             
             discriminant = b*b - 4*a*c
             if discriminant < 0:
-                return None  # Ball won't reach target height
+                return True
                 
             t1 = (-b + math.sqrt(discriminant)) / (2*a)
             t2 = (-b - math.sqrt(discriminant)) / (2*a)
@@ -1201,18 +1236,39 @@ class HysrOneBall:
 
             # calculate and set min_distance_ball_target
             landing_distance_ball_target = _distance(hitting_point, ball_status.target_position)
-            if landing_distance_ball_target < ball_status.min_distance_ball_target:
+            if not ball_status.min_distance_ball_target:
                 ball_status.min_distance_ball_target = landing_distance_ball_target
+
+ 
+            # Only set landing data if not already set
+            if self.ball_landing_data[ball_id]["landing_position"] is None:
+                # print(f"Ball {ball_id}: Setting landing position to {hitting_point}")
+                self.ball_landing_data[ball_id] = {
+                    "landing_position": hitting_point,
+                    "min_distance_ball_racket": ball_status.min_distance_ball_racket,
+                    "max_ball_velocity": ball_status.max_ball_velocity
+                }
+            else:
+                # Debug print to see if landing point would change
+                diff = np.array(hitting_point) - np.array(self.ball_landing_data[ball_id]['landing_position'])
+                if np.linalg.norm(diff) > 0.5:
+                    print(f"Ball {ball_id}: Landing already set, diff: {diff}")
+
+                # replace hitting point with original landing point
+                hitting_point = self.ball_landing_data[ball_id]["landing_position"]
 
             # set ball state to landing state
             ball_status.ball_position = hitting_point
+            ball_status.ball_velocity = [0, 0, 0]
 
             return True
 
-        # in case the user called the method
-        # force_episode_over
         if self._force_episode_over:
             return True
+
+        if self._nb_steps_per_episode > 0:
+            if self._step_number >= self._nb_steps_per_episode:
+                return True
 
         return False
 
@@ -1280,7 +1336,7 @@ class HysrOneBall:
             self._parallel_burst.burst(self._nb_sim_bursts)
 
 
-        def _update_ball_status(handle, segment_id, ball_status):
+        def _update_ball_status(handle, segment_id, ball_status, ball_position, ball_velocity):
             # getting ball/racket contact information
             # note : racket_contact_information is an instance
             #        of context.ContactInformation
@@ -1290,10 +1346,8 @@ class HysrOneBall:
 
         # updating the status of all balls
         _update_ball_status(
-            self._simulated_robot_handle, SEGMENT_ID_BALL, self._ball_status
+            self._simulated_robot_handle, SEGMENT_ID_BALL, self._ball_status, ball_position, ball_velocity
         )
-        for ball in self._extra_balls:
-            _update_ball_status(ball.handle, ball.segment_id, ball.ball_status)
 
         # getting information about extra simulated balls
         if self._extra_balls_frontend is not None:
@@ -1307,6 +1361,12 @@ class HysrOneBall:
             contacts = observation.get_extended_state().contacts
             extra_ball_positions = [states.get(index).get_position() for index in range(nb_balls)]
             extra_ball_velocities = [states.get(index).get_velocity() for index in range(nb_balls)]
+
+            for i, ball in enumerate(self._extra_balls):
+                _update_ball_status(
+                    ball.handle, ball.segment_id, ball.ball_status,
+                    extra_ball_positions[i], extra_ball_velocities[i]
+                )
 
             self.extra_contacts = [self.extra_contacts[index] or contacts[index] for index in range(nb_balls) ]
             self.extra_min_distance_ball_racket = [None if self.extra_contacts[index]
@@ -1330,10 +1390,16 @@ class HysrOneBall:
                         
             self.extra_dones_before = extra_dones.copy()
 
-            extra_rewards = [0 if not extra_dones[index]
-                    else self._reward_function(self.extra_min_distance_ball_racket[index], self.extra_min_distance_ball_target[index], self.extra_max_ball_velocity[index])
-                        for index in range(nb_balls)
-                ]
+            self.extra_ball_positions = extra_ball_positions
+ 
+            if self._reward_function_type == "reward_many_balls_exploration":
+                extra_rewards = [0] * nb_balls
+            else:
+                # Standard reward function
+                extra_rewards = [0 if not extra_dones[index]
+                        else self._reward_function(self.extra_min_distance_ball_racket[index], self.extra_min_distance_ball_target[index], self.extra_max_ball_velocity[index])
+                            for index in range(nb_balls)
+                    ]
 
         # moving the hit point to the minimal observed distance
         # between ball and target (post racket hit)
@@ -1355,11 +1421,63 @@ class HysrOneBall:
 
         # if episode over, computing related reward
         if episode_over:
-            reward = self._reward_function(
-                self._ball_status.min_distance_ball_racket,
-                self._ball_status.min_distance_ball_target,
-                self._ball_status.max_ball_velocity,
-            )
+            all_episodes_over = all(extra_dones) if self._extra_balls_frontend is not None else True
+            if all_episodes_over:
+                if self._reward_function_type == "reward_many_balls_exploration":
+                    # For exploration reward, create ball data with all balls
+                    ball_data = []
+ 
+                    # Add main ball (ID 0)
+                    if self.ball_landing_data[0]["landing_position"] is not None:
+                        # Ball was hit and landed
+                        ball_data.append({
+                            "ball_id": 0,
+                            "min_distance_ball_racket": self.ball_landing_data[0]["min_distance_ball_racket"],
+                            "landing_position": self.ball_landing_data[0]["landing_position"],
+                            "max_ball_velocity": self.ball_landing_data[0]["max_ball_velocity"]
+                        })
+                    else:
+                        # Ball wasn't hit - use current data from ball_status
+                        ball_data.append({
+                            "ball_id": 0,
+                            "min_distance_ball_racket": self._ball_status.min_distance_ball_racket,
+                            "landing_position": None
+                        })
+                    
+                    # Add all extra balls (both landed and not landed)
+                    for idx in range(1, len(self.ball_landing_data)):
+                        if self.ball_landing_data[idx]["landing_position"] is not None:
+                            # Ball was hit and landed
+                            ball_data.append({
+                                "ball_id": idx,
+                                "min_distance_ball_racket": self.ball_landing_data[idx]["min_distance_ball_racket"],
+                                "landing_position": self.ball_landing_data[idx]["landing_position"],
+                                "max_ball_velocity": self.ball_landing_data[idx]["max_ball_velocity"]
+                            })
+                        elif hasattr(self, 'extra_min_distance_ball_racket') and len(self.extra_min_distance_ball_racket) > idx - 1:
+                            # Ball wasn't hit - include closest distance for penalty calculation
+                            ball_data.append({
+                                "ball_id": idx,
+                                "min_distance_ball_racket": self.extra_min_distance_ball_racket[idx - 1],
+                                "landing_position": None
+                            })
+                        else:
+                            # This shouldn't happen, but add a fallback with warning
+                            print(f"WARNING: Missing data for ball ID {idx} - using fallback values")
+                            ball_data.append({
+                                "ball_id": idx,
+                                "min_distance_ball_racket": 1.0,
+                                "landing_position": None
+                            })
+                    
+                    reward = self._reward_function(ball_data)
+                else:
+                    # Standard reward function
+                    reward = self._reward_function(
+                        self._ball_status.min_distance_ball_racket,
+                        self._ball_status.min_distance_ball_target,
+                        self._ball_status.max_ball_velocity,
+                    )
 
         # recreate observation if episode is over
         if episode_over:
@@ -1393,8 +1511,8 @@ class HysrOneBall:
                                 joint_positions,
                                 joint_velocities,
                                 _convert_pressures_out(pressures_ago, pressures_antago),
-                                extra_ball_positions[index],
-                                extra_ball_velocities[index],)
+                                self._extra_balls[index].ball_status.ball_position,
+                                self._extra_balls[index].ball_status.ball_velocity,)
                                 for index in range(nb_balls)]
             extra_transitions = [(extra_observations[index],
                                 extra_rewards[index],

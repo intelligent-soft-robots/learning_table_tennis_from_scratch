@@ -97,6 +97,12 @@ class HysrManyBallEnv(gym.Env):
 
         reward_function = JsonReward.get(reward_config_file)
 
+        # check if reward function has config object
+        if hasattr(reward_function, "config"):
+            self.normalization_constant = reward_function.config.normalization_constant
+        else:
+            self.normalization_constant = reward_function.normalization_constant
+
         self._config = pam_interface.JsonConfiguration(
             str(hysr_one_ball_config.pam_config_file)
         )
@@ -153,7 +159,9 @@ class HysrManyBallEnv(gym.Env):
 
         if self._log_episodes:
             self.data_buffer = []
+            self.ball_hit = False
             self.extra_data_buffer = [[] for _ in range(self._hysr._hysr_config.extra_balls_per_set)]
+            self.extra_ball_hit = [False for _ in range(self._hysr._hysr_config.extra_balls_per_set)]
 
         if self.n_eps == 0:
             print("---HysrManyBallEnv with {} extra balls---".format(self._hysr._hysr_config.extra_balls_per_set))
@@ -402,27 +410,75 @@ class HysrManyBallEnv(gym.Env):
                     obs.copy(),
                     self._hysr._ball_status.min_distance_ball_racket
                 )
-                # Append to full trajectory
-                self.data_buffer.append(data_entry)
+
+                skip_entry = False
+                if not episode_over and not self._hysr._ball_status.min_distance_ball_racket:
+                    if not self.ball_hit:
+                        self.ball_hit = True
+                    else:
+                        skip_entry = True
+
+                if len(self.data_buffer) > 0 and self.data_buffer[-1][5]:  # episode over
+                    skip_entry = True
+
+                if not skip_entry:
+                    if not episode_over or not self.ball_hit:
+                        self.data_buffer.append(data_entry)
+                    else:
+                        # replace last entry with new one
+                        self.data_buffer[-1] = (
+                            self.data_buffer[-1][0],
+                            self.data_buffer[-1][1],
+                            self.data_buffer[-1][2],
+                            self.data_buffer[-1][3],
+                            reward,
+                            episode_over,
+                            self.data_buffer[-1][6],
+                            obs.copy(),
+                            self.data_buffer[-1][8]
+                        )
 
                 # add extra transitions
-                idx = 0
+                idx = -1
                 for extra_ob, extra_reward, extra_episode_over, extra_previous_obs, extra_min_distance_ball_racket in \
                     zip(extra_obs, extra_rewards, extra_dones, self.previous_extra_obs, self._hysr.extra_min_distance_ball_racket):
-                    self.extra_data_buffer[idx].append(
-                        (
-                            extra_previous_obs.copy(),
-                            action_orig,
+                    idx += 1
+                    if not extra_episode_over and not extra_min_distance_ball_racket:
+                        if not self.extra_ball_hit[idx]:
+                            self.extra_ball_hit[idx] = True
+                        else:
+                            continue
+                    if len(self.extra_data_buffer[idx]) > 0 and self.extra_data_buffer[idx][-1][5]:  # episode over
+                        continue
+
+                    if not extra_episode_over or not self.extra_ball_hit[idx]:
+                        self.extra_data_buffer[idx].append(
+                            (
+                                extra_previous_obs.copy(),
+                                action_orig,
+                                None,
+                                None,
+                                extra_reward,
+                                extra_episode_over,
+                                (rob_pos, rob_vel, racket_pos, racket_vel, racket_ori, timestamp),
+                                extra_ob.copy(),
+                                extra_min_distance_ball_racket
+                            )
+                        )
+                    else:
+                        # replace last entry with new one
+                        self.extra_data_buffer[idx][-1] = (
+                            self.extra_data_buffer[idx][-1][0],
+                            self.extra_data_buffer[idx][-1][1],
                             None,
                             None,
                             extra_reward,
                             extra_episode_over,
-                            None,
-                            extra_ob,
+                            self.extra_data_buffer[idx][-1][6],
+                            extra_ob.copy(),
                             extra_min_distance_ball_racket
                         )
-                    )
-                    idx += 1
+
                 infos = {}
 
             self.previous_extra_obs = extra_obs.copy()
@@ -443,14 +499,19 @@ class HysrManyBallEnv(gym.Env):
             infos["trajectory"], infos["hsm_trajectories"] = self.get_reduced_episodes()
             if self._log_episodes:
                 self.dump_data(self.data_buffer)
+                for idx, extra_data_buffer in enumerate(self.extra_data_buffer):
+                    # ignore last buffer (main ball)
+                    if idx == len(self.extra_data_buffer) - 1:
+                        continue
+                    self.dump_data(extra_data_buffer, idx)
             if self._logger:
                 self._logger.record("eprew", reward)
                 self._logger.record("n_steps_on_policy", self.n_steps_on_policy)
                 self._logger.record("min_discante_ball_racket", self._hysr._ball_status.min_distance_ball_racket or 0)
                 self._logger.record("min_distance_ball_target_capped",
                     min(
-                        self._hysr._ball_status.min_distance_ball_target or self._hysr._reward_function.config.normalization_constant,
-                        self._hysr._reward_function.config.normalization_constant))
+                        self._hysr._ball_status.min_distance_ball_target or self.normalization_constant,
+                        self.normalization_constant))
                 self._logger.record("max_ball_velocity", self._hysr._ball_status.max_ball_velocity)
                 # self._logger.dump()
             self.n_eps += 1
@@ -480,8 +541,11 @@ class HysrManyBallEnv(gym.Env):
         self.previous_obs = obs.copy()
         return obs, {}
 
-    def dump_data(self, data_buffer):
-        filename = "/tmp/ep_ppo_" + time.strftime("%Y%m%d-%H%M%S")
+    def dump_data(self, data_buffer, index=None):
+        filename = "/tmp/" + "ppo" + time.strftime("%Y%m%d-%H%M%S")
+        if index is not None:
+            filename += "_" + str(index)
+        filename += "_" + str(np.random.randint(10000)) + ".json"
         dict_data_full = dict()
         with open(filename, "w") as json_data:
             dict_data_full["ob"] = [x[0].tolist() for x in data_buffer]

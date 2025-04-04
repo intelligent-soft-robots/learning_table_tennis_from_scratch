@@ -173,6 +173,21 @@ class JsonReward:
                     "in the json reward configuration "
                     "file: {}".format(attr, jsonpath)
                 )
+
+        reward_function_type = conf.get("reward_function", "one_ball_reward")
+
+        if reward_function_type == "reward_many_balls_exploration":
+
+            from .rewards_many_balls_exploration import PerBallIDEntropyChangeReward
+            table_bounds = ((0, 2), (0, 1))  # Default values
+            n_buckets_x = 4
+            n_buckets_y = 3
+
+            reward_func = PerBallIDEntropyChangeReward(table_bounds, n_buckets_x, n_buckets_y)
+            reward_func.reward_function_type = "reward_many_balls_exploration"
+            return reward_func
+
+        # Standard reward function
         smash = conf["smash"]
         normalization_constant = conf["normalization_constant"]
         rtt_cap = conf["rtt_cap"]
@@ -182,9 +197,10 @@ class JsonReward:
         distance_exponent = conf["distance_exponent"]
         sparse_reward_racket_hit = conf["sparse_reward_racket_hit"]
         config = RewardConfig(normalization_constant, rtt_cap, binary, sparse, bin_spa_radius, distance_exponent, sparse_reward_racket_hit)
-        if smash:
-            return SmashReward(config)
-        return Reward(config)
+        
+        reward_func = SmashReward(config) if smash else Reward(config)
+        reward_func.reward_function_type = "one_ball_reward"
+        return reward_func
 
     @staticmethod
     def default_path():

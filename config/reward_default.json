@@ -6,5 +6,6 @@
     "binary":false,
     "sparse":false,
     "sparse_reward_racket_hit": 1.0,
-    "bin_spa_radius":0.685
+    "bin_spa_radius":0.685,
+    "reward_function": "one_ball_reward"
 }
