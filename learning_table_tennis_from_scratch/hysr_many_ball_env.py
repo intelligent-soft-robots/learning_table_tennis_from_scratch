@@ -95,6 +95,8 @@ class HysrManyBallEnv(gym.Env):
 
         hysr_one_ball_config = HysrOneBallConfig.from_json(hysr_one_ball_config_file)
 
+        self._save_folder_traj = hysr_one_ball_config.save_folder_traj
+
         reward_function = JsonReward.get(reward_config_file)
 
         # check if reward function has config object
@@ -542,7 +544,7 @@ class HysrManyBallEnv(gym.Env):
         return obs, {}
 
     def dump_data(self, data_buffer, index=None):
-        filename = "/tmp/" + "ppo" + time.strftime("%Y%m%d-%H%M%S")
+        filename = self._save_folder_traj + "ppo" + time.strftime("%Y%m%d-%H%M%S")
         if index is not None:
             filename += "_" + str(index)
         filename += "_" + str(np.random.randint(10000)) + ".json"

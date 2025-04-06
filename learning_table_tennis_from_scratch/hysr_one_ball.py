@@ -141,6 +141,7 @@ class HysrOneBallConfig:
     accelerated_time: bool = oc.MISSING
     save_data: bool = oc.MISSING
     save_folder: str = "/tmp/"
+    save_folder_traj: str = "/tmp/"
     graphics_pseudo_real: bool = False
     graphics_simulation: bool = False
     graphics_extra_balls: bool = False

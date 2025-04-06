@@ -94,6 +94,8 @@ class HysrOneBallEnv(gym.Env):
 
         hysr_one_ball_config = HysrOneBallConfig.from_json(hysr_one_ball_config_file)
 
+        self._save_folder_traj = hysr_one_ball_config.save_folder_traj
+
         reward_function = JsonReward.get(reward_config_file)
 
         self._config = pam_interface.JsonConfiguration(
@@ -688,7 +690,9 @@ class HysrOneBallEnv(gym.Env):
 
     def dump_data(self, data_buffer, data_buffer_short=None):
         # Dump full trajectory
-        filename_full = "/tmp/ep_full_ppo_" + time.strftime("%Y%m%d-%H%M%S")
+        filename_full = self._save_folder_traj + "ppo" + time.strftime("%Y%m%d-%H%M%S")
+        filename_full += "_" + str(np.random.randint(10000)) + ".json"
+
         dict_data_full = dict()
         with open(filename_full, "w") as json_data_full:
             dict_data_full["ob"] = [x[0].tolist() for x in data_buffer]
