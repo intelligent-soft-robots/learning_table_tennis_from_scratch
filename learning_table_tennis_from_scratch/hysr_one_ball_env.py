@@ -1,6 +1,7 @@
 import json
 import math
 import time
+import os
 from collections import OrderedDict
 
 import gymnasium as gym
@@ -95,6 +96,8 @@ class HysrOneBallEnv(gym.Env):
         hysr_one_ball_config = HysrOneBallConfig.from_json(hysr_one_ball_config_file)
 
         self._save_folder_traj = hysr_one_ball_config.save_folder_traj
+        if not os.path.exists(self._save_folder_traj):
+            os.makedirs(self._save_folder_traj)
 
         reward_function = JsonReward.get(reward_config_file)
 
@@ -708,7 +711,7 @@ class HysrOneBallEnv(gym.Env):
 
         # Dump shorter trajectory if available
         if data_buffer_short is not None:
-            filename_short = "/tmp/ep_short_test_" + time.strftime("%Y%m%d-%H%M%S")
+            filename_short = filename_full.replace(".json", "_short.json")
             dict_data_short = dict()
             with open(filename_short, "w") as json_data_short:
                 dict_data_short["ob"] = [x[0].tolist() for x in data_buffer_short]

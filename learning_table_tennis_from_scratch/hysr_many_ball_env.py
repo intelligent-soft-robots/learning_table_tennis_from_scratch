@@ -1,6 +1,7 @@
 import json
 import math
 import time
+import os
 from collections import OrderedDict
 from typing import Dict, Union
 
@@ -96,6 +97,8 @@ class HysrManyBallEnv(gym.Env):
         hysr_one_ball_config = HysrOneBallConfig.from_json(hysr_one_ball_config_file)
 
         self._save_folder_traj = hysr_one_ball_config.save_folder_traj
+        if not os.path.exists(self._save_folder_traj):
+            os.makedirs(self._save_folder_traj)
 
         reward_function = JsonReward.get(reward_config_file)
 
