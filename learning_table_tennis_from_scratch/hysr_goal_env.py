@@ -4,7 +4,7 @@ import time
 from typing import Dict, Union
 from collections import OrderedDict
 
-import gym
+import gymmnasium as gym
 import gym_robotics
 import numpy as np
 import o80

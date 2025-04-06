@@ -8,7 +8,7 @@ from learning_table_tennis_from_scratch.rl_config import RLConfig
 from learning_table_tennis_from_scratch.rl_config import OpenAIRLConfig
 from learning_table_tennis_from_scratch.hysr_one_ball import HysrOneBallConfig
 
-import gym
+import gymnasium as gym
 
 def run_stable_baselines(
     reward_config_file,
