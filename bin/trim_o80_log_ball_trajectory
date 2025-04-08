@@ -1,0 +1,108 @@
+#!/usr/bin/env python3
+
+import sys
+import pathlib
+import o80_pam
+import matplotlib.pyplot as plt
+from lightargs import BrightArgs
+
+
+def _configure():
+    config = BrightArgs("Trim o80 log trajectory")
+    config.add_option("file_path", None, "input log file path", str)
+    config.add_option("output_path", "/tmp/", "path for trimmed log file and plot", str)
+    config.add_option("create_plot", False, "create plot of trimmed trajectory", bool)
+    config.add_option("max_ignored_balls", 0, "maximum number of undetected balls that are ignored", int)
+    change_all = False
+    finished = config.dialog(change_all, sys.argv[1:])
+    if not finished:
+        return None
+    return config
+
+
+def _run(config):
+    file_path = pathlib.Path(config.file_path)
+    output_path = pathlib.Path(config.output_path)
+    data = list(o80_pam.robot_ball_parser.parse(file_path))
+    trimmed_file_path = output_path / (file_path.name + ".log")
+    print("Writing to", trimmed_file_path)
+    ball_trajectory_started = False
+    ball_trajectory_ended = False
+    ball_trajectory_start_index = -1
+    ball_trajectory_stop_index = -1
+    ball_not_found_counter = 0
+    undetected_balls_idxs=[]
+    with trimmed_file_path.open(mode="w") as f:
+        for i in range(len(data)):
+            ball_values = data[i][0]
+            robot_values = data[i][1]
+
+            # ball detected, in front of ball gun and above min z -> start trajectory
+            if (
+                not ball_trajectory_started
+                and ball_values[0] > 0
+                and ball_values[2][1] < 3.1
+                and ball_values[2][1] > 2.5
+                and ball_values[2][2] > -0.5
+            ):
+                ball_trajectory_start_index = i
+                print("ball traj start:", ball_values[0])
+                ball_trajectory_started = True
+
+            # ball not detected anymore or below min z -> end trajectory
+            if (
+                ball_trajectory_started
+                and (ball_values[0]<0 and config.max_ignored_balls<1)
+                 or ball_values[2][2] < -0.5
+                 or (ball_not_found_counter>0 and ball_not_found_counter>=config.max_ignored_balls)
+            ):
+                print("ball traj end:", data[i - 1][0][0])
+                print("y:", ball_values[2][1] < 1)
+                ball_trajectory_ended = True
+                ball_trajectory_stop_index = i - 1
+                if config.create_plot:
+                    _plt(
+                        data,
+                        output_path / file_path.name,
+                        ball_trajectory_start_index,
+                        ball_trajectory_stop_index,
+                        undetected_balls_idxs
+                    )
+                break
+            elif ball_trajectory_started and ball_values[0]<0:
+                ball_not_found_counter +=1
+                undetected_balls_idxs.append(i)
+
+            # save trajectory
+            if ball_trajectory_started and not ball_trajectory_ended:
+                str_ = repr((ball_values, robot_values))
+                f.write(str_)
+                f.write("\n")
+        print("traj. len:", ball_trajectory_stop_index - ball_trajectory_start_index)
+        if ball_not_found_counter>0:
+            print("!!", ball_not_found_counter, "balls not detected...")
+
+
+def _plt(data, plot_file_path, ball_trajectory_start_index, ball_trajectory_stop_index, undetected_balls_idxs):
+    print(undetected_balls_idxs)
+    print(len(data))
+    balls_xyz = [[data[i][0][2][dim] for i in range(ball_trajectory_start_index, ball_trajectory_stop_index)] for dim in range(3)]
+    vels_xyz = [[data[i][0][3][dim] for i in range(ball_trajectory_start_index, ball_trajectory_stop_index)] for dim in range(3)]
+    balls_xyz_red = [[data[i][0][2][dim] for i in undetected_balls_idxs] for dim in range(3)]
+    _, ax = plt.subplots(3, 2)
+    ax[0][0].scatter(balls_xyz[1], balls_xyz[0])
+    ax[2][0].scatter(balls_xyz[1], balls_xyz[2])
+    ax[0][0].scatter(balls_xyz_red[1], balls_xyz_red[0], color='red')
+    ax[2][0].scatter(balls_xyz_red[1], balls_xyz_red[2], color='red')
+    ax[0][1].scatter(balls_xyz[1], vels_xyz[0])
+    ax[1][1].scatter(balls_xyz[1], vels_xyz[0])
+    ax[2][1].scatter(balls_xyz[1], vels_xyz[2])
+    plt.savefig(plot_file_path)
+
+
+if __name__ == "__main__":
+    config = _configure()
+    if config is None or not config.file_path:
+        print("Please provide file_path as command line argument.")
+    else:
+        _run(config)
