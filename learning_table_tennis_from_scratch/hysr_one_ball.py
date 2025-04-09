@@ -1041,6 +1041,7 @@ class HysrOneBall:
 
     def set_goal(self, goal):
         self._target_position = goal
+        self._ball_status.target_position = goal
 
     def reset(self):
         # what happens during reset does not correspond
@@ -1079,8 +1080,7 @@ class HysrOneBall:
         # going to starting pressure
         self._move_to_pressure(self._hysr_config.starting_pressures)
 
-        # moving the goal to the target position
-        self._goal.set(self._ball_status.target_position, [0, 0, 0])
+        
 
         # setting the ball behavior
         self.load_ball()
@@ -1110,6 +1110,10 @@ class HysrOneBall:
         for ball in self._extra_balls:
             ball.ball_status.target_position = self.sample_goal()
             ball.ball_status.reset()
+
+        # moving the goal to the target position
+        goal_position_vis = [self._ball_status.target_position[0], self._ball_status.target_position[1], self._ball_status.target_position[2] + 0.02]
+        self._goal.set(goal_position_vis, [0, 0, 0])
 
         # resetting extra balls
         self.extra_contacts = [False]*self._hysr_config.extra_balls_per_set
@@ -1289,7 +1293,8 @@ class HysrOneBall:
         ) = self._pressure_commands.read()
 
         # moving the goal to the target position
-        self._goal.set(self._ball_status.target_position, [0, 0, 0])
+        goal_position_vis = [self._ball_status.target_position[0], self._ball_status.target_position[1], self._ball_status.target_position[2] + 0.02]
+        self._goal.set(goal_position_vis, [0, 0, 0])
 
         # getting information about simulated ball
         _, ball_position, ball_velocity = self._ball_communication.get()
