@@ -1,0 +1,75 @@
+{
+    "paths": {
+      "dataset_folder_groups": {
+        "exploration": [
+          "/is/projects/isrlab/gcsl/data04/ppo_many_balls_expl_05_root_count/",
+          "/is/projects/isrlab/gcsl/data04/ppo_many_balls_expl_05_root_count/"
+        ]
+      },
+      "data_path": "",
+      "data_path_eval": "",
+      "log_file_path": "/home/sguist/Experiments/offline_tt/logs/logs_collect.csv",
+      "vsgcsl_path": "/home/sguist/Experiments/offline_tt",
+      "output_folder": "/home/sguist/Experiments/offline_tt/exp_04_many_balls_expl_05_twenty_percent_03_video"
+    },
+    "data_loading": {
+      "action_repeat_counter": 2,
+      "validation_split": 0.1
+    },
+    "agent_defaults": {
+      "CBCAgent": {
+        "n_hidden": 1024,
+        "n_layers": 2,
+        "dropout": 0.0,
+        "use_layer_norm": false
+      },
+      "NNAgent": {
+        "n_hidden": 1024,
+        "n_layers": 2
+      },
+      "NNAgentDeterministic": {
+        "n_hidden": 1024,
+        "n_layers": 2
+      }
+    },
+    "training_params": {
+      "patience": 100,
+      "max_grad_norm": 1.0,
+      "min_improvement": 0.01,
+      "sample_prob_buffer_collected_during_training": 0.0
+    },
+    "evaluation_params": {
+      "n_runs": 5
+    },
+    "dataset_experiment_settings": {
+      "agent_class_to_use": "CBCAgent",
+      "learning_rates": [3e-4],
+      "filters_to_test": [
+        [null, 50]
+      ],
+      "collect_during_training": 0,
+      "mode_specific": {
+        "train": {
+          "n_training_episodes": 25,
+          "n_evaluation_episodes": 10,
+          "n_samples": 1,
+          "batch_size": 1024,
+          "max_files": 500000000
+        },
+        "debug": {
+          "n_training_episodes": 2,
+          "n_evaluation_episodes": 2,
+          "n_samples": 2,
+          "batch_size": 32,
+          "max_files": 500
+        },
+        "video": {
+          "n_training_episodes": 10,
+          "n_evaluation_episodes": 2,
+          "n_samples": 1,
+          "batch_size": 1024,
+          "max_files": 1000000
+        }
+      }
+    }
+  }

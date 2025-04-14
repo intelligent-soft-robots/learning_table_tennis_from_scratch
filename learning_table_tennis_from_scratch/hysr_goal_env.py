@@ -10,6 +10,7 @@ import numpy as np
 import o80
 import pam_interface
 import random
+import os
 
 from .hysr_one_ball import HysrOneBall, HysrOneBallConfig
 from .rewards import JsonReward
@@ -94,6 +95,10 @@ class HysrGoalEnv(gym_robotics.GoalEnv):
 
         hysr_one_ball_config = HysrOneBallConfig.from_json(hysr_one_ball_config_file)
 
+        self._save_folder_traj = hysr_one_ball_config.save_folder_traj
+        if not os.path.exists(self._save_folder_traj):
+            os.makedirs(self._save_folder_traj)
+
         reward_function = JsonReward.get(reward_config_file)
 
         self._config = pam_interface.JsonConfiguration(
@@ -119,7 +124,7 @@ class HysrGoalEnv(gym_robotics.GoalEnv):
             self._obs_boxes.add_box("action_copy", -1, +1, self._nb_dofs * 2)
 
         self._obs_boxes.add_box("robot_position", -math.pi, +math.pi, self._nb_dofs)
-        self._obs_boxes.add_box("robot_velocity", 0.0, 10.0, self._nb_dofs)
+        self._obs_boxes.add_box("robot_velocity", -10.0, 10.0, self._nb_dofs)
         self._obs_boxes.add_box(
             "robot_pressure",
             self._config.min_pressure(),
@@ -390,9 +395,9 @@ class HysrGoalEnv(gym_robotics.GoalEnv):
 
         # put pressure in range as defined in parameters file
         for dof in range(self._nb_dofs):
-            action[2 * dof] = self._scale_pressure(dof, True, action[2 * dof])
+            action[2 * dof] = self._scale_pressure(dof, True, action_casted[2 * dof])
             action[2 * dof + 1] = (
-                self._scale_pressure(dof, False, action[2 * dof + 1])
+                self._scale_pressure(dof, False, action_casted[2 * dof + 1])
             )
 
         # final target pressure (make sure that it is within bounds)
@@ -406,37 +411,51 @@ class HysrGoalEnv(gym_robotics.GoalEnv):
         # performing a step
         for _ in range(self._action_repeat_counter):
             observation, reward, episode_over = self._hysr.step(list(action))
+            
+            # formatting observation in a format suitable for gym
+            obs = self._get_obs(observation, action_casted, episode_over)
+            
             if episode_over:
                 break
 
-        if self._hysr.linear_approx_hitting_point_set:
-            # replace ball position with linear approx hitting point
-            observation.ball_position = self._hysr.linear_approx_hitting_point
 
-        # formatting observation in a format suitable for gym
-        obs = self._get_obs(observation, action_casted, episode_over)
+        
 
-        # imposing frequency to learning agent
-        if not self._accelerated_time:
-            self._frequency_manager.wait()
+            # imposing frequency to learning agent
+            if not self._accelerated_time:
+                self._frequency_manager.wait()
 
         # Ignore steps after hitting the ball
         # if not episode_over and not self._hysr._ball_status.min_distance_ball_racket:
         #     return self.step(action_orig)
 
-        # logging
-        self.n_steps += 1
-        if self._log_episodes:
-            self.data_buffer.append(
-                (
-                    observation.copy(),
+            # logging
+            self.n_steps += 1
+            if self._log_episodes:
+                # Prepare data to log
+                fk = self._hysr._mirrorings[0].get_fk()
+                rob_pos = fk[0]
+                rob_vel = fk[1]
+                racket_pos = fk[2]
+                racket_vel = fk[3]
+                racket_ori = fk[4]
+                timestamp = fk[5]
+                data_entry = (
+                    self.previous_obs["observation"].copy(),
                     action_orig,
                     action_casted,
                     action.copy(),
                     reward,
                     episode_over,
+                    (rob_pos, rob_vel, racket_pos, racket_vel, racket_ori, timestamp),
+                    obs["observation"].copy(),
                 )
-            )
+                self.data_buffer.append(data_entry)
+                self.previous_obs = obs.copy()
+
+            if episode_over:
+                break
+
         if episode_over:
             if self._log_episodes:
                 self.dump_data(self.data_buffer)    
@@ -463,18 +482,27 @@ class HysrGoalEnv(gym_robotics.GoalEnv):
         if not self._accelerated_time:
             self._frequency_manager = None
         obs = self._get_obs(observation, self.last_action, False)
+        self.previous_obs = obs.copy()
         self.episode_over = False
         self.action_orig = None
         return obs
 
     def dump_data(self, data_buffer):
-        filename = "/tmp/ep_" + time.strftime("%Y%m%d-%H%M%S")
+        filename = os.path.join(
+            self._save_folder_traj,
+            "traj_{}_{}.json".format(self.n_eps, time.strftime("%Y-%m-%d_%H-%M-%S")),
+        )
         dict_data = dict()
         with open(filename, "w") as json_data:
             dict_data["ob"] = [x[0].tolist() for x in data_buffer]
+            dict_data["next_ob"] = [x[-1].tolist() for x in data_buffer]
             dict_data["action_orig"] = [x[1].tolist() for x in data_buffer]
             dict_data["action_casted"] = [x[2] for x in data_buffer]
             dict_data["prdes"] = [x[3] for x in data_buffer]
             dict_data["reward"] = [x[4] for x in data_buffer]
             dict_data["episode_over"] = [x[5] for x in data_buffer]
+            dict_data["fk"] = [x[6] for x in data_buffer]
+            dict_data["random_traj_index"] = self._hysr._ball_behavior._random_traj_index
             json.dump(dict_data, json_data)
+    def close(self):
+        self._hysr.close()

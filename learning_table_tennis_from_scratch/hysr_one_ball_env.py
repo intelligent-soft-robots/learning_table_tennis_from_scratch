@@ -693,8 +693,12 @@ class HysrOneBallEnv(gym.Env):
 
     def dump_data(self, data_buffer, data_buffer_short=None):
         # Dump full trajectory
-        filename_full = self._save_folder_traj + "ppo" + time.strftime("%Y%m%d-%H%M%S")
-        filename_full += "_" + str(np.random.randint(10000)) + ".json"
+        filename_full = os.path.join(
+            self._save_folder_traj,
+            "traj_{}_{}_full.json".format(
+                self.n_eps, time.strftime("%Y-%m-%d_%H-%M-%S")
+            ),
+        )
 
         dict_data_full = dict()
         with open(filename_full, "w") as json_data_full:
@@ -711,7 +715,7 @@ class HysrOneBallEnv(gym.Env):
 
         # Dump shorter trajectory if available
         if data_buffer_short is not None:
-            filename_short = filename_full.replace(".json", "_short.json")
+            filename_short = filename_full.replace("_full", "_short")
             dict_data_short = dict()
             with open(filename_short, "w") as json_data_short:
                 dict_data_short["ob"] = [x[0].tolist() for x in data_buffer_short]
