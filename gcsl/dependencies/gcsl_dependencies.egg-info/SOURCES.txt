@@ -1,0 +1,5 @@
+setup.py
+gcsl_dependencies.egg-info/PKG-INFO
+gcsl_dependencies.egg-info/SOURCES.txt
+gcsl_dependencies.egg-info/dependency_links.txt
+gcsl_dependencies.egg-info/top_level.txt
