@@ -857,7 +857,7 @@ def setup_plot_style():
     
     return colors
 
-def save_plot_formats(fig, base_path, prefix='', formats=['png']):
+def save_plot_formats(fig, base_path, prefix='', formats=[]):
     """Save plot in multiple formats."""
     if 'png' in formats:
         fig.savefig(f'{base_path}/{prefix}.png', bbox_inches='tight', dpi=300)
