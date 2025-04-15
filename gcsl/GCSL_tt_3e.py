@@ -702,7 +702,7 @@ def train_agent(env, agent, buffer, validation_buffer=None, num_episodes=10, bat
             break
             
         # Plotting
-        if True: #episode < 3 or episode % 10 == 0:
+        if False: #episode < 3 or episode % 10 == 0:
             for i in range(1):
                 plot_trajectories(env, agent, step=episode + i * 0.5, buffer=buffer,
                             dataset_traj_idx=np.random.randint(len(buffer)), 
