@@ -573,6 +573,7 @@ def train_agent(env, agent, buffer, validation_buffer=None, num_episodes=10, bat
     best_agent_state = None
     patience_counter = 0
     
+    print("xx01 Initial evaluation...", flush=True)
     # Initial evaluation
     metrics = evaluate_agent(env,
             agent,
@@ -581,11 +582,13 @@ def train_agent(env, agent, buffer, validation_buffer=None, num_episodes=10, bat
             ball_id=specific_ball_id,
             goal=specific_goal,
             n_runs=5)
+    print("xx02 Initial evaluation done", flush=True)
     metrics['training_step'] = 0
     metrics_list.append(metrics)
     best_eval_reward = np.mean(metrics['rewards'])
     
     for episode in range(num_episodes):
+        print("xx03 Training episode", episode, flush=True)
         agent.train()
         losses_ep = []
         for step in range(steps_per_episode):
@@ -636,14 +639,17 @@ def train_agent(env, agent, buffer, validation_buffer=None, num_episodes=10, bat
                 loss = nll.mean()
             
             # Backward pass with gradient clipping
+            print("xx03.1 Backward pass", flush=True)
             optimizer.zero_grad()
             loss.backward()
             torch.nn.utils.clip_grad_norm_(agent.parameters(), max_grad_norm)
             optimizer.step()
+            print("xx03.2 Backward pass done", flush=True)
             
             losses.append(loss.item())
             losses_ep.append(loss.item())
 
+        print("xx04 Compute validation loss", step, flush=True)
         # Compute validation loss and evaluation metrics
         current_val_loss = float('inf')
         if validation_buffer and len(validation_buffer) > 0:
@@ -664,6 +670,7 @@ def train_agent(env, agent, buffer, validation_buffer=None, num_episodes=10, bat
                 print("*", end="")
                 buffer_collected_during_training.append(trajectory)
 
+        print("xx05 Evaluate agent", flush=True)
         # Evaluate agent
         metrics = evaluate_agent(env,
                                agent,
@@ -675,6 +682,7 @@ def train_agent(env, agent, buffer, validation_buffer=None, num_episodes=10, bat
         metrics['training_step'] = (episode + 1) * steps_per_episode
         metrics['losses'] = losses_ep
         metrics_list.append(metrics)
+        print("xx06 Evaluation done", flush=True)
         
         current_eval_reward = np.mean(metrics['rewards'])
         
@@ -710,8 +718,10 @@ def train_agent(env, agent, buffer, validation_buffer=None, num_episodes=10, bat
                             output_dir=output_dir, plot_diff_also=True, save_json=True)
 
         print()
+        print("xx07 End of episode", episode, flush=True)
                 
-    
+    print("xx08 Training done", flush=True)
+
     return agent, metrics_list
 
 def compute_validation_loss(agent, validation_buffer, batch_size):
