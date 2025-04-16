@@ -767,11 +767,13 @@ def compute_validation_loss(agent, validation_buffer, batch_size):
 
 # === Evaluation ===
 def evaluate_agent(env, agent, random_ball=True, random_goal=True, ball_id=0, goal=center_goal, n_runs=5):
+    print("xx evaluate_agent set agent to eval mode", flush=True)
     agent.eval()
     all_distances = []
     all_rewards = []
     scenarios = []
     for _ in range(n_runs):
+        print("xx evaluate_agent sample scenario", flush=True)
         ball_id = np.random.randint(1, 106) if random_ball else ball_id
         # sample goal randomly on the opponent side
         goal = [tc[0] - hts[0] + np.random.rand() * 2 * hts[0], 
@@ -784,6 +786,7 @@ def evaluate_agent(env, agent, random_ball=True, random_goal=True, ball_id=0, go
         # Reset environment with specific ball and goal
         env.set_ball_id(scenario['ball_id'])
         env.set_goal(scenario['goal'])
+        print("xx evaluate_agent, scenario", scenario, flush=True)
         trajectory = sample_trajectory(env, agent, greedy=True, eval=True)
         final_distance = np.linalg.norm(trajectory['achieved_goal'] - trajectory['desired_goal'])
         all_distances.append(final_distance)
@@ -792,6 +795,7 @@ def evaluate_agent(env, agent, random_ball=True, random_goal=True, ball_id=0, go
     hit_rates = [1 if r > 0 else 0 for r in all_rewards]
     print(f"Eval: D: {np.mean(all_distances):.4f}, R: {np.mean(all_rewards):.4f}, SR: {np.mean(success_rates):.2f} HR: {np.mean(hit_rates):.2f}", end=' ')
     agent.train()
+    print("xx evaluate_agent done", flush=True)
     return {'distances': all_distances, 'rewards': all_rewards, 'success_rates': success_rates, 'hit_rates': hit_rates}
 
 def set_env_to_random_ball_and_random_goal(env):
@@ -805,12 +809,15 @@ def sample_trajectory(env, agent, T=250, greedy=False, eval=False, k_step_noise 
     """
     Samples a trajectory using the agent in the environment.
     """
+    print("xx sample_trajectory reset env", flush=True)
     state = env.reset()
     desired_goal = state['desired_goal']
     states = []
     actions = []
     total_reward = 0
     for t in range(T):
+        if t<5 or t>100:
+            print("xx sample_trajectory t:", t, "state:", state['observation'], "goal:", state['desired_goal'], "achieved_goal:", state['achieved_goal'], flush=True)
         states.append(state)
         action = agent.get_action(state, desired_goal, horizon=0, greedy=greedy)
         # if t<7:
@@ -827,6 +834,8 @@ def sample_trajectory(env, agent, T=250, greedy=False, eval=False, k_step_noise 
         if done:
             # print("ep steps:", t, "reward:", reward)
             break
+    
+    print("xx sample_trajectory done", flush=True)
     
     # Use the final achieved goal as the desired goal for all states
     final_achieved_goal = state['achieved_goal']
