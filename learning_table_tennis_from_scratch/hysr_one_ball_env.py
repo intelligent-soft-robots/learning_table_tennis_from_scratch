@@ -88,7 +88,7 @@ class HysrOneBallEnv(gym.Env):
     ):
         super().__init__()
 
-        self._log_episodes = log_episodes and self._save_folder_traj!=""
+        
         self._logger = logger
         self._continue_after_hit = continue_after_hit
         self._continue_after_hit_with_smooth_approximation = continue_after_hit_with_smooth_approximation
@@ -98,6 +98,8 @@ class HysrOneBallEnv(gym.Env):
         self._save_folder_traj = hysr_one_ball_config.save_folder_traj
         if self._save_folder_traj and not os.path.exists(self._save_folder_traj):
             os.makedirs(self._save_folder_traj)
+
+        self._log_episodes = log_episodes and self._save_folder_traj!=""
 
         reward_function = JsonReward.get(reward_config_file)
 
