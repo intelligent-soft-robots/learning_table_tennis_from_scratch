@@ -91,13 +91,13 @@ class HysrManyBallEnv(gym.Env):
     ):
         super().__init__()
 
-        self._log_episodes = log_episodes
+        self._log_episodes = log_episodes and self._save_folder_traj!=""
         self._logger = logger
 
         hysr_one_ball_config = HysrOneBallConfig.from_json(hysr_one_ball_config_file)
 
         self._save_folder_traj = hysr_one_ball_config.save_folder_traj
-        if not os.path.exists(self._save_folder_traj):
+        if self._save_folder_traj and not os.path.exists(self._save_folder_traj):
             os.makedirs(self._save_folder_traj)
 
         reward_function = JsonReward.get(reward_config_file)
