@@ -164,11 +164,10 @@ class HysrManyBallEnv(gym.Env):
     def init_episode(self):
         self.n_steps = 0
 
-        if self._log_episodes:
-            self.data_buffer = []
-            self.ball_hit = False
-            self.extra_data_buffer = [[] for _ in range(self._hysr._hysr_config.extra_balls_per_set)]
-            self.extra_ball_hit = [False for _ in range(self._hysr._hysr_config.extra_balls_per_set)]
+        self.data_buffer = []
+        self.ball_hit = False
+        self.extra_data_buffer = [[] for _ in range(self._hysr._hysr_config.extra_balls_per_set)]
+        self.extra_ball_hit = [False for _ in range(self._hysr._hysr_config.extra_balls_per_set)]
 
         if self.n_eps == 0:
             print("---HysrManyBallEnv with {} extra balls---".format(self._hysr._hysr_config.extra_balls_per_set))
