@@ -175,12 +175,16 @@ class HysrGoalEnv(gym_robotics.GoalEnv):
 
     def init_episode(self):
         self.n_steps = 0
+        self.n_steps_after_all_hit = 0
         if self._log_episodes:
             self.data_buffer = []
 
         # initialize initial action (for action diffs)
                 # initialize initial action (for action diffs)
         self.last_action = self.get_init_action()
+        self.joint_penalty = 0.0
+        self.total_joint_penalty = 0.0
+        self.accelarated_towards_limits = False
 
     def sample_goal(self):
         return self._hysr.sample_goal()
@@ -408,9 +412,17 @@ class HysrGoalEnv(gym_robotics.GoalEnv):
         # hysr takes a list of int, not float, as input
         action = [int(a) for a in action]
 
+        self.joint_penalty = 0
+
         # performing a step
         for _ in range(self._action_repeat_counter):
             observation, reward, episode_over = self._hysr.step(list(action))
+
+            # give negative reward 0.5 if joint limits are reached (limit joint 1: 100, 2 and 3: 89, 4: no limit)
+            if abs(observation.joint_positions[0]) > 100 * np.pi/180 or abs(observation.joint_positions[1]) > 87 * np.pi/180 or abs(observation.joint_positions[2]) > 87 * np.pi/180:
+                self.joint_penalty = -0.025
+                self.total_joint_penalty += self.joint_penalty
+                print("*", end="")
             
             # formatting observation in a format suitable for gym
             obs = self._get_obs(observation, action_casted, episode_over)
@@ -425,9 +437,13 @@ class HysrGoalEnv(gym_robotics.GoalEnv):
             if not self._accelerated_time:
                 self._frequency_manager.wait()
 
-        # Ignore steps after hitting the ball
-        # if not episode_over and not self._hysr._ball_status.min_distance_ball_racket:
-        #     return self.step(action_orig)
+            # Ignore steps after hitting the ball
+            if not episode_over and not self._hysr._ball_status.min_distance_ball_racket:
+                if self.n_steps_after_all_hit > 1:
+                    difference_to_init = self.get_init_action() - self.last_action
+                    action_orig = difference_to_init + action_orig
+                self.n_steps_after_all_hit += 1
+                return self.step(action_orig)
 
             # logging
             self.n_steps += 1
@@ -456,19 +472,23 @@ class HysrGoalEnv(gym_robotics.GoalEnv):
             if episode_over:
                 break
 
+        reward += self.joint_penalty
         if episode_over:
             if self._log_episodes:
                 self.dump_data(self.data_buffer)    
             self.n_eps += 1
+            print("ep:", self.n_eps, " steps:", self.n_steps, " rew:", reward)
             if self._logger:
-                self._logger.record("eprew", reward)
+                print("log", "rew:", reward, "n_eps:", self.n_eps, "n_steps:", self.n_steps)
+                self._logger.record("eprew", reward - self.joint_penalty)
+                self._logger.record("joint_penalty", self.total_joint_penalty)
                 self._logger.record("min_discante_ball_racket", self._hysr._ball_status.min_distance_ball_racket or 0)
                 self._logger.record("min_distance_ball_target_capped",
                     min(
                         self._hysr._ball_status.min_distance_ball_target or self._hysr._reward_function.config.normalization_constant,
                         self._hysr._reward_function.config.normalization_constant))
                 self._logger.record("max_ball_velocity", self._hysr._ball_status.max_ball_velocity)
-                # self._logger.dump()
+                self._logger.dump()
 
         self.episode_over = episode_over
         self.action_orig = action_orig.copy()
@@ -478,7 +498,8 @@ class HysrGoalEnv(gym_robotics.GoalEnv):
 
     def reset(self):
         self.init_episode()
-        observation, _ = self._hysr.reset()
+        observation = self._hysr.reset()
+        print(observation)
         if not self._accelerated_time:
             self._frequency_manager = None
         obs = self._get_obs(observation, self.last_action, False)

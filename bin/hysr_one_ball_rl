@@ -67,6 +67,7 @@ def _execute(
 
     random.seed(seed)
     if common_conf["use_openai_baselines"]:
+        print("using openai baselines...")
         run_openai_baselines(
             reward_config_file,
             hysr_config_file,

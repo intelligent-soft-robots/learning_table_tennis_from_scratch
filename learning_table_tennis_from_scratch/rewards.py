@@ -26,6 +26,7 @@ def _smash_task_reward(min_distance_ball_target, max_ball_velocity, c, rtt_cap, 
     reward = 1.0 - ((min_distance_ball_target / c) ** distance_exponent)
     reward = reward * max_ball_velocity
     reward = max(reward, rtt_cap)
+    print("smash - ", "max_v:", max_ball_velocity, "reward:", reward)
     return reward
 
 
@@ -42,6 +43,7 @@ def _compute_reward(
     distance_exponent = 0.75,
     sparse_reward_racket_hit =1.0
 ):
+    
     # i.e. the ball did not hit the racket,
     # so computing a reward based on the minimum
     # distance between the racket and the ball
@@ -153,6 +155,8 @@ class SmashReward:
 class JsonReward:
     @staticmethod
     def get(jsonpath):
+        print("get JsonReward")
+        print("path:", jsonpath)
         if not os.path.isfile(jsonpath):
             raise FileNotFoundError(
                 "failed to find reward configuration file: {}".format(jsonpath)

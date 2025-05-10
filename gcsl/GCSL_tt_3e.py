@@ -25,6 +25,9 @@ from copy import deepcopy
 import dataclasses
 from types import MappingProxyType
 
+import torch
+torch.cuda.is_available = lambda : False
+
 # === Load Main Configuration ===
 # Assume config.json is in the same directory or accessible path
 main_config_path = 'config.json'
@@ -129,6 +132,9 @@ def show_statistics_of_traj_types(file_list, foldername):
 
     # print percentages
     n_total = n_sin + n_sin_plus_noise + n_ppo + n_peril + n_none
+    if n_total == 0:
+        sys.exit()
+
     print(f"Total: {n_total}")
     print(f"Sin: {n_sin} ({n_sin/n_total*100:.2f}%)")
     print(f"Sin + Noise: {n_sin_plus_noise} ({n_sin_plus_noise/n_total*100:.2f}%)")
@@ -317,6 +323,7 @@ class CBCAgent(nn.Module, GoalConditionedPolicy):
                 add_conditioning=True,  # Enable conditioning at each layer
                 nonlinearity=torch.nn.ReLU
             )
+        self.net = self.net.to('cpu')
       
     def forward(self, state, goal, horizon: Optional[torch.Tensor] = None) -> Tuple[torch.Tensor, torch.Tensor]:
         """
@@ -479,7 +486,7 @@ def load_trajectories(data_paths: Union[str, List[str]],
             ob = dict_data["ob"]
             next_ob = dict_data["next_ob"]
             dones = dict_data["episode_over"]
-            if next_ob[-1][17] < tc[1]:
+            if next_ob[-1][17+8] < tc[1]:
                 continue
             action = dict_data["action_orig"] #[::action_repeat_counter]
             if not next_ob or not ob or not action:
@@ -489,14 +496,14 @@ def load_trajectories(data_paths: Union[str, List[str]],
             actions = []
             for i in list(range(0, len(ob)+1, action_repeat_counter))[:-1] + [len(ob)-1]:
                 state = OrderedDict([
-                    ("observation", ob[i][0:22]),
-                    ("achieved_goal", ob[i][16:19]),
-                    ("desired_goal", next_ob[-1][16:19]),
+                    ("observation", ob[i][0:22+8]),
+                    ("achieved_goal", ob[i][16+8:19+8]),
+                    ("desired_goal", next_ob[-1][16+8:19+8]),
                 ])
                 next_state = OrderedDict([
-                    ("observation", next_ob[i][0:22]),
-                    ("achieved_goal", next_ob[i][16:19]),
-                    ("desired_goal", next_ob[-1][16:19]),
+                    ("observation", next_ob[i][0:22+8]),
+                    ("achieved_goal", next_ob[i][16+8:19+8]),
+                    ("desired_goal", next_ob[-1][16+8:19+8]),
                 ])
                 states.append(state)
                 next_states.append(next_state)
@@ -639,17 +646,14 @@ def train_agent(env, agent, buffer, validation_buffer=None, num_episodes=10, bat
                 loss = nll.mean()
             
             # Backward pass with gradient clipping
-            print("xx03.1 Backward pass", flush=True)
             optimizer.zero_grad()
             loss.backward()
             torch.nn.utils.clip_grad_norm_(agent.parameters(), max_grad_norm)
             optimizer.step()
-            print("xx03.2 Backward pass done", flush=True)
             
             losses.append(loss.item())
             losses_ep.append(loss.item())
 
-        print("xx04 Compute validation loss", step, flush=True)
         # Compute validation loss and evaluation metrics
         current_val_loss = float('inf')
         if validation_buffer and len(validation_buffer) > 0:
@@ -670,7 +674,6 @@ def train_agent(env, agent, buffer, validation_buffer=None, num_episodes=10, bat
                 print("*", end="")
                 buffer_collected_during_training.append(trajectory)
 
-        print("xx05 Evaluate agent", flush=True)
         # Evaluate agent
         metrics = evaluate_agent(env,
                                agent,
@@ -682,7 +685,6 @@ def train_agent(env, agent, buffer, validation_buffer=None, num_episodes=10, bat
         metrics['training_step'] = (episode + 1) * steps_per_episode
         metrics['losses'] = losses_ep
         metrics_list.append(metrics)
-        print("xx06 Evaluation done", flush=True)
         
         current_eval_reward = np.mean(metrics['rewards'])
         
@@ -718,7 +720,6 @@ def train_agent(env, agent, buffer, validation_buffer=None, num_episodes=10, bat
                             output_dir=output_dir, plot_diff_also=True, save_json=True)
 
         print()
-        print("xx07 End of episode", episode, flush=True)
                 
     print("xx08 Training done", flush=True)
 
@@ -767,13 +768,11 @@ def compute_validation_loss(agent, validation_buffer, batch_size):
 
 # === Evaluation ===
 def evaluate_agent(env, agent, random_ball=True, random_goal=True, ball_id=0, goal=center_goal, n_runs=5):
-    print("xx evaluate_agent set agent to eval mode", flush=True)
     agent.eval()
     all_distances = []
     all_rewards = []
     scenarios = []
     for _ in range(n_runs):
-        print("xx evaluate_agent sample scenario", flush=True)
         ball_id = np.random.randint(1, 106) if random_ball else ball_id
         # sample goal randomly on the opponent side
         goal = [tc[0] - hts[0] + np.random.rand() * 2 * hts[0], 
@@ -786,7 +785,6 @@ def evaluate_agent(env, agent, random_ball=True, random_goal=True, ball_id=0, go
         # Reset environment with specific ball and goal
         env.set_ball_id(scenario['ball_id'])
         env.set_goal(scenario['goal'])
-        print("xx evaluate_agent, scenario", scenario, flush=True)
         trajectory = sample_trajectory(env, agent, greedy=True, eval=True)
         final_distance = np.linalg.norm(trajectory['achieved_goal'] - trajectory['desired_goal'])
         all_distances.append(final_distance)
@@ -795,7 +793,6 @@ def evaluate_agent(env, agent, random_ball=True, random_goal=True, ball_id=0, go
     hit_rates = [1 if r > 0 else 0 for r in all_rewards]
     print(f"Eval: D: {np.mean(all_distances):.4f}, R: {np.mean(all_rewards):.4f}, SR: {np.mean(success_rates):.2f} HR: {np.mean(hit_rates):.2f}", end=' ')
     agent.train()
-    print("xx evaluate_agent done", flush=True)
     return {'distances': all_distances, 'rewards': all_rewards, 'success_rates': success_rates, 'hit_rates': hit_rates}
 
 def set_env_to_random_ball_and_random_goal(env):
@@ -809,15 +806,12 @@ def sample_trajectory(env, agent, T=250, greedy=False, eval=False, k_step_noise 
     """
     Samples a trajectory using the agent in the environment.
     """
-    print("xx sample_trajectory reset env", flush=True)
     state = env.reset()
     desired_goal = state['desired_goal']
     states = []
     actions = []
     total_reward = 0
     for t in range(T):
-        if t<5 or t>100:
-            print("xx sample_trajectory t:", t, "state:", state['observation'], "goal:", state['desired_goal'], "achieved_goal:", state['achieved_goal'], flush=True)
         states.append(state)
         action = agent.get_action(state, desired_goal, horizon=0, greedy=greedy)
         # if t<7:
@@ -834,9 +828,7 @@ def sample_trajectory(env, agent, T=250, greedy=False, eval=False, k_step_noise 
         if done:
             # print("ep steps:", t, "reward:", reward)
             break
-    
-    print("xx sample_trajectory done", flush=True)
-    
+        
     # Use the final achieved goal as the desired goal for all states
     final_achieved_goal = state['achieved_goal']
     if not eval:

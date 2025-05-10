@@ -12,8 +12,8 @@ import pam_interface
 from .hysr_one_ball import HysrOneBall, HysrOneBallConfig
 from .rewards import JsonReward
 
-from sklearn.gaussian_process import GaussianProcessRegressor
-from sklearn.gaussian_process.kernels import Matern
+# from sklearn.gaussian_process import GaussianProcessRegressor
+# from sklearn.gaussian_process.kernels import Matern
 from scipy.optimize import minimize
 from scipy.stats import norm
 from noise import pnoise1
@@ -170,6 +170,9 @@ class HysrOneBallEnv(gym.Env):
         self.last_action = self.get_init_action()
         self._ball_hit = False
         self.first_step_after_hit = True
+        self.joint_penalty = 0.0
+        self.total_joint_penalty = 0.0
+        self.accelarated_towards_limits = False
 
     def get_init_action(self):
         init_action = np.zeros(self._nb_dofs * 2, dtype=np.float32)
@@ -182,6 +185,7 @@ class HysrOneBallEnv(gym.Env):
                 dof, False, starting_pressures[dof][1]
             )
         return init_action
+        
         
 
     def _bound_pressure(self, dof, ago, value):
@@ -365,40 +369,40 @@ class HysrOneBallEnv(gym.Env):
     #     return combined_acquisition
 
 
-    def perform_bayesian_optimization(self):
-        # Reshape and prepare data for Gaussian Process
+    # def perform_bayesian_optimization(self):
+    #     # Reshape and prepare data for Gaussian Process
         
-        # first two entries are X, third entry is y
-        X = np.array([np.concatenate([Amp, phi]) for Amp, phi, _ in self.opt_data])
-        y = np.array([rew for _, _, rew in self.opt_data])
+    #     # first two entries are X, third entry is y
+    #     X = np.array([np.concatenate([Amp, phi]) for Amp, phi, _ in self.opt_data])
+    #     y = np.array([rew for _, _, rew in self.opt_data])
 
-        # Define and train Gaussian Process
-        kernel = Matern(nu=2.5)
-        gp = GaussianProcessRegressor(kernel=kernel)
-        gp.fit(X, y)
+    #     # Define and train Gaussian Process
+    #     kernel = Matern(nu=2.5)
+    #     gp = GaussianProcessRegressor(kernel=kernel)
+    #     gp.fit(X, y)
 
-        def acquisition_function(params):
-            params = np.array(params).reshape(1, -1)
-            mean, std = gp.predict(params, return_std=True)
-            return mean + 0.6 * std  # Expected Improvement (std weighted less)
+    #     def acquisition_function(params):
+    #         params = np.array(params).reshape(1, -1)
+    #         mean, std = gp.predict(params, return_std=True)
+    #         return mean + 0.6 * std  # Expected Improvement (std weighted less)
 
-        # Optimize acquisition function
-        result = minimize(lambda params: -acquisition_function(params), 
-                          x0=np.random.rand(16),  # Initial guess, 16 = 8 Amp + 8 phi
-                          bounds=[(-1, 1)] * 16) 
+    #     # Optimize acquisition function
+    #     result = minimize(lambda params: -acquisition_function(params), 
+    #                       x0=np.random.rand(16),  # Initial guess, 16 = 8 Amp + 8 phi
+    #                       bounds=[(-1, 1)] * 16) 
 
-        # Extract optimized Amp and phi
-        optimized_params = result.x
-        Amp_optimized = optimized_params[:8]
-        phi_optimized = optimized_params[8:]
+    #     # Extract optimized Amp and phi
+    #     optimized_params = result.x
+    #     Amp_optimized = optimized_params[:8]
+    #     phi_optimized = optimized_params[8:]
 
-        # print("noise: ", self.noise_facor)
-        # self.noise = np.random.uniform(-self.noise_facor, self.noise_facor, 8)
+    #     # print("noise: ", self.noise_facor)
+    #     # self.noise = np.random.uniform(-self.noise_facor, self.noise_facor, 8)
 
-        # Amp_optimized += self.noise
-        # phi_optimized += self.noise
+    #     # Amp_optimized += self.noise
+    #     # phi_optimized += self.noise
 
-        return Amp_optimized, phi_optimized
+    #     return Amp_optimized, phi_optimized
 
 
     def get_action_motion3(self):
@@ -542,6 +546,8 @@ class HysrOneBallEnv(gym.Env):
 
         # action = self.get_action_motion2()
         # action = self.get_action_test()
+        # action[0] = action[0]*32
+        # action[1] = action[1]*32
 
         if not self._accelerated_time and self._frequency_manager is None:
             self._frequency_manager = o80.FrequencyManager(1.0 / self._algo_time_step)
@@ -578,13 +584,18 @@ class HysrOneBallEnv(gym.Env):
         # hysr takes a list of int, not float, as input
         action = [int(a) for a in action]
 
+        self.joint_penalty = 0
+
         # performing a step
         for _ in range(self._action_repeat_counter):
             observation, reward, episode_over = self._hysr.step(list(action))
             
+            # give negative reward 0.5 if joint limits are reached (limit joint 1: 100, 2 and 3: 89, 4: no limit)
+            if abs(observation.joint_positions[0]) > 100 * np.pi/180 or abs(observation.joint_positions[1]) > 87 * np.pi/180 or abs(observation.joint_positions[2]) > 87 * np.pi/180:
+                self.joint_penalty = -0.025
+                self.total_joint_penalty += self.joint_penalty
+                print("*", end="")
 
-            # formatting observation in a format suitable for gym
-            observation = self._convert_observation(observation, action_casted)
 
             # imposing frequency to learning agent
             if not self._accelerated_time:
@@ -593,6 +604,56 @@ class HysrOneBallEnv(gym.Env):
             # Update ball hit status
             if not self._ball_hit and self._hysr._ball_status.min_distance_ball_racket:
                 self._ball_hit = True
+            
+            # Ignore steps after hitting the ball
+            if (not episode_over and not self._hysr._ball_status.min_distance_ball_racket) or (not episode_over and observation.ball_position[2] < -1.39 + 0.15 and observation.ball_position[1]<-3.38):
+
+                if not self._hysr._ball_status.min_distance_ball_racket and not self.print_ball_hit:
+                    print("ball hit")
+                    self.print_ball_hit = True
+                if observation.ball_position[2] < -1.39 + 0.15 and not self.print_ball_below_racket:
+                    print("ball below racket")
+                    self.print_ball_below_racket = True
+            
+                self.last_action = np.ones(self._nb_dofs * 2, dtype=np.float32) * 0.29  # 0.29 = 1.5 bar, 0.5 = 2.0 bar
+                action_orig = np.zeros(self._nb_dofs * 2, dtype=np.float32)
+
+                if (observation.joint_positions[0] > 60 * np.pi/180  and observation.joint_velocities[0]>0) or observation.joint_velocities[0]>10.0:
+                    self.accelarated_towards_limits = True
+                    if observation.joint_velocities[0]>10.0:
+                        print("pos:", observation.joint_positions[0], "vel:", observation.joint_velocities[0], " -- 6.0")
+                        self.last_action[0] = 0.29
+                        self.last_action[1] = 0
+                    else:
+                        print("pos:", observation.joint_positions[0], "vel:", observation.joint_velocities[0], " -- 3.0")
+                        self.last_action[0] = 0.29
+                        self.last_action[1] = 0.1
+                elif (observation.joint_positions[0] > 10 * np.pi/180  and observation.joint_velocities[0]>6.0):
+                    print("pos:", observation.joint_positions[0], "vel:", observation.joint_velocities[0], " -- 3.0")
+                    self.last_action[0] = 0.29
+                    self.last_action[1] = 0.2
+                    print("pos:", observation.joint_positions[0], "vel:", observation.joint_velocities[0], " -- 1.0")
+                elif observation.joint_positions[0] < -60 * np.pi/180 and self.accelarated_towards_limits:
+                    print("pos:", observation.joint_positions[0], "vel:", observation.joint_velocities[0], " -- -2.0")
+                    self.last_action[0] = 0.2
+                    self.last_action[1] = 0.29
+                elif self.accelarated_towards_limits and observation.joint_velocities[0]<-2.0:
+                    print("pos:", observation.joint_positions[0], "vel:", observation.joint_velocities[0]," -- -2.5")
+                    self.last_action[0] = 0.15
+                    self.last_action[1] = 0.29
+                elif self.accelarated_towards_limits and observation.joint_velocities[0]>6.0:
+                    print("pos:", observation.joint_positions[0], "vel:", observation.joint_velocities[0]," -- 1.5")
+                    self.last_action[0] = 0.29
+                    self.last_action[1] = 0.15
+                else:
+                    self.last_action[0] = 0.29
+                    self.last_action[1] = 0.29
+                    if self.accelarated_towards_limits:
+                        print("pos:", observation.joint_positions[0], "vel:", observation.joint_velocities[0], " -- 0.0")
+
+        
+            # formatting observation in a format suitable for gym
+            observation = self._convert_observation(observation, action_casted)
 
             # Skip steps after hitting the ball if continue_after_hit is False
             if not self._continue_after_hit and not episode_over and not self._hysr._ball_status.min_distance_ball_racket:
@@ -656,18 +717,23 @@ class HysrOneBallEnv(gym.Env):
                     return self.step(new_action_orig)
 
 
+        reward += self.joint_penalty
+
         if episode_over:
             # if len(self.opt_data[-1]) < 3:
             #    self.opt_data[-1].append(reward)
             #else:
             #    self.last_sample_plus_noise = reward
             # print("phi", self.phi, "Amp", self.Amp, "rew", reward)
+            
             if self._log_episodes:
                 self.dump_data(self.data_buffer, self.data_buffer_short)
             self.n_eps += 1
             print("ep:", self.n_eps, " steps:", self.n_steps, " rew:", reward)
             if self._logger:
-                self._logger.record("eprew", reward)
+                print("log", "rew:", reward, "n_eps:", self.n_eps, "n_steps:", self.n_steps)
+                self._logger.record("eprew", reward - self.joint_penalty)
+                self._logger.record("joint_penalty", self.total_joint_penalty)
                 self._logger.record("min_discante_ball_racket", self._hysr._ball_status.min_distance_ball_racket or 0)
                 self._logger.record("min_distance_ball_target_capped",
                     min(
@@ -675,6 +741,7 @@ class HysrOneBallEnv(gym.Env):
                         self._hysr._reward_function.config.normalization_constant))
                 self._logger.record("max_ball_velocity", self._hysr._ball_status.max_ball_velocity)
                 # self._logger.dump()
+                self._logger.dump()
 
 
         return observation, reward, episode_over, False, {}
@@ -683,11 +750,12 @@ class HysrOneBallEnv(gym.Env):
         if seed is not None:
             np.random.seed(seed)
         self.init_episode()
-        observation, _ = self._hysr.reset()
+        observation = self._hysr.reset()
         observation = self._convert_observation(observation, self.last_action)
         if not self._accelerated_time:
             self._frequency_manager = None
-
+        self.print_ball_hit = False
+        self.print_ball_below_racket = False
         self.previous_observation = observation.copy()
         return observation, {}
 

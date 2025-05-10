@@ -115,6 +115,7 @@ class HysrManyBallEnv(gym.Env):
         self._algo_time_step = hysr_one_ball_config.algo_time_step
         self._pressure_change_range = hysr_one_ball_config.pressure_change_range
         self._accelerated_time = hysr_one_ball_config.accelerated_time
+        self._action_in_state = hysr_one_ball_config.action_in_state
         self._goal_in_state = (hysr_one_ball_config.target_position_sampling_radius != 0)
         self._action_repeat_counter = hysr_one_ball_config.action_repeat_counter
 
@@ -125,6 +126,8 @@ class HysrManyBallEnv(gym.Env):
         self.action_space = gym.spaces.Box(
             low=-1.0, high=+1.0, shape=(self._nb_dofs * 2,), dtype=np.float32
         )
+        if self._action_in_state:
+            self._obs_boxes.add_box("action_copy", -1, +1, self._nb_dofs * 2)
 
         self._obs_boxes.add_box("robot_position", -math.pi, +math.pi, self._nb_dofs)
         self._obs_boxes.add_box("robot_velocity", -10.0, 10.0, self._nb_dofs)
@@ -161,6 +164,7 @@ class HysrManyBallEnv(gym.Env):
 
     def init_episode(self):
         self.n_steps = 0
+        self.n_steps_after_all_hit = 0
 
         if self._log_episodes:
             self.data_buffer = []
@@ -174,6 +178,10 @@ class HysrManyBallEnv(gym.Env):
         # initialize initial action (for action diffs)
         self.last_action = self.get_init_action()
         self._ball_hit = False
+        self.first_step_after_hit = True
+        self.joint_penalty = 0.0
+        self.total_joint_penalty = 0.0
+        self.accelarated_towards_limits = False
 
     def get_init_action(self):
         init_action = np.zeros(self._nb_dofs * 2, dtype=np.float32)
@@ -236,7 +244,7 @@ class HysrManyBallEnv(gym.Env):
                 - self._config.min_pressures_antago[dof]
             )
 
-    def _convert_observation(self, observation):
+    def _convert_observation(self, observation, action_casted):
         self._obs_boxes.set_values_non_norm(
             "robot_position", observation.joint_positions
         )
@@ -248,6 +256,8 @@ class HysrManyBallEnv(gym.Env):
         )
         self._obs_boxes.set_values_non_norm("ball_position", observation.ball_position)
         self._obs_boxes.set_values_non_norm("ball_velocity", observation.ball_velocity)
+        if self._action_in_state:
+            self._obs_boxes.set_values_non_norm("action_copy", action_casted)
         if self._goal_in_state:
             self._obs_boxes.set_values_non_norm("goal", self._hysr._ball_status.target_position)
         self.last_observation = self._obs_boxes.get_normalized_values()
@@ -264,7 +274,7 @@ class HysrManyBallEnv(gym.Env):
     def set_goal(self, goal):
         self._hysr.set_goal(goal)
 
-    def _get_obs(self, state) -> Dict[str, Union[int, np.ndarray]]:
+    def _get_obs(self, state, action_casted) -> Dict[str, Union[int, np.ndarray]]:
             """
             Helper to create the observation.
 
@@ -275,9 +285,9 @@ class HysrManyBallEnv(gym.Env):
             #         ("observation", self._convert_observation(state)),
             #     ]
             # )
-            return self._convert_observation(state)
+            return self._convert_observation(state, action_casted)
 
-    def _get_extra_obs(self, extra_states) -> Dict[str, Union[int, np.ndarray]]:
+    def _get_extra_obs(self, extra_states, action_casted) -> Dict[str, Union[int, np.ndarray]]:
             """
             Helper to create the observation.
 
@@ -290,7 +300,7 @@ class HysrManyBallEnv(gym.Env):
             # )
             #     for extra_state in extra_states
             # ]
-            return [self._convert_observation(extra_state) for extra_state in extra_states]
+            return [self._convert_observation(extra_state, action_casted) for extra_state in extra_states]
 
 
     # remove transitions between the ball hitting the racket and the ball hitting the table as well as transitions after the end of the episode
@@ -361,16 +371,19 @@ class HysrManyBallEnv(gym.Env):
         # hysr takes a list of int, not float, as input
         action = [int(a) for a in action]
 
-        infos = {}
-        idx_ball_still_active = -1
-
-        obs = None
-        extra_obs = None
+        self.joint_penalty = 0
 
         # performing a step
         for _ in range(self._action_repeat_counter):
             observation, reward, episode_over, extra_observations, extra_rewards, extra_dones = self._hysr.step(list(action))
             all_episodes_over = episode_over and all(extra_dones)
+
+            # give negative reward 0.5 if joint limits are reached (limit joint 1: 100, 2 and 3: 89, 4: no limit)
+            if abs(observation.joint_positions[0]) > 100 * np.pi/180 or abs(observation.joint_positions[1]) > 87 * np.pi/180 or abs(observation.joint_positions[2]) > 87 * np.pi/180:
+                self.joint_penalty = -0.025
+                self.total_joint_penalty += self.joint_penalty
+                print("*", end="")
+
 
             # imposing frequency to learning agent
             if not self._accelerated_time:
@@ -388,10 +401,16 @@ class HysrManyBallEnv(gym.Env):
                 
                 if idx_ball_still_active == -1: # non of the balls can still be hit anymore 
                     if not episode_over and not self._hysr._ball_status.min_distance_ball_racket:
+                        
+                        if self.n_steps_after_all_hit > 1:
+                            difference_to_init = self.get_init_action() - self.last_action
+                            action_orig = difference_to_init + action_orig
+                        self.n_steps_after_all_hit += 1
                         return self.step(action_orig)
 
-            obs = self._get_obs(observation)
-            extra_obs = self._get_extra_obs(extra_observations)
+
+            obs = self._get_obs(observation, action_casted)
+            extra_obs = self._get_extra_obs(extra_observations, action_casted)
 
             # logging
             self.n_steps += 1
@@ -491,16 +510,18 @@ class HysrManyBallEnv(gym.Env):
 
             all_episodes_over = episode_over and all(extra_dones)
 
-            # temporary fix for ppo: also use old action if main ball was hit
-            if not self._hysr._ball_status.min_distance_ball_racket and not episode_over:
-                return self.step(action_orig)
+            # # temporary fix for ppo: also use old action if main ball was hit
+            # if not self._hysr._ball_status.min_distance_ball_racket and not episode_over:
+            #     return self.step(action_orig)
 
             if all_episodes_over:
                 break
 
+        reward += self.joint_penalty
+
 
         if all_episodes_over:
-            print("ep:", self.n_eps, " rew:", reward)
+            # print("ep:", self.n_eps, " rew:", reward)
             infos["trajectory"], infos["hsm_trajectories"] = self.get_reduced_episodes()
             if self._log_episodes:
                 self.dump_data(self.data_buffer)
@@ -510,7 +531,9 @@ class HysrManyBallEnv(gym.Env):
                         continue
                     self.dump_data(extra_data_buffer, idx)
             if self._logger:
-                self._logger.record("eprew", reward)
+                print("log", "rew:", reward, "n_eps:", self.n_eps, "n_steps:", self.n_steps)
+                self._logger.record("eprew", reward - self.joint_penalty)
+                self._logger.record("joint_penalty", self.total_joint_penalty)
                 self._logger.record("n_steps_on_policy", self.n_steps_on_policy)
                 self._logger.record("min_discante_ball_racket", self._hysr._ball_status.min_distance_ball_racket or 0)
                 self._logger.record("min_distance_ball_target_capped",
@@ -528,8 +551,8 @@ class HysrManyBallEnv(gym.Env):
         else:
             self.n_steps_on_policy += 1
 
-        if not all_episodes_over:
-            reward = 0
+        # if not all_episodes_over:
+        #     reward = 0
 
         return obs, reward, all_episodes_over, False, infos
 
@@ -538,8 +561,8 @@ class HysrManyBallEnv(gym.Env):
             np.random.seed(seed)
         self.init_episode()
         observation, extra_observations = self._hysr.reset()
-        obs = self._get_obs(observation)
-        extra_obs = self._get_extra_obs(extra_observations)
+        obs = self._get_obs(observation, self.last_action)
+        extra_obs = self._get_extra_obs(extra_observations, self.last_action)
         if not self._accelerated_time:
             self._frequency_manager = None
         self.previous_extra_obs = extra_obs.copy()
@@ -550,7 +573,9 @@ class HysrManyBallEnv(gym.Env):
         filename = self._save_folder_traj + "ppo" + time.strftime("%Y%m%d-%H%M%S")
         if index is not None:
             filename += "_" + str(index)
-        filename += "_" + str(np.random.randint(10000)) + ".json"
+        else:
+            filename += "_main"
+        filename += "_" + str(self.n_eps) + ".json"
         dict_data_full = dict()
         with open(filename, "w") as json_data:
             dict_data_full["ob"] = [x[0].tolist() for x in data_buffer]
