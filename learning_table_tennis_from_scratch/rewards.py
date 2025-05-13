@@ -188,7 +188,7 @@ class JsonReward:
             n_buckets_y = 3
             
             # Default to KNN with k=1
-            reward_type = conf.get("exploration_reward_type", ExplorationReward.REWARD_TYPE_KNN_JOINT)
+            reward_type = conf.get("exploration_reward_type", ExplorationReward.REWARD_TYPE_BUCKET_J3)
             k_neighbors = conf.get("k_neighbors", 1)
 
             reward_func = ExplorationReward(

@@ -4,11 +4,23 @@ from sklearn.neighbors import KDTree
 
 
 class ExplorationReward:
+    """Reward computation for table‑tennis exploration tasks.
+
+    * **Entropy** – encourage uniform coverage of 2‑D landing buckets.
+    * **Bucket**  – encourage visiting rarely‑hit XY buckets.
+    * **KNN**     – reward proportional to distance to previous landings (XY).
+    * **KNN‑Joint** – as above + distance in robot joint space.
+    * **Bucket‑J3** – rare‑bucket bonus for the 3rd robot joint (‑π..π) in
+      30 uniform bins, summed with the normal "bucket" ball reward.
+    """
+
     REWARD_TYPE_ENTROPY = "entropy"
     REWARD_TYPE_BUCKET = "bucket"
     REWARD_TYPE_KNN = "knn"
     REWARD_TYPE_KNN_JOINT = "knn_joint"
+    REWARD_TYPE_BUCKET_J3 = "bucket_j3"
 
+    # ---------------------------------------------------------------------
     def __init__(self, table_bounds, n_buckets_x=4, n_buckets_y=2,
                  reward_type="knn", epsilon=3e-2, k_neighbors=1):
 
@@ -20,25 +32,36 @@ class ExplorationReward:
         self.reward_type = reward_type
         self.k_neighbors = k_neighbors
 
-        self.reset_counts()                     # initialise all per-ball stores
+        self.reset_counts()  # initialise all per‑ball stores
 
-    # ────────────────────────────────────────
-    # bookkeeping
+        print(f"--- ExplorationReward: {reward_type} ---")
+
+
+    # ------------------------------------------------------------------
+    # bookkeeping / reset
     def reset_counts(self):
+        # ball ↦ scalar counters
         self.ball_total_hits = {}
-        self.ball_on_table_counts = {}
         self.ball_off_table_counts = {}
+
+        # ball ↦ 2‑D bucket grid  (XY landing buckets)
+        self.ball_on_table_counts = {}
+
+        # ball ↦ list of positions / joints (for k‑NN)
         self.ball_landing_positions = {}
         self.ball_joint_positions = {}
 
-        # KD-tree caches
-        self.kd_trees_xy        = {}      # ball_id ➜ KDTree   (landing positions)
-        self.kd_trees_joint     = {}      # ball_id ➜ KDTree   (robot joints)
-        self.kd_trees_xy_dirty  = {}      # ball_id ➜ bool
-        self.kd_trees_joint_dirty = {}    # ball_id ➜ bool
+        # ball ↦ 1‑D buckets for joint‑3 (30 bins)
+        self.ball_joint3_bucket_counts = {}
 
-    # ────────────────────────────────────────
-    # utility
+        # KD‑tree caches
+        self.kd_trees_xy = {}
+        self.kd_trees_joint = {}
+        self.kd_trees_xy_dirty = {}
+        self.kd_trees_joint_dirty = {}
+
+    # ------------------------------------------------------------------
+    # utility helpers
     def is_on_table(self, landing_position):
         if landing_position is None:
             return False
@@ -60,13 +83,16 @@ class ExplorationReward:
         j = int((y - min_y) / (max_y - min_y) * self.n_buckets_y)
         return max(0, min(i, self.n_buckets_x - 1)), max(0, min(j, self.n_buckets_y - 1))
 
-    # ────────────────────────────────────────
-    # KD-tree helpers (NEW)
+    # bucket index for joint‑3 (angle ∈ [‑π, π])
+    @staticmethod
+    def get_joint3_bucket_index(angle_rad):
+        idx = int((angle_rad + math.pi) / (2 * math.pi) * 30)
+        return max(0, min(idx, 29))
+
+    # ------------------------------------------------------------------
+    # KD‑tree helpers
     def _ensure_kdtree(self, ball_id, space):
-        """
-        Build / rebuild the KD-tree for the requested `space`
-        (`"xy"` or `"joint"`) if it is marked dirty.
-        """
+        """Build / rebuild KD‑tree (on demand) for `space` = 'xy' | 'joint'."""
         if space == "xy":
             if self.kd_trees_xy_dirty.get(ball_id, True):
                 data = np.asarray(self.ball_landing_positions[ball_id], dtype=np.float32)[:, :2]
@@ -83,29 +109,24 @@ class ExplorationReward:
 
         raise ValueError("space must be 'xy' or 'joint'")
 
-    # ────────────────────────────────────────
-    # K-NN in XY space (NEW)
+    # ------------------------------------------------------------------
+    # K‑NN helpers
     def compute_knn_distance(self, ball_id, landing_position):
         positions = self.ball_landing_positions.get(ball_id, [])
         if not positions:
             return 1.0
 
         tree = self._ensure_kdtree(ball_id, "xy")
-        if tree is None:               # no previous data
+        if tree is None:
             return 1.0
 
         k = min(self.k_neighbors, len(positions))
-        d, _ = tree.query(
-            np.asarray(landing_position[:2], dtype=np.float32).reshape(1, -1),
-            k=k
-        )
+        d, _ = tree.query(np.asarray(landing_position[:2], dtype=np.float32).reshape(1, -1), k=k)
         mean_dist = float(d.mean())
 
         (min_x, max_x), (min_y, max_y) = self.table_bounds
         return min(mean_dist / math.hypot(max_x - min_x, max_y - min_y), 1.0)
 
-    # ────────────────────────────────────────
-    # K-NN in joint space (NEW)
     def compute_joint_knn_distance(self, ball_id, joint_positions):
         if joint_positions is None:
             return 0.0
@@ -119,14 +140,12 @@ class ExplorationReward:
             return 0.5 / math.pi
 
         k = min(self.k_neighbors, len(stored))
-        d, _ = tree.query(
-            np.asarray(joint_positions, dtype=np.float32).reshape(1, -1),
-            k=k
-        )
+        d, _ = tree.query(np.asarray(joint_positions, dtype=np.float32).reshape(1, -1), k=k)
         mean_dist = float(d.mean())
         return min(mean_dist / math.pi, 1.0)
 
-    # ────────────────────────────────────────
+    # ------------------------------------------------------------------
+    # entropy
     def compute_entropy_for_ball_id(self, ball_id):
         entropy = 0.0
         total_hits = self.ball_total_hits[ball_id]
@@ -139,8 +158,8 @@ class ExplorationReward:
         entropy /= self.n_buckets_x * self.n_buckets_y + 1
         return entropy
 
-    # ────────────────────────────────────────
-    # main per-ball routine (NEW append logic)
+    # ------------------------------------------------------------------
+    # main per‑ball routine
     def process_ball_and_get_reward(self, ball):
         ball_id = ball.get("ball_id")
         if ball_id is None:
@@ -150,30 +169,33 @@ class ExplorationReward:
         landing_position = ball.get("landing_position")
         robot_joint_positions = ball.get("robot_joint_positions")
 
-        if self.REWARD_TYPE_KNN_JOINT:
-            total_p_reward = 0.0
-            total_j_reward = 0.0
+        # Re‑usable accumulators (always defined!)
+        total_p_reward = 0.0
+        total_j_reward = 0.0
 
-        # initialise tracking for new ball IDs
+        # ------------------------------------------------------------------
+        # create storage for new balls
         if ball_id not in self.ball_total_hits:
-            self.ball_total_hits[ball_id] = 5
-            self.ball_on_table_counts[ball_id] = [[0] * self.n_buckets_y
-                                                  for _ in range(self.n_buckets_x)]
+            self.ball_total_hits[ball_id] = 5  # small prior
+            self.ball_on_table_counts[ball_id] = [[0] * self.n_buckets_y for _ in range(self.n_buckets_x)]
             self.ball_off_table_counts[ball_id] = 0
             self.ball_landing_positions[ball_id] = []
             self.ball_joint_positions[ball_id] = []
+            self.ball_joint3_bucket_counts[ball_id] = [0] * 30
             self.kd_trees_xy[ball_id] = None
             self.kd_trees_joint[ball_id] = None
             self.kd_trees_xy_dirty[ball_id] = True
             self.kd_trees_joint_dirty[ball_id] = True
 
+        # only process balls that were hit
         if min_dist_racket is not None and min_dist_racket > 0:
             raise ValueError("Ball not hit.")
 
-        # ── compute reward *before* appending the new point ──
+        # compute entropy BEFORE appending the point
         if self.reward_type == self.REWARD_TYPE_ENTROPY:
             old_entropy = self.compute_entropy_for_ball_id(ball_id)
 
+        # bookkeeping: increment total hit counter right away
         self.ball_total_hits[ball_id] += 1
         reward = 0.0
 
@@ -186,128 +208,115 @@ class ExplorationReward:
             self.ball_off_table_counts[ball_id] += 1
             print(".", end="")
 
-        # reward type dispatch
+        # ------------------------------------------------------------------
+        # reward‑type dispatch
         if self.reward_type == self.REWARD_TYPE_ENTROPY:
             new_entropy = self.compute_entropy_for_ball_id(ball_id)
             reward = max(0.0, -(new_entropy - old_entropy)) + 0.1
 
         elif self.reward_type == self.REWARD_TYPE_BUCKET:
-            reward = (1 / math.sqrt(self.ball_on_table_counts[ball_id][i][j])
-                      if on_table else 1 / math.sqrt(self.ball_total_hits[ball_id]))
+            reward = (1 / math.sqrt(self.ball_on_table_counts[ball_id][i][j]) if on_table
+                      else 1 / math.sqrt(self.ball_total_hits[ball_id])) * 2.5
 
         elif self.reward_type == self.REWARD_TYPE_KNN and on_table:
             reward = self.compute_knn_distance(ball_id, landing_position) * 2.0 + 0.1
 
         elif self.reward_type == self.REWARD_TYPE_KNN_JOINT:
-            pos_r = (self.compute_knn_distance(ball_id, landing_position) * 4.0 + 0.1
-                     if on_table else 0.0)
-            joint_r = (self.compute_joint_knn_distance(ball_id, robot_joint_positions) * 6.0
-                       if on_table and robot_joint_positions is not None else 0.0)
-            
+            pos_r = (self.compute_knn_distance(ball_id, landing_position) * 4.0 + 0.1 if on_table else 0.0)
+            joint_r = (self.compute_joint_knn_distance(ball_id, robot_joint_positions) * 6.0 if robot_joint_positions is not None else 0.0)
             reward = pos_r + joint_r
             total_p_reward = pos_r
             total_j_reward = joint_r
 
-        # off-table penalty
-        if not on_table:
-            if landing_position is None:
-                reward = 0.0
-            else:
-                dist = self.min_distance_to_table(landing_position)
-                if self.reward_type in (self.REWARD_TYPE_KNN, self.REWARD_TYPE_KNN_JOINT):
-                    proximity = max(0.0,
-                                    (self.normalization_constant - dist) /
-                                    self.normalization_constant)
-                    reward = (0.3 + reward) * proximity
-                    # divide by sqrt of total hits on table
-                    reward /= math.sqrt(self.ball_total_hits[ball_id] - self.ball_off_table_counts[ball_id])
-                else:
-                    reward *= (self.normalization_constant - dist) / self.normalization_constant
-                reward = max(0.0, reward)
+        # ---------------- bucket_j3 ----------------
+        elif self.reward_type == self.REWARD_TYPE_BUCKET_J3:
+            # (a) normal bucket reward for the landing position
+            bucket_r = (1 / math.sqrt(self.ball_on_table_counts[ball_id][i][j]) if on_table
+                        else 1 / math.sqrt(self.ball_total_hits[ball_id]))
 
-        # ── now append the new data and mark KD-tree dirty ──
+            # (b) bucket reward for joint‑3 angle (‑π .. π divided into 30)
+            j3_r = 0.0
+            if robot_joint_positions is not None and len(robot_joint_positions) >= 3 and on_table:
+                idx_j3 = self.get_joint3_bucket_index(robot_joint_positions[2])
+                self.ball_joint3_bucket_counts[ball_id][idx_j3] += 1
+                j3_r = 1 / math.sqrt(self.ball_joint3_bucket_counts[ball_id][idx_j3])
+
+            total_p_reward = bucket_r
+            total_j_reward = j3_r
+            reward = (bucket_r + j3_r) * 1.5
+
+        # ------------------------------------------------------------------
+        # off‑table penalty (same logic for all bucket‑style rewards)
+        if not on_table and landing_position is not None:
+            dist = self.min_distance_to_table(landing_position)
+            if self.reward_type in (self.REWARD_TYPE_KNN, self.REWARD_TYPE_KNN_JOINT):
+                proximity = max(0.0, (self.normalization_constant - dist) / self.normalization_constant)
+                reward = (0.3 + reward) * proximity
+                reward /= math.sqrt(self.ball_total_hits[ball_id] - self.ball_off_table_counts[ball_id])
+            else:
+                reward *= (self.normalization_constant - dist) / self.normalization_constant
+            reward = max(0.0, reward)
+
+        # ------------------------------------------------------------------
+        # append the new data + mark KD‑trees dirty
         if landing_position is not None:
             self.ball_landing_positions[ball_id].append(landing_position)
-            self.kd_trees_xy_dirty[ball_id] = True        # mark only the XY tree dirty
+            self.kd_trees_xy_dirty[ball_id] = True
 
         if robot_joint_positions is not None:
             self.ball_joint_positions[ball_id].append(robot_joint_positions)
-            self.kd_trees_joint_dirty[ball_id] = True     # mark only the joint tree dirty
+            self.kd_trees_joint_dirty[ball_id] = True
 
         return reward, total_p_reward, total_j_reward
 
+    # ------------------------------------------------------------------
     def __call__(self, balls):
-        """
-        Args:
-            balls (list): A list of dictionaries for ball outcomes. Each dictionary should include:
-                - "ball_id": unique identifier.
-                - "min_distance_ball_racket": float; if 0 or None, the ball is considered hit.
-                - "landing_position": [x, y, z] (optional; if provided, used to check if on table).
-                
-        Returns:
-            float: Exploration reward summed across all hit balls.
-        """
         print("_", end="")
         total_reward = 0.0
-        if self.reward_type == self.REWARD_TYPE_KNN_JOINT:
-            total_p_reward = 0.0
-            total_j_reward = 0.0
+        total_p_reward = 0.0
+        total_j_reward = 0.0
         hit_count = 0
-        non_hit_min_distance = float('inf')
-        
-        # Calculate rewards per ball and sum them
+        non_hit_min_distance = float("inf")
+
         for ball in balls:
             min_dist_racket = ball.get("min_distance_ball_racket", None)
-            
-            # Track minimum distance for non-hit balls (for fallback reward)
+
             if min_dist_racket is not None and min_dist_racket > 0:
                 non_hit_min_distance = min(non_hit_min_distance, min_dist_racket)
                 print(" ", end="")
                 continue
-                
-            # Process hit ball and get reward
-            hit_count += 1
-            ball_reward, p_reward, j_reward = self.process_ball_and_get_reward(ball)
-            total_reward += ball_reward
-            if self.reward_type == self.REWARD_TYPE_KNN_JOINT:
-                total_p_reward += p_reward
-                total_j_reward += j_reward
 
-        if self.reward_type == self.REWARD_TYPE_KNN_JOINT:
-            print("pr: {:.2f}, jr: {:.2f} ".format(total_p_reward, total_j_reward), end="")
-            
+            hit_count += 1
+            ball_r, p_r, j_r = self.process_ball_and_get_reward(ball)
+            total_reward += ball_r
+            total_p_reward += p_r
+            total_j_reward += j_r
+
+        if self.reward_type == self.REWARD_TYPE_KNN_JOINT or self.reward_type == self.REWARD_TYPE_BUCKET_J3:
+            print(f"  pr: {total_p_reward:.2f}, jr: {total_j_reward:.2f} ", end="")
+
         print("   ", end="")
 
-        # If no balls were hit, use fallback penalty based on closest miss
         if hit_count == 0:
-            if non_hit_min_distance != float('inf'):
-                total_reward = -non_hit_min_distance
-            else:
-                total_reward = 0.0
+            total_reward = -non_hit_min_distance if non_hit_min_distance != float("inf") else 0.0
             return total_reward
-        
-        return total_reward / len(balls) * 3.0  # Normalize by number of balls and scale reward
-    
+
+        return total_reward / len(balls) * 3.0
+
+    # ------------------------------------------------------------------
+    # diagnostics
     def get_hit_distribution(self):
-        """
-        Returns the current hit distribution as a dictionary.
-        Useful for debugging and visualization.
-        """
-        distribution = {
+        dist = {
             "ball_total_hits": self.ball_total_hits.copy(),
-            "ball_on_table": {ball_id: [[counts[i][j] for j in range(self.n_buckets_y)] 
-                                   for i in range(self.n_buckets_x)]
-                          for ball_id, counts in self.ball_on_table_counts.items()},
+            "ball_on_table": {bid: [[cnts[i][j] for j in range(self.n_buckets_y)] for i in range(self.n_buckets_x)]
+                               for bid, cnts in self.ball_on_table_counts.items()},
             "ball_off_table": self.ball_off_table_counts.copy(),
         }
-        
         if self.reward_type == self.REWARD_TYPE_ENTROPY:
-            distribution["ball_entropies"] = {
-                ball_id: self.compute_entropy_for_ball_id(ball_id) 
-                for ball_id in self.ball_total_hits
-            }
-            
-        return distribution
+            dist["ball_entropies"] = {bid: self.compute_entropy_for_ball_id(bid) for bid in self.ball_total_hits}
+        if self.reward_type == self.REWARD_TYPE_BUCKET_J3:
+            dist["ball_joint3_buckets"] = self.ball_joint3_bucket_counts.copy()
+        return dist
 
 
 
@@ -434,3 +443,28 @@ if __name__ == "__main__":
         print(f"\nStep {step+1}:")
         reward = reward_fn(balls)
         print(f"  Reward: {reward:.4f}")
+
+
+    # Test with bucket_j3 reward
+    print("\n\nTesting with bucket_j3 reward:")
+    reward_fn = ExplorationReward(
+        table_bounds, 
+        n_buckets_x, 
+        n_buckets_y, 
+        reward_type=ExplorationReward.REWARD_TYPE_BUCKET_J3
+    )
+
+    # Reset for a new test
+    reward_fn.reset_counts()
+    # Add robot joint positions to the test data
+    i=0
+    for ball_set in hits_sequence:
+        i+=1
+        for ball in ball_set:
+            if ball.get("min_distance_ball_racket", 1.0) == 0:
+                ball["robot_joint_positions"] = [0.1, 0.2, 0.3, 0.1 * i]
+    for step, balls in enumerate(hits_sequence):
+        print(f"\nStep {step+1}:")
+        reward = reward_fn(balls)
+        print(f"  Reward: {reward:.4f}")
+    
