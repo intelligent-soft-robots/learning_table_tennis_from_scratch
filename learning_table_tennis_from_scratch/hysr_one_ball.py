@@ -1251,7 +1251,7 @@ class HysrOneBall:
                     "landing_position": hitting_point,
                     "min_distance_ball_racket": ball_status.min_distance_ball_racket,
                     "max_ball_velocity": ball_status.max_ball_velocity,
-                    "robot_joint_positions": joint_positions,
+                    "robot_joint_positions": self.ball_landing_data[ball_id]["robot_joint_positions"],
                 }
             else:
                 # Debug print to see if landing point would change
@@ -1352,6 +1352,9 @@ class HysrOneBall:
             self._simulated_robot_handle, SEGMENT_ID_BALL, self._ball_status, ball_position, ball_velocity
         )
 
+        if self._ball_status.min_distance_ball_racket is None and self.ball_landing_data[0]["robot_joint_positions"] is None:
+            self.ball_landing_data[0]["robot_joint_positions"] = joint_positions
+
         # getting information about extra simulated balls
         if self._extra_balls_frontend is not None:
 
@@ -1372,6 +1375,11 @@ class HysrOneBall:
                 )
 
             self.extra_contacts = [self.extra_contacts[index] or contacts[index] for index in range(nb_balls) ]
+
+            for index in range(nb_balls):
+                if self.extra_contacts[index] and self.ball_landing_data[index + 1]["robot_joint_positions"] is None:
+                    self.ball_landing_data[index + 1]["robot_joint_positions"] = joint_positions
+
             self.extra_min_distance_ball_racket = [None if self.extra_contacts[index]
                                             else _distance(extra_ball_positions[index], robot_cartesian_position) if not self.extra_min_distance_ball_racket[index] 
                                             else min([distance(extra_ball_positions[index], robot_cartesian_position), self.extra_min_distance_ball_racket[index]])
