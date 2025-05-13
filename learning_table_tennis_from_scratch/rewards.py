@@ -182,12 +182,22 @@ class JsonReward:
 
         if reward_function_type == "reward_many_balls_exploration":
 
-            from .rewards_many_balls_exploration import PerBallIDEntropyChangeReward
+            from .rewards_many_balls_exploration import ExplorationReward
             table_bounds = ((0, 2), (0, 1))  # Default values
             n_buckets_x = 4
             n_buckets_y = 3
+            
+            # Default to KNN with k=1
+            reward_type = conf.get("exploration_reward_type", ExplorationReward.REWARD_TYPE_KNN_JOINT)
+            k_neighbors = conf.get("k_neighbors", 1)
 
-            reward_func = PerBallIDEntropyChangeReward(table_bounds, n_buckets_x, n_buckets_y)
+            reward_func = ExplorationReward(
+                table_bounds, 
+                n_buckets_x, 
+                n_buckets_y, 
+                reward_type=reward_type,
+                k_neighbors=k_neighbors
+            )
             reward_func.reward_function_type = "reward_many_balls_exploration"
             return reward_func
 
@@ -291,7 +301,7 @@ def compute_rewards(reward_function, target, nb_balls, observations, episode=Non
 
         # returns euclidian distance between two vectors
         def _distance(p1, p2):
-            return math.sqrt(sum([(a - b) ** 2 for a, b in zip(p1, p2)]))
+            return float(np.linalg.norm(np.asarray(p1) - p2))
 
         # traj1 is a list of positions, so is traj2
         # returns the minimal distance between positions in traj1 and

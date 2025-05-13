@@ -91,14 +91,16 @@ class HysrManyBallEnv(gym.Env):
     ):
         super().__init__()
 
-        self._log_episodes = log_episodes
+        
         self._logger = logger
 
         hysr_one_ball_config = HysrOneBallConfig.from_json(hysr_one_ball_config_file)
 
         self._save_folder_traj = hysr_one_ball_config.save_folder_traj
-        if not os.path.exists(self._save_folder_traj):
+        if self._save_folder_traj and not os.path.exists(self._save_folder_traj):
             os.makedirs(self._save_folder_traj)
+
+        self._log_episodes = log_episodes and self._save_folder_traj!=""
 
         reward_function = JsonReward.get(reward_config_file)
 
@@ -166,11 +168,10 @@ class HysrManyBallEnv(gym.Env):
         self.n_steps = 0
         self.n_steps_after_all_hit = 0
 
-        if self._log_episodes:
-            self.data_buffer = []
-            self.ball_hit = False
-            self.extra_data_buffer = [[] for _ in range(self._hysr._hysr_config.extra_balls_per_set)]
-            self.extra_ball_hit = [False for _ in range(self._hysr._hysr_config.extra_balls_per_set)]
+        self.data_buffer = []
+        self.ball_hit = False
+        self.extra_data_buffer = [[] for _ in range(self._hysr._hysr_config.extra_balls_per_set)]
+        self.extra_ball_hit = [False for _ in range(self._hysr._hysr_config.extra_balls_per_set)]
 
         if self.n_eps == 0:
             print("---HysrManyBallEnv with {} extra balls---".format(self._hysr._hysr_config.extra_balls_per_set))

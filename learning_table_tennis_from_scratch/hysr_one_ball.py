@@ -67,7 +67,7 @@ def _velocity_norm(velocity):
     return math.sqrt(sum([v ** 2 for v in velocity]))
 
 def _distance(p1, p2):
-    return math.sqrt(sum([(a - b) ** 2 for a, b in zip(p1, p2)]))
+    return float(np.linalg.norm(np.asarray(p1) - p2))
 
 def _min_distance(traj1, traj2):
     return min([_distance(p1, p2) for p1, p2 in zip(traj1, traj2)])
@@ -1198,8 +1198,6 @@ class HysrOneBall:
             ball.handle.reset_contact(ball.segment_id)
             ball.handle.activate_contact(ball.segment_id)
 
-        time.sleep(0.1)
-
         # resetting ball info, e.g. min distance ball/racket, target_position etc
         self._ball_status.target_position = self.sample_goal()
         self._ball_status.reset()
@@ -1225,14 +1223,16 @@ class HysrOneBall:
         self.ball_landing_data[0] = {
             "landing_position": None,
             "min_distance_ball_racket": None,
-            "max_ball_velocity": None
+            "max_ball_velocity": None,
+            "robot_joint_positions": None,
         }
         # Extra balls start at ID 1
         for i in range(self._hysr_config.extra_balls_per_set):
             self.ball_landing_data[i+1] = {
                 "landing_position": None,
                 "min_distance_ball_racket": None,
-                "max_ball_velocity": None
+                "max_ball_velocity": None,
+                "robot_joint_positions": None,
             }
 
         # checking the position of the robot, to see if it drifts
@@ -1339,7 +1339,7 @@ class HysrOneBall:
 
 
 
-    def _episode_over(self, ball_status=None):
+    def _episode_over(self, ball_status=None, joint_positions=None):
         if ball_status is None:
             ball_status = self._ball_status
 
@@ -1405,7 +1405,8 @@ class HysrOneBall:
                 self.ball_landing_data[ball_id] = {
                     "landing_position": hitting_point,
                     "min_distance_ball_racket": ball_status.min_distance_ball_racket,
-                    "max_ball_velocity": ball_status.max_ball_velocity
+                    "max_ball_velocity": ball_status.max_ball_velocity,
+                    "robot_joint_positions": joint_positions,
                 }
             else:
                 # Debug print to see if landing point would change
@@ -1737,10 +1738,7 @@ class HysrOneBall:
         if self._accelerated_time:
             for _ in range(self._nb_robot_bursts):
                 # sending action pressures to real (or pseudo real) robot.
-                if self._accelerated_time:
-                    # if accelerated times, running the pseudo real robot iterations
-                    # (note : o80_pam expected to have started in bursting mode)
-                    self._pressure_commands.set(pressures, burst=1) #self._nb_robot_bursts
+                self._pressure_commands.set(pressures, burst=1) #self._nb_robot_bursts
 
                 # sending mirroring state to simulated robot(s)
                 _, _, joint_positions, joint_velocities = self._pressure_commands.read()
@@ -1811,8 +1809,7 @@ class HysrOneBall:
                                             else max([_velocity_norm(extra_ball_velocities[index]), self.extra_max_ball_velocity[index]])
                                             for index in range(nb_balls)]
 
-            extra_dones =   [self._episode_over(ball.ball_status) for ball in self._extra_balls]
-
+            extra_dones =  [self._episode_over(ball.ball_status, joint_positions) for ball in self._extra_balls]
             extra_dones = [self.extra_dones_before[index] or extra_dones[index] for index in range(nb_balls)]
                         
             self.extra_dones_before = extra_dones.copy()
@@ -1861,7 +1858,8 @@ class HysrOneBall:
                             "ball_id": 0,
                             "min_distance_ball_racket": self.ball_landing_data[0]["min_distance_ball_racket"],
                             "landing_position": self.ball_landing_data[0]["landing_position"],
-                            "max_ball_velocity": self.ball_landing_data[0]["max_ball_velocity"]
+                            "max_ball_velocity": self.ball_landing_data[0]["max_ball_velocity"],
+                            "robot_joint_positions": self.ball_landing_data[0]["robot_joint_positions"]
                         })
                     else:
                         # Ball wasn't hit - use current data from ball_status
@@ -1879,7 +1877,8 @@ class HysrOneBall:
                                 "ball_id": idx,
                                 "min_distance_ball_racket": self.ball_landing_data[idx]["min_distance_ball_racket"],
                                 "landing_position": self.ball_landing_data[idx]["landing_position"],
-                                "max_ball_velocity": self.ball_landing_data[idx]["max_ball_velocity"]
+                                "max_ball_velocity": self.ball_landing_data[idx]["max_ball_velocity"],
+                                "robot_joint_positions": self.ball_landing_data[idx]["robot_joint_positions"]
                             })
                         elif hasattr(self, 'extra_min_distance_ball_racket') and len(self.extra_min_distance_ball_racket) > idx - 1:
                             # Ball wasn't hit - include closest distance for penalty calculation
@@ -1954,7 +1953,6 @@ class HysrOneBall:
             #returning with extra transitions
             return observation, reward, episode_over, extra_observations, extra_rewards, extra_dones
 
-        # returning
         if self._extra_balls_frontend is not None:
             return observation, reward, episode_over, extra_transitions
         else:
