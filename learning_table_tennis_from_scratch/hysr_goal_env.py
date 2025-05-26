@@ -17,7 +17,7 @@ from .rewards import JsonReward
 
 
 def _distance(p1, p2):
-    return math.sqrt(sum([(a - b) ** 2 for a, b in zip(p1, p2)]))
+    return float(np.linalg.norm(np.asarray(p1) - p2))
 
 class _ObservationSpace:
 

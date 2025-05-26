@@ -192,7 +192,8 @@ class JsonReward:
                 n_buckets_x, 
                 n_buckets_y, 
                 reward_type=reward_type,
-                k_neighbors=k_neighbors
+                k_neighbors=k_neighbors,
+                give_max_reward=conf.get("give_max_reward", True),
             )
             reward_func.reward_function_type = "reward_many_balls_exploration"
             return reward_func

@@ -22,7 +22,7 @@ class ExplorationReward:
 
     # ---------------------------------------------------------------------
     def __init__(self, table_bounds, n_buckets_x=4, n_buckets_y=2,
-                 reward_type="knn", epsilon=3e-2, k_neighbors=1):
+                 reward_type="knn", epsilon=3e-2, k_neighbors=1, give_max_reward=False):
 
         self.table_bounds = table_bounds
         self.n_buckets_x = n_buckets_x
@@ -31,10 +31,19 @@ class ExplorationReward:
         self.normalization_constant = 1.5
         self.reward_type = reward_type
         self.k_neighbors = k_neighbors
+        self.give_max_reward = give_max_reward
 
         self.reset_counts()  # initialise all per‑ball stores
 
         print(f"--- ExplorationReward: {reward_type} ---")
+        print(f" params: {table_bounds}, {n_buckets_x}x{n_buckets_y}, "
+              f"epsilon={epsilon}, k_neighbors={k_neighbors}, give_max_reward={give_max_reward}")
+        print(f" buckets: {self.n_buckets_x}x{self.n_buckets_y}, "
+              f"table_bounds: {self.table_bounds}")
+        print(f" reward_type: {self.reward_type}")
+        print(f" k_neighbors: {self.k_neighbors}")
+        print(f" give_max_reward: {self.give_max_reward}")
+        print("--------------------------------------------------")
 
 
     # ------------------------------------------------------------------
@@ -206,7 +215,6 @@ class ExplorationReward:
             print(chr(65 + i * self.n_buckets_y + j), end="")
         else:
             self.ball_off_table_counts[ball_id] += 1
-            print(".", end="")
 
         # ------------------------------------------------------------------
         # reward‑type dispatch
@@ -241,6 +249,11 @@ class ExplorationReward:
                 self.ball_joint3_bucket_counts[ball_id][idx_j3] += 1
                 j3_r = 1 / math.sqrt(self.ball_joint3_bucket_counts[ball_id][idx_j3])
 
+            # (c) joint reward is zero when angle between -pi * 0.1 and pi * 0.1
+            if j3_r > 0.0 and abs(robot_joint_positions[2]) < 0.1 * math.pi:
+                j3_r = 0.0
+
+            # (d) combine the two rewards
             total_p_reward = bucket_r
             total_j_reward = j3_r
             reward = (bucket_r + j3_r) * 1.5
@@ -273,6 +286,7 @@ class ExplorationReward:
     def __call__(self, balls):
         print("_", end="")
         total_reward = 0.0
+        max_reward = -1.0
         total_p_reward = 0.0
         total_j_reward = 0.0
         hit_count = 0
@@ -291,6 +305,7 @@ class ExplorationReward:
             total_reward += ball_r
             total_p_reward += p_r
             total_j_reward += j_r
+            max_reward = max(max_reward, ball_r)
 
         if self.reward_type == self.REWARD_TYPE_KNN_JOINT or self.reward_type == self.REWARD_TYPE_BUCKET_J3:
             print(f"  pr: {total_p_reward:.2f}, jr: {total_j_reward:.2f} ", end="")
@@ -300,6 +315,9 @@ class ExplorationReward:
         if hit_count == 0:
             total_reward = -non_hit_min_distance if non_hit_min_distance != float("inf") else 0.0
             return total_reward
+
+        if self.give_max_reward:
+            return max_reward
 
         return total_reward / len(balls) * 3.0
 

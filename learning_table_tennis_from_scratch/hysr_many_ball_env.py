@@ -534,6 +534,10 @@ class HysrManyBallEnv(gym.Env):
 
         return obs, reward, all_episodes_over, False, infos
 
+    def seed(self, seed=None):
+        if seed is not None:
+            np.random.seed(seed)
+
     def reset(self, *, seed=None, options=None):
         if seed is not None:
             np.random.seed(seed)
