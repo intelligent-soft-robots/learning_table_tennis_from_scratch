@@ -15,7 +15,7 @@ import torch
 import torch.nn as nn
 import matplotlib.pyplot as plt
 from matplotlib.colors import LinearSegmentedColormap
-from collections import OrderedDict, defaultdict
+from collections import OrderedDict, defaultdict, deque
 import itertools
 import tikzplotlib
 from dataclasses import dataclass
@@ -24,6 +24,7 @@ from typing import List, Dict, Optional, Union, Tuple, Any, Type
 from copy import deepcopy
 import dataclasses
 from types import MappingProxyType
+from ttr_diffusion_v4 import inference_diffusion_policy, TTRDiffusionDataset, ConditionalUnet1D
 
 # === Load Main Configuration ===
 # Assume config.json is in the same directory or accessible path
@@ -288,7 +289,7 @@ class CBCAgent(nn.Module, GoalConditionedPolicy):
         self.data_normalizer = data_normalizer
         
         # Get state and goal dimensions from the environment
-        ob_reset = env.reset()
+        ob_reset, _ = env.reset()
         state_dim = ob_reset['observation'].shape[0]
         goal_dim = ob_reset['desired_goal'].shape[0]
         
@@ -410,6 +411,8 @@ def load_trajectories(data_paths: Union[str, List[str]],
         files_all_test = [f for f in os.listdir(data_path)]
         all_files.extend([(data_path, f) for f in files])
         if mode == Mode.DEBUG and len(all_files) > max_files:
+            # shuffle files
+            np.random.shuffle(all_files)
             all_files = all_files[:max_files * 2]
 
     if first_fraction < 1.0:
@@ -448,10 +451,12 @@ def load_trajectories(data_paths: Union[str, List[str]],
     validation_buffer = []
     filenames_loaded = []
     n_found = 0
+    n_checked = 0
     n_found_per_path = [0] * len(data_paths)
     for filename in all_filenames:
+        n_checked += 1
         # show progress every 1% of files
-        if n_found % (total_files // 100) == 0:
+        if n_checked % (total_files // 100) == 0:
             print(".", end="", flush=True)
         if isinstance(max_files, int):
             if n_found >= max_files:
@@ -475,6 +480,7 @@ def load_trajectories(data_paths: Union[str, List[str]],
         with open(filename, "r") as json_data:
             dict_data = json.load(json_data)
             if "next_ob" not in dict_data:
+                print(f"Skipping file {filename} because 'next_ob' is missing.")
                 continue
             ob = dict_data["ob"]
             next_ob = dict_data["next_ob"]
@@ -483,6 +489,7 @@ def load_trajectories(data_paths: Union[str, List[str]],
                 continue
             action = dict_data["action_orig"] #[::action_repeat_counter]
             if not next_ob or not ob or not action:
+                print(f"Skipping file {filename} because 'ob', 'next_ob' or 'action' is empty.")
                 continue
             states = []
             next_states = []
@@ -550,6 +557,69 @@ def get_state_normalizer(buffer):
     return state_normalizer
 
 
+def load_stats(stats_path):
+    # Load from stats file
+    with open(stats_path, 'r') as f:
+        stats_dict = json.load(f)
+    stats = {
+        'obs': {
+            'min': np.array(stats_dict['obs']['min'], dtype=np.float32),
+            'max': np.array(stats_dict['obs']['max'], dtype=np.float32)
+        },
+        'goal': {
+            'min': np.array(stats_dict['goal']['min'], dtype=np.float32),
+            'max': np.array(stats_dict['goal']['max'], dtype=np.float32)
+        },
+        'action': {
+            'min': np.array(stats_dict['action']['min'], dtype=np.float32),
+            'max': np.array(stats_dict['action']['max'], dtype=np.float32)
+        }
+    }
+    return stats
+
+
+def load_diffusion_agent(model_path, device='cpu'):
+    # Load the full checkpoint
+    checkpoint = torch.load(model_path, map_location=device)
+    
+    # Extract the model state dict and stats
+    state_dict = checkpoint['model_state_dict']
+    stats = checkpoint.get('stats', None)
+    
+    # Set dimensions as in training
+    action_dim = 8  # Adjust based on your action space
+    obs_dim = 22    # From LEN_OB in your constants
+    goal_dim = 3    # From desired_goal dimensions
+    obs_horizon = 2 # Number of past observations used during training
+    action_horizon = 1 # Number of past actions used during training
+    
+    # Instantiate the model with EXACT same dimensions as during training
+    model = ConditionalUnet1D(
+        input_dim=action_dim,
+        global_cond_dim=obs_dim * obs_horizon + goal_dim,
+    ).to(device)
+    
+    # Load the weights
+    model.load_state_dict(state_dict)
+    model.eval()  # Set to evaluation mode
+    
+    return model, stats
+
+
+
+def evaluate_diffusion_agent(env, model_path, random_ball=True, random_goal=True, ball_id=None, goal=None, n_runs=5):
+    model, _ = load_diffusion_agent(model_path)
+    stats = load_stats(model_path.replace('policy.pth', 'stats.json'))
+    metrics_list = []
+    metrics = evaluate_agent(env, model, random_ball=random_ball, random_goal=random_goal, ball_id=ball_id, goal=goal, n_runs=n_runs, diffusion_policy=True, diffusion_stats=stats)
+    metrics_list.append(metrics)
+
+    return metrics_list
+
+    
+
+
+
 # === Training ===
 def train_agent(env, agent, buffer, validation_buffer=None, num_episodes=10, batch_size=1024, 
                 learning_rate=3e-4, collect_during_training=0, specific_ball_id=None, 
@@ -573,7 +643,6 @@ def train_agent(env, agent, buffer, validation_buffer=None, num_episodes=10, bat
     best_agent_state = None
     patience_counter = 0
     
-    print("xx01 Initial evaluation...", flush=True)
     # Initial evaluation
     metrics = evaluate_agent(env,
             agent,
@@ -582,13 +651,11 @@ def train_agent(env, agent, buffer, validation_buffer=None, num_episodes=10, bat
             ball_id=specific_ball_id,
             goal=specific_goal,
             n_runs=5)
-    print("xx02 Initial evaluation done", flush=True)
     metrics['training_step'] = 0
     metrics_list.append(metrics)
     best_eval_reward = np.mean(metrics['rewards'])
     
     for episode in range(num_episodes):
-        print("xx03 Training episode", episode, flush=True)
         agent.train()
         losses_ep = []
         for step in range(steps_per_episode):
@@ -639,17 +706,14 @@ def train_agent(env, agent, buffer, validation_buffer=None, num_episodes=10, bat
                 loss = nll.mean()
             
             # Backward pass with gradient clipping
-            print("xx03.1 Backward pass", flush=True)
             optimizer.zero_grad()
             loss.backward()
             torch.nn.utils.clip_grad_norm_(agent.parameters(), max_grad_norm)
             optimizer.step()
-            print("xx03.2 Backward pass done", flush=True)
             
             losses.append(loss.item())
             losses_ep.append(loss.item())
 
-        print("xx04 Compute validation loss", step, flush=True)
         # Compute validation loss and evaluation metrics
         current_val_loss = float('inf')
         if validation_buffer and len(validation_buffer) > 0:
@@ -670,7 +734,6 @@ def train_agent(env, agent, buffer, validation_buffer=None, num_episodes=10, bat
                 print("*", end="")
                 buffer_collected_during_training.append(trajectory)
 
-        print("xx05 Evaluate agent", flush=True)
         # Evaluate agent
         metrics = evaluate_agent(env,
                                agent,
@@ -682,7 +745,6 @@ def train_agent(env, agent, buffer, validation_buffer=None, num_episodes=10, bat
         metrics['training_step'] = (episode + 1) * steps_per_episode
         metrics['losses'] = losses_ep
         metrics_list.append(metrics)
-        print("xx06 Evaluation done", flush=True)
         
         current_eval_reward = np.mean(metrics['rewards'])
         
@@ -718,10 +780,7 @@ def train_agent(env, agent, buffer, validation_buffer=None, num_episodes=10, bat
                             output_dir=output_dir, plot_diff_also=True, save_json=True)
 
         print()
-        print("xx07 End of episode", episode, flush=True)
                 
-    print("xx08 Training done", flush=True)
-
     return agent, metrics_list
 
 def compute_validation_loss(agent, validation_buffer, batch_size):
@@ -766,14 +825,13 @@ def compute_validation_loss(agent, validation_buffer, batch_size):
     return np.mean(losses)
 
 # === Evaluation ===
-def evaluate_agent(env, agent, random_ball=True, random_goal=True, ball_id=0, goal=center_goal, n_runs=5):
-    print("xx evaluate_agent set agent to eval mode", flush=True)
-    agent.eval()
+def evaluate_agent(env, agent, random_ball=True, random_goal=True, ball_id=0, goal=center_goal, n_runs=5, diffusion_policy=False, diffusion_stats=None):
+    if not diffusion_policy:
+        agent.eval()
     all_distances = []
     all_rewards = []
     scenarios = []
     for _ in range(n_runs):
-        print("xx evaluate_agent sample scenario", flush=True)
         ball_id = np.random.randint(1, 106) if random_ball else ball_id
         # sample goal randomly on the opponent side
         goal = [tc[0] - hts[0] + np.random.rand() * 2 * hts[0], 
@@ -786,16 +844,16 @@ def evaluate_agent(env, agent, random_ball=True, random_goal=True, ball_id=0, go
         # Reset environment with specific ball and goal
         env.set_ball_id(scenario['ball_id'])
         env.set_goal(scenario['goal'])
-        print("xx evaluate_agent, scenario", scenario, flush=True)
-        trajectory = sample_trajectory(env, agent, greedy=True, eval=True)
+        trajectory = sample_trajectory(env, agent, greedy=True, eval=True, 
+                                       diffusion_policy=diffusion_policy, diffusion_stats=diffusion_stats)
         final_distance = np.linalg.norm(trajectory['achieved_goal'] - trajectory['desired_goal'])
         all_distances.append(final_distance)
         all_rewards.append(trajectory['reward'])
     success_rates = [1 if d < 0.8 else 0 for d in all_distances]
     hit_rates = [1 if r > 0 else 0 for r in all_rewards]
     print(f"Eval: D: {np.mean(all_distances):.4f}, R: {np.mean(all_rewards):.4f}, SR: {np.mean(success_rates):.2f} HR: {np.mean(hit_rates):.2f}", end=' ')
-    agent.train()
-    print("xx evaluate_agent done", flush=True)
+    if not diffusion_policy:
+        agent.train()
     return {'distances': all_distances, 'rewards': all_rewards, 'success_rates': success_rates, 'hit_rates': hit_rates}
 
 def set_env_to_random_ball_and_random_goal(env):
@@ -805,21 +863,30 @@ def set_env_to_random_ball_and_random_goal(env):
     env.set_goal(goal)
     return ball_id, goal
 
-def sample_trajectory(env, agent, T=250, greedy=False, eval=False, k_step_noise = 0, noise_k_step = 0, dataset_actions = None):
+def sample_trajectory(env, agent, T=250, greedy=False, eval=False, k_step_noise = 0, noise_k_step = 0, dataset_actions = None, diffusion_policy=False, diffusion_stats=None):
     """
     Samples a trajectory using the agent in the environment.
     """
-    print("xx sample_trajectory reset env", flush=True)
-    state = env.reset()
+    state, _ = env.reset()
     desired_goal = state['desired_goal']
     states = []
     actions = []
     total_reward = 0
+    previous_previous_observation = state['observation']
+    previous_observation = state['observation']
     for t in range(T):
-        if t<5 or t>100:
-            print("xx sample_trajectory t:", t, "state:", state['observation'], "goal:", state['desired_goal'], "achieved_goal:", state['achieved_goal'], flush=True)
         states.append(state)
-        action = agent.get_action(state, desired_goal, horizon=0, greedy=greedy)
+        if diffusion_policy:
+            current_observation = state['observation']
+            observation_history = np.array([previous_observation, current_observation])
+            action = inference_diffusion_policy(agent, observation_history, state['desired_goal'], diffusion_stats, pred_horizon=4,
+            action_horizon=1)
+            action=action[0]
+            previous_previous_observation = previous_observation
+            previous_observation = current_observation
+        else:
+            action = agent.get_action(state, desired_goal, horizon=0, greedy=greedy)
+        
         # if t<7:
         #     action = action * 0.0000000001
         if dataset_actions is not None:
@@ -829,14 +896,13 @@ def sample_trajectory(env, agent, T=250, greedy=False, eval=False, k_step_noise 
         if t == noise_k_step:
             action += k_step_noise
         actions.append(action)
-        state, reward, done, _ = env.step(action)
+        state, reward, done, _, _ = env.step(action)
+        print(".", end="", flush=True)
         total_reward += reward
         if done:
             # print("ep steps:", t, "reward:", reward)
             break
-    
-    print("xx sample_trajectory done", flush=True)
-    
+        
     # Use the final achieved goal as the desired goal for all states
     final_achieved_goal = state['achieved_goal']
     if not eval:
@@ -2372,8 +2438,12 @@ def main():
         os.makedirs(run_output_folder)
     print(f"Results for this run will be saved in: {run_output_folder}")
 
-    # Pass the loaded config to dataset_experiments
+    # # Pass the loaded config to dataset_experiments
     dataset_experiments(env, run_output_folder, gcsl_config, mode)
+
+    # evaluate diffusion policy
+    # model_path = "/path/to/policy.pth"
+    # evaluate_diffusion_agent(env, model_path, random_ball=True, random_goal=True, ball_id=None, goal=None, n_runs=5)
 
 
 if __name__ == '__main__':

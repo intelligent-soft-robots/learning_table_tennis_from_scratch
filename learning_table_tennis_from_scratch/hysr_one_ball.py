@@ -138,6 +138,7 @@ class HysrOneBallConfig:
     action_in_state: bool = oc.MISSING
     action_repeat_counter: int = oc.MISSING
     trajectory: int = oc.MISSING
+    random_trajectory_translation: t.List[t.Any] = oc.MISSING  # t.List[float]
     accelerated_time: bool = oc.MISSING
     save_data: bool = oc.MISSING
     save_folder: str = "/tmp/"
@@ -284,8 +285,11 @@ class _BallBehavior:
             t.Tuple[t.Sequence[float], t.Sequence[float], float, float]
         ] = None,
         index: t.Optional[int] = None,
+        random_trajectory_translation: t.Optional[t.List[float]] = None,
         random: bool = False,
     ):
+        print("Ball behavior: ", line, index, random, 
+              random_trajectory_translation)
         if not hasattr(self.__class__, "_trajectory_reader"):
             raise UnboundLocalError(
                 "_BallBehavior: the classmethod read_trajectories(group:str) "
@@ -305,8 +309,10 @@ class _BallBehavior:
         elif index is not None and index is not False:
             self.type = self.INDEX
             self.value = index
+            self.random_trajectory_translation = random_trajectory_translation
         elif random is not None and random is not False:
             self.type = self.RANDOM
+            self.random_trajectory_translation = random_trajectory_translation
 
         self._random_traj_index = index
 
@@ -322,12 +328,26 @@ class _BallBehavior:
             return trajectory
         # ball behavior is a specified pre-recorded trajectory
         if self.type == self.INDEX:
-            trajectory = self._trajectory_reader.get_trajectory(self.value)
+            print("Using trajectory index: ", self.value)
+            if self.random_trajectory_translation is None:
+                trajectory = self._trajectory_reader.get_trajectory(self.value)
+            else:
+                trajectory = self._trajectory_reader.get_trajectory_with_random_translation(
+                    self.value, translation_range=self.random_trajectory_translation
+                )
             self._random_traj_index = self.value
             return trajectory
         # ball behavior is a randomly selected pre-recorded trajectory
         if self.type == self.RANDOM:
-            trajectory, self._random_traj_index = self._trajectory_reader.random_trajectory(return_index = True)
+            if self.random_trajectory_translation is None:
+                trajectory, self._random_traj_index = self._trajectory_reader.random_trajectory(return_index = True)
+                print("Using random trajectory index: ", self._random_traj_index)
+            else:
+                trajectory, self._random_traj_index = self._trajectory_reader.random_trajectory_with_random_translation(
+                    translation_range=self.random_trajectory_translation, return_index=True
+                )
+                print("Using random trajectory index: ", self._random_traj_index)
+                print("Random trajectory translation: ", self.random_trajectory_translation)
             return trajectory
 
     def get(self):
@@ -551,9 +571,11 @@ class HysrOneBall:
         # corresponding indexed pre-recorded trajectory) or a negative int
         # (playing randomly selected indexed trajectories)
         if hysr_config.trajectory >= 0:
-            self._ball_behavior = _BallBehavior(index=hysr_config.trajectory)
+            self._ball_behavior = _BallBehavior(index=hysr_config.trajectory, 
+                                                random_trajectory_translation=hysr_config.random_trajectory_translation)
         else:
-            self._ball_behavior = _BallBehavior(random=True)
+            self._ball_behavior = _BallBehavior(random=True,
+                                                random_trajectory_translation=hysr_config.random_trajectory_translation)
 
         # the robot will interpolate between current and
         # target posture over this duration
@@ -704,7 +726,8 @@ class HysrOneBall:
     def set_ball_behavior(self, line=False, index=False, random=False):
         # overwrite the ball behavior (set to a trajectory in the constructor)
         # see comments in _BallBehavior, in this file
-        self._ball_behavior = _BallBehavior(line=line, index=index, random=random)
+        self._ball_behavior = _BallBehavior(line=line, index=index, random=random, 
+                                            random_trajectory_translation=self._hysr_config.random_trajectory_translation)
 
     def set_extra_ball_behavior(
         self, ball_index, line=False, index=False, random=False
@@ -715,7 +738,8 @@ class HysrOneBall:
         if ball_index < 0 or ball_index >= len(self._extra_balls):
             raise IndexError(ball_index)
         self._extra_balls[ball_index].ball_behavior = _BallBehavior(
-            line=line, index=index, random=random
+            line=line, index=index, random=random,
+            random_trajectory_translation=self._hysr_config.random_trajectory_translation
         )
 
     def _create_observation(self):
@@ -788,11 +812,19 @@ class HysrOneBall:
             index for index, value in enumerate(trajectories) if value is None
         ]
         if none_trajectory_indexes:
-            extra_trajectories = (
-                self._trajectory_reader.get_different_random_trajectories(
-                    len(none_trajectory_indexes)
+            if self._hysr_config.random_trajectory_translation is None:
+                extra_trajectories = (
+                    self._trajectory_reader.get_different_random_trajectories(
+                        len(none_trajectory_indexes)
+                    )
                 )
-            )
+            else:
+                extra_trajectories = (
+                    self._trajectory_reader.get_different_random_trajectories_with_random_translation(
+                        len(none_trajectory_indexes),
+                        translation_range=self._hysr_config.random_trajectory_translation
+                    )
+                )
             for index, trajectory in zip(none_trajectory_indexes, extra_trajectories):
                 trajectories[index] = trajectory
         for index_ball, (ball, trajectory) in enumerate(
@@ -1036,8 +1068,18 @@ class HysrOneBall:
         else:
             return self._target_position
 
-    def set_ball_id(self, ball_id):
+    def set_ball_id(self, ball_id, extra_balls=False):
         self.set_ball_behavior(index=ball_id)
+        if extra_balls:
+            for extra_ball in self._extra_balls:
+                extra_ball.ball_behavior = _BallBehavior(index=ball_id, 
+                                                         random_trajectory_translation=self._hysr_config.random_trajectory_translation)
+
+    def set_ball_random_trajectory_translation(self, random_translation_range, extra_balls=False):
+        self._ball_behavior.random_trajectory_translation = random_translation_range
+        if extra_balls:
+            for extra_ball in self._extra_balls:
+                extra_ball.ball_behavior.random_trajectory_translation = random_translation_range
 
     def set_goal(self, goal):
         self._target_position = goal

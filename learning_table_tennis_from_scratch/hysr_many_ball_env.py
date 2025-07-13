@@ -258,9 +258,12 @@ class HysrManyBallEnv(gym.Env):
 
 
 
-    def set_ball_id(self, ball_id):
+    def set_ball_id(self, ball_id, extra_balls=False):
         # print("set ball id env", ball_id)
-        self._hysr.set_ball_id(ball_id)
+        self._hysr.set_ball_id(ball_id, extra_balls)
+
+    def set_ball_random_trajectory_translation(self, translation, extra_balls=False):
+        self._hysr.set_ball_random_trajectory_translation(translation, extra_balls)
 
     def set_goal(self, goal):
         self._hysr.set_goal(goal)

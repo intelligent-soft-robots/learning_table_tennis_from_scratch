@@ -213,6 +213,12 @@ def run_stable_baselines(
 
     if rl_config.eval:
         print("-- Evaluating policy --")
+        if env.get_attr('_log_episodes')[0]:
+            base_env = env.envs[0].unwrapped
+            base_env._save_folder_traj = base_env._save_folder_traj + "eval/"
+            if not os.path.exists(base_env._save_folder_traj):
+                os.makedirs(base_env._save_folder_traj)
+            print("Saving evaluation episodes to", base_env._save_folder_traj)
         mean_reward, std_reward = evaluate_policy(model, env, n_eval_episodes=rl_config.eval_episodes)
         print("-- Evaluation finished --")
         print(f"Mean reward: {mean_reward:.2f} ± {std_reward:.2f} (std)")

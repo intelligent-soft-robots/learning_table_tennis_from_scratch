@@ -7,6 +7,8 @@
     "learning_rate":0.00026,
     "batch_size": 256,
     "num_timesteps": 500000,
+    "eval": true,
+    "eval_episodes": 100,
     "load_path": "",
     "save_path": "/tmp/model",
     "num_layers": 1,
@@ -15,5 +17,5 @@
     "train_freq": 1,
     "train_freq_unit": "step",
     "buffer_size": 500000,
-    "learning_starts": 10000
+    "learning_starts": 1000
 }

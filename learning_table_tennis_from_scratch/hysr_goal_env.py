@@ -285,8 +285,11 @@ class HysrGoalEnv(gym_robotics.GoalEnv):
         return self._goal_boxes.get_normalized_values()
 
     
-    def set_ball_id(self, ball_id):
-        self._hysr.set_ball_id(ball_id)
+    def set_ball_id(self, ball_id, extra_balls=False):
+        self._hysr.set_ball_id(ball_id, extra_balls)
+
+    def set_ball_random_trajectory_translation(self, translation, extra_balls=False):
+        self._hysr.set_ball_random_trajectory_translation(translation, extra_balls)
 
     def set_goal(self, goal):
         self._hysr.set_goal(goal)
@@ -417,8 +420,8 @@ class HysrGoalEnv(gym_robotics.GoalEnv):
             # formatting observation in a format suitable for gym
             obs = self._get_obs(observation, action_casted, episode_over)
             
-            if episode_over:
-                break
+            # if episode_over:
+            #     break
 
 
         
@@ -476,7 +479,7 @@ class HysrGoalEnv(gym_robotics.GoalEnv):
         self.action_orig = action_orig.copy()
 
         # formatting observation in a format suitable for gym goal env
-        return obs, reward, episode_over, {}
+        return obs, reward, episode_over, False, {}
 
     def reset(self):
         self.init_episode()
@@ -487,7 +490,7 @@ class HysrGoalEnv(gym_robotics.GoalEnv):
         self.previous_obs = obs.copy()
         self.episode_over = False
         self.action_orig = None
-        return obs
+        return obs, {}
 
     def dump_data(self, data_buffer):
         filename = os.path.join(
@@ -495,6 +498,7 @@ class HysrGoalEnv(gym_robotics.GoalEnv):
             "traj_{}_{}.json".format(self.n_eps, time.strftime("%Y-%m-%d_%H-%M-%S")),
         )
         dict_data = dict()
+
         with open(filename, "w") as json_data:
             dict_data["ob"] = [x[0].tolist() for x in data_buffer]
             dict_data["next_ob"] = [x[-1].tolist() for x in data_buffer]
