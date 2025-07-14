@@ -1,16 +1,21 @@
 {
     "paths": {
       "dataset_folder_groups": {
-        "exploration": [
-          "/is/projects/isrlab/gcsl/data04/ppo_many_balls_expl_05_root_count/",
-          "/is/projects/isrlab/gcsl/data04/ppo_many_balls_expl_05_root_count/"
+        "ppo": [
+          "/is/projects/isrlab/gcsl/data_rew_knn_joint_5_transl/traj/"
+        ],
+        "aug": [
+          "/is/projects/isrlab/gcsl/data_rew_knn_joint_5_transl/aug/"
+        ],
+        "ppo_and_aug": [
+          "/is/projects/isrlab/gcsl/data_rew_knn_joint_5_transl/traj_plus_aug/"
         ]
       },
       "data_path": "",
       "data_path_eval": "",
       "log_file_path": "/home/sguist/Experiments/offline_tt/logs/logs_collect.csv",
-      "vsgcsl_path": "/home/sguist/Experiments/offline_tt",
-      "output_folder": "/home/sguist/Experiments/offline_tt/exp_04_many_balls_expl_05_twenty_percent_03_video"
+      "vsgcsl_path": "/home/sguist/tmp/ltt2/learning_table_tennis_from_scratch/gcsl/",
+      "output_folder": "/is/projects/isrlab/gcsl/data_rew_knn_joint_5_transl/gcsl2"
     },
     "data_loading": {
       "action_repeat_counter": 2,
@@ -32,6 +37,9 @@
         "n_layers": 2
       }
     },
+    "augmentation_params": {
+      "number_steps": 15
+    },
     "training_params": {
       "patience": 100,
       "max_grad_norm": 1.0,
@@ -49,7 +57,7 @@
       ],
       "collect_during_training": 0,
       "mode_specific": {
-        "train": {
+        "training": {
           "n_training_episodes": 25,
           "n_evaluation_episodes": 10,
           "n_samples": 1,

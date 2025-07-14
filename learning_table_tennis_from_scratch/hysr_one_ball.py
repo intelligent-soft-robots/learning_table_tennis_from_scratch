@@ -332,6 +332,7 @@ class _BallBehavior:
             if self.random_trajectory_translation is None:
                 trajectory = self._trajectory_reader.get_trajectory(self.value)
             else:
+                print("translation range: ", self.random_trajectory_translation)
                 trajectory = self._trajectory_reader.get_trajectory_with_random_translation(
                     self.value, translation_range=self.random_trajectory_translation
                 )
@@ -341,13 +342,10 @@ class _BallBehavior:
         if self.type == self.RANDOM:
             if self.random_trajectory_translation is None:
                 trajectory, self._random_traj_index = self._trajectory_reader.random_trajectory(return_index = True)
-                print("Using random trajectory index: ", self._random_traj_index)
             else:
                 trajectory, self._random_traj_index = self._trajectory_reader.random_trajectory_with_random_translation(
                     translation_range=self.random_trajectory_translation, return_index=True
                 )
-                print("Using random trajectory index: ", self._random_traj_index)
-                print("Random trajectory translation: ", self.random_trajectory_translation)
             return trajectory
 
     def get(self):
@@ -677,6 +675,15 @@ class HysrOneBall:
         else:
             self._extra_balls = []
             self._extra_balls_frontend = None
+
+        if self._extra_balls_frontend is not None:
+            for extra_ball in self._extra_balls:
+                if hysr_config.trajectory >= 0:
+                    extra_ball.ball_behavior = _BallBehavior(index=hysr_config.trajectory, 
+                                                            random_trajectory_translation=self._hysr_config.random_trajectory_translation)
+                else:
+                    extra_ball.ball_behavior = _BallBehavior(random=True,
+                                                        random_trajectory_translation=self._hysr_config.random_trajectory_translation) 
 
         # for running all simulations (main + for extra balls)
         # in parallel (i.e. when bursting is called, all mujoco
