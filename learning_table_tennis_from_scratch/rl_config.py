@@ -72,6 +72,8 @@ class RLConfig:
         "log_path",  # Destination for checkpoints and log files
         "eval", # If set, the model is evaluated
         "eval_episodes", # Number of episodes to evaluate the model
+        "use_layer_norm",  # Enable LayerNorm via features extractor
+        "hidden_layers_bias",  # Enable bias in hidden layers
     )
 
     _default_additional_params = {
@@ -85,6 +87,8 @@ class RLConfig:
         "log_path": "",
         "eval": False,
         "eval_episodes": 100,
+        "use_layer_norm": False,
+        "hidden_layers_bias": True,
     }
 
     _params_ppo = _algo_params_ppo + _additional_params

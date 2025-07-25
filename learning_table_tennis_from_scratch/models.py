@@ -7,8 +7,10 @@ from learning_table_tennis_from_scratch.hysr_goal_env import HysrGoalEnv
 from learning_table_tennis_from_scratch.rl_config import RLConfig
 from learning_table_tennis_from_scratch.rl_config import OpenAIRLConfig
 from learning_table_tennis_from_scratch.hysr_one_ball import HysrOneBallConfig
+from learning_table_tennis_from_scratch.layernorm_extractor import LayerNormFeaturesExtractor
 
 import gymnasium as gym
+import torch.nn as nn
 
 def run_stable_baselines(
     reward_config_file,
@@ -74,13 +76,30 @@ def run_stable_baselines(
         continue_training = True
     else:
         if algorithm in ["ppo", "sac"]:
+            if rl_config.use_layer_norm:
+                # Use custom features extractor with LayerNorm
+                policy_kwargs = {
+                    "features_extractor_class": LayerNormFeaturesExtractor,
+                    "features_extractor_kwargs": {
+                        "net_arch": [rl_config.num_hidden] * rl_config.num_layers,
+                        "use_layer_norm": rl_config.use_layer_norm,
+                        "hidden_layers_bias": rl_config.hidden_layers_bias,
+                        "activation_fn": nn.ReLU,
+                    },
+                    "net_arch": []  # Empty since features extractor handles the network
+                }
+            else:
+                assert rl_config.hidden_layers_bias, "hidden layers bias must be set to True for standard architecture"
+                # Standard MlpPolicy
+                policy_kwargs = {
+                    "net_arch": [rl_config.num_hidden] * rl_config.num_layers
+                }
+            
             model = model_type[algorithm](
                     "MlpPolicy",
                     env,
                     seed=seed,
-                    policy_kwargs={
-                        "net_arch": [rl_config.num_hidden] * rl_config.num_layers
-                },
+                    policy_kwargs=policy_kwargs,
                     **rl_config.get_rl_params(),
                 )
             continue_training = False
@@ -166,7 +185,6 @@ def run_stable_baselines(
 
     # set custom logger, so we also get CSV output
     model.set_logger(tensorboard_logger)
-
     
     if rl_config.load_path:
         del model
