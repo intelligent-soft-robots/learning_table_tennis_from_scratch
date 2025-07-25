@@ -45,9 +45,9 @@ def run_stable_baselines(
         )
         tensorboard_logger.set_level(logger.INFO)
 
-        # Save a checkpoint every n_steps steps, or every 10000 steps if n_steps does
-        # not exist (e.g. SAC)
-        save_freq = getattr(rl_config, "n_steps", 10000)
+        # Save a checkpoint every checkpoint_save_freq steps, or every 10000 steps if checkpoint_save_freq does
+        # not exist
+        save_freq = getattr(rl_config, "checkpoint_save_freq", 10000)
 
         checkpoint_callback = CheckpointCallback(
             save_freq=save_freq,

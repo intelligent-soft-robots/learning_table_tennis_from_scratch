@@ -74,6 +74,7 @@ class RLConfig:
         "eval_episodes", # Number of episodes to evaluate the model
         "use_layer_norm",  # Enable LayerNorm via features extractor
         "hidden_layers_bias",  # Enable bias in hidden layers
+        "checkpoint_save_freq",  # Frequency for saving model checkpoints
     )
 
     _default_additional_params = {
@@ -89,6 +90,7 @@ class RLConfig:
         "eval_episodes": 100,
         "use_layer_norm": False,
         "hidden_layers_bias": True,
+        "checkpoint_save_freq": None,  # Will default to n_steps if not specified
     }
 
     _params_ppo = _algo_params_ppo + _additional_params
@@ -168,6 +170,12 @@ class RLConfig:
                     raise ValueError(
                         "failed to find the attribute {} " "in {}".format(s, jsonpath)
                     )
+        
+        # Set checkpoint_save_freq to n_steps if not specified
+        if instance.checkpoint_save_freq is None and hasattr(instance, 'n_steps') and instance.n_steps is not None:
+            instance.checkpoint_save_freq = instance.n_steps
+            print("Using n_steps value '{}' for checkpoint_save_freq parameter.".format(instance.n_steps))
+        
         return instance
 
     # FIXME Is this used anywhere?
