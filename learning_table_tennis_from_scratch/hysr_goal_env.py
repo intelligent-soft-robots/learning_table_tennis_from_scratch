@@ -77,6 +77,14 @@ class _ObservationSpace:
         r = np.concatenate(values)
         r = np.array(r, dtype=np.float32)
         return r
+    
+    def get_start_index(self, name):
+        start_idx = 0
+        for key, box in self._obs_boxes.items():
+            if key == name:
+                return start_idx
+            start_idx += box.size
+        raise KeyError(f"Box '{name}' not found")
 
 
 class HysrGoalEnv(gym_robotics.GoalEnv):
@@ -114,6 +122,7 @@ class HysrGoalEnv(gym_robotics.GoalEnv):
         self._action_repeat_counter = hysr_one_ball_config.action_repeat_counter
 
         self._hysr = HysrOneBall(hysr_one_ball_config, reward_function)
+        self._unsuccessful_episode_counter = 0  # Counter for unsuccessful episodes
 
         self.action_space = gym.spaces.Box(
             low=-1.0, high=+1.0, shape=(self._nb_dofs * 2,), dtype=np.float32
@@ -493,6 +502,18 @@ class HysrGoalEnv(gym_robotics.GoalEnv):
         return obs, {}
 
     def dump_data(self, data_buffer):
+        if len(data_buffer) > 0:
+            final_observation = data_buffer[-1][-1]
+            ball_pos_start = self._obs_boxes.get_start_index("ball_position")
+            final_ball_y = final_observation[ball_pos_start + 1]
+            table_center_y = self._hysr._hysr_config.table_position[1]
+            ball_reached_other_side = final_ball_y > table_center_y
+            
+            if not ball_reached_other_side:
+                self._unsuccessful_episode_counter += 1
+                if self._unsuccessful_episode_counter % 100 != 0:
+                    return
+        
         filename = os.path.join(
             self._save_folder_traj,
             "traj_{}_{}.json".format(self.n_eps, time.strftime("%Y-%m-%d_%H-%M-%S")),

@@ -79,6 +79,14 @@ class _ObservationSpace:
         r = np.concatenate(values)
         r = np.array(r, dtype=np.float32)
         return r
+    
+    def get_start_index(self, name):
+        start_idx = 0
+        for key, box in self._obs_boxes.items():
+            if key == name:
+                return start_idx
+            start_idx += box.size
+        raise KeyError(f"Box '{name}' not found")
 
 
 class HysrManyBallEnv(gym.Env):
@@ -121,6 +129,7 @@ class HysrManyBallEnv(gym.Env):
         self._action_repeat_counter = hysr_one_ball_config.action_repeat_counter
 
         self._hysr = HysrOneBall(hysr_one_ball_config, reward_function)
+        self._unsuccessful_episode_counter = 0  # Counter for unsuccessful episodes
 
         self._obs_boxes = _ObservationSpace()
         
@@ -555,6 +564,18 @@ class HysrManyBallEnv(gym.Env):
         return obs, {}
 
     def dump_data(self, data_buffer, index=None):
+        if len(data_buffer) > 0:
+            final_observation = data_buffer[-1][7]  # next_ob is at index 7
+            ball_pos_start = self._obs_boxes.get_start_index("ball_position")
+            final_ball_y = final_observation[ball_pos_start + 1]
+            table_center_y = self._hysr._hysr_config.table_position[1]
+            ball_reached_other_side = final_ball_y > table_center_y
+            
+            if not ball_reached_other_side:
+                self._unsuccessful_episode_counter += 1
+                if self._unsuccessful_episode_counter % 100 != 0:
+                    return
+        
         filename = self._save_folder_traj + "ppo" + time.strftime("%Y%m%d-%H%M%S")
         if index is not None:
             filename += "_" + str(index)
