@@ -50,7 +50,7 @@ number_steps = gcsl_config['augmentation_params']['number_steps']
 
 
 
-env_tt = HysrManyBallEnv(reward_config_file=reward_config_file, hysr_one_ball_config_file=hysr_one_ball_config_file, log_episodes=True)
+env_tt = HysrManyBallEnv(reward_config_file=reward_config_file, hysr_one_ball_config_file=hysr_one_ball_config_file, log_episodes=True, stop_new_actions_after_main_ball_hit=False)
 print("--- HysrManyBallEnv ---")
 
 all_files = [f for f in os.listdir(data_path) if ".json" in f]
@@ -168,7 +168,7 @@ def simulate_2(states, env_tt, filename, ball_id=None, action_repeat_counter=1):
     while not done:
         action_idx = idx * action_repeat_counter
         if action_idx > len(action)-1:
-            action_idx = np.random.randint(0, len(action)-1)
+            action_idx = len(action)-1  # Use last action of episode
         obs, reward, done, _, info = env_tt.step(action[action_idx])
         
         if env_tt.__class__.__name__ == "HysrGoalEnv":

@@ -96,11 +96,13 @@ class HysrManyBallEnv(gym.Env):
         hysr_one_ball_config_file=None,
         log_episodes=False,
         logger=None,
+        stop_new_actions_after_main_ball_hit=True,
     ):
         super().__init__()
 
         
         self._logger = logger
+        self._stop_new_actions_after_main_ball_hit = stop_new_actions_after_main_ball_hit
 
         hysr_one_ball_config = HysrOneBallConfig.from_json(hysr_one_ball_config_file)
 
@@ -505,7 +507,7 @@ class HysrManyBallEnv(gym.Env):
             all_episodes_over = episode_over and all(extra_dones)
 
             # temporary fix for ppo: also use old action if main ball was hit
-            if not self._hysr._ball_status.min_distance_ball_racket and not episode_over:
+            if not self._hysr._ball_status.min_distance_ball_racket and not episode_over and self._stop_new_actions_after_main_ball_hit:
                 return self.step(action_orig)
 
             if all_episodes_over:
