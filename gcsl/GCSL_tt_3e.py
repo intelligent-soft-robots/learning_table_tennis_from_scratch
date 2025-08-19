@@ -219,7 +219,7 @@ class NNAgent(nn.Module, GoalConditionedPolicy):
     def forward(self, state, goal, horizon=None):
         mean_log_std = self.net(state, goal, horizon=horizon)
         mean, log_std = torch.chunk(mean_log_std, 2, dim=-1)
-        log_std = torch.clamp(log_std, -20, 2)
+        log_std = torch.clamp(log_std, -5, 1)
         return mean, log_std
       
     def get_action(self, state, goal, horizon=0, greedy=False):
@@ -632,7 +632,7 @@ def train_agent(env, agent, buffer, validation_buffer=None, num_episodes=10, bat
     steps_per_episode = 500
     min_len_buffer_collected_during_training = 10
     
-    optimizer = torch.optim.Adam(agent.parameters(), lr=learning_rate)
+    optimizer = torch.optim.AdamW(agent.parameters(), lr=learning_rate, weight_decay=1e-4)
     losses = []
     metrics_list = []
     buffer_collected_during_training = []
@@ -662,6 +662,7 @@ def train_agent(env, agent, buffer, validation_buffer=None, num_episodes=10, bat
             batch_states = []
             batch_goals = []
             batch_actions = []
+            batch_horizons = []
             
             # Batch sampling
             for _ in range(batch_size):
@@ -674,12 +675,15 @@ def train_agent(env, agent, buffer, validation_buffer=None, num_episodes=10, bat
                         print('----- Using extra buffer ----')
 
                 t1 = np.random.randint(0, len(trajectory['actions']))
+                # horizon = steps until episode ends
+                horizon = len(trajectory['actions']) - t1
                 s = trajectory['states'][t1]['observation']
                 a = trajectory['actions'][t1]
                 g = trajectory['desired_goal']
                 batch_states.append(s)
                 batch_goals.append(g)
                 batch_actions.append(a)
+                batch_horizons.append(horizon)
                 
             # Normalization
             batch_states = np.array(batch_states)
@@ -692,6 +696,7 @@ def train_agent(env, agent, buffer, validation_buffer=None, num_episodes=10, bat
             goals_tensor = torch.tensor(batch_goals, dtype=torch.float32)
             horizons_tensor = torch.zeros((batch_size, 1), dtype=torch.float32)
             actions_tensor = torch.tensor(batch_actions, dtype=torch.float32)
+            horizons_tensor = torch.tensor(batch_horizons, dtype=torch.float32).unsqueeze(-1)
             
             
             if agent.__class__.__name__ == "NNAgentDeterministic":
@@ -702,8 +707,13 @@ def train_agent(env, agent, buffer, validation_buffer=None, num_episodes=10, bat
                 predicted_mean, predicted_log_std = agent.forward(states_tensor, goals_tensor, horizons_tensor)
                 std = predicted_log_std.exp()
                 dist = torch.distributions.Normal(predicted_mean, std)
+
+                # weigh timesteps closer to the end more (use horizon)
+                tau = 20.0
+                weights = torch.exp(-horizons_tensor / tau)
+
                 nll = -dist.log_prob(actions_tensor).sum(-1)
-                loss = nll.mean()
+                loss = (nll * weights).mean()  # Weighted NLL loss
             
             # Backward pass with gradient clipping
             optimizer.zero_grad()
@@ -897,7 +907,6 @@ def sample_trajectory(env, agent, T=250, greedy=False, eval=False, k_step_noise 
             action += k_step_noise
         actions.append(action)
         state, reward, done, _, _ = env.step(action)
-        print(".", end="", flush=True)
         total_reward += reward
         if done:
             # print("ep steps:", t, "reward:", reward)
@@ -1809,11 +1818,13 @@ class ExperimentRunner:
                 )
 
                 # show dataset composition
-                dataset_label = self.create_dataset_label(dataset_config, dataset_buffer)
+                dataset_label = self.create_dataset_label(config.setting.value, dataset_config, dataset_buffer)
                 print(f"Dataset composition: {dataset_label}")
 
                 # Create a descriptive label for this dataset configuration
-                dataset_label = self.create_dataset_label(dataset_config, dataset_buffer)
+                dataset_label = self.create_dataset_label(
+                    config.setting.value, dataset_config, dataset_buffer
+                )
                 print(f"Dataset composition: {dataset_label}")
 
                 config.dataset_config = dataset_config
