@@ -132,6 +132,9 @@ class HysrManyBallEnv(gym.Env):
 
         self._hysr = HysrOneBall(hysr_one_ball_config, reward_function)
         self._unsuccessful_episode_counter = 0  # Counter for unsuccessful episodes
+        self._hit_ball_indices = set()  # Track all hit ball indices that reached other side
+        self._hit_indices_file = os.path.join(self._save_folder_traj, "hit_ball_indices.json") if self._save_folder_traj else None
+        self._load_hit_indices()
 
         self._obs_boxes = _ObservationSpace()
         
@@ -171,6 +174,33 @@ class HysrManyBallEnv(gym.Env):
         self.n_eps = 0
         self.n_steps_on_policy = 0
         self.init_episode()
+
+    def _load_hit_indices(self):
+        """Load previously hit ball indices from file."""
+        if self._hit_indices_file and os.path.exists(self._hit_indices_file):
+            try:
+                with open(self._hit_indices_file, 'r') as f:
+                    data = json.load(f)
+                    self._hit_ball_indices = set(data.get('hit_indices', []))
+                    print(f"Loaded {len(self._hit_ball_indices)} previously hit ball indices")
+            except Exception as e:
+                print(f"Error loading hit indices: {e}")
+                self._hit_ball_indices = set()
+        else:
+            self._hit_ball_indices = set()
+
+    def _save_hit_indices(self):
+        """Save hit ball indices to file."""
+        if self._hit_indices_file:
+            try:
+                with open(self._hit_indices_file, 'w') as f:
+                    json.dump({
+                        'hit_indices': sorted(list(self._hit_ball_indices)),
+                        'total_count': len(self._hit_ball_indices),
+                        'last_updated': time.strftime("%Y-%m-%d_%H-%M-%S")
+                    }, f, indent=2)
+            except Exception as e:
+                print(f"Error saving hit indices: {e}")
 
     def init_episode(self):
         self.n_steps = 0
@@ -573,6 +603,29 @@ class HysrManyBallEnv(gym.Env):
             table_center_y = self._hysr._hysr_config.table_position[1]
             ball_reached_other_side = final_ball_y > table_center_y
             
+            # Track successful hits - more specific check for landing on table
+            if ball_reached_other_side and self.ball_hit:
+                final_ball_x = final_observation[ball_pos_start]
+                table_center_x = self._hysr._hysr_config.table_position[0]
+                
+                # Standard table dimensions
+                table_half_width = 0.7625  # Half of 1.525m width
+                table_half_length = 1.37   # Half of 2.74m length
+                
+                # Check if ball is within table bounds
+                ball_within_x_bounds = (table_center_x - table_half_width) <= final_ball_x <= (table_center_x + table_half_width)
+                ball_within_y_bounds = table_center_y < final_ball_y <= (table_center_y + table_half_length)
+                
+                if ball_within_x_bounds and ball_within_y_bounds:
+                    current_traj_index = self._hysr._ball_behavior._random_traj_index
+                    if current_traj_index not in self._hit_ball_indices:
+                        self._hit_ball_indices.add(current_traj_index)
+                        self._save_hit_indices()
+                        print(f"New successful hit! Ball index {current_traj_index} landed on table at ({final_ball_x:.3f}, {final_ball_y:.3f}). Total unique hits: {len(self._hit_ball_indices)}")
+            
+            else:
+                print("x", end="", flush=True)
+
             if not ball_reached_other_side:
                 self._unsuccessful_episode_counter += 1
                 if self._unsuccessful_episode_counter % 100 != 0:
@@ -594,6 +647,14 @@ class HysrManyBallEnv(gym.Env):
             dict_data_full["fk"] = [x[6] for x in data_buffer]
             dict_data_full["random_traj_index"] = self._hysr._ball_behavior._random_traj_index
             json.dump(dict_data_full, json_data)
+
+    def get_hit_indices_stats(self):
+        """Get statistics about hit ball indices."""
+        return {
+            'total_unique_hits': len(self._hit_ball_indices),
+            'hit_indices': sorted(list(self._hit_ball_indices)),
+            'file_path': self._hit_indices_file
+        }
 
     def close(self):
         self._hysr.close()
