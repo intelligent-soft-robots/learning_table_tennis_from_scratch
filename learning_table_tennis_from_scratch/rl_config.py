@@ -75,6 +75,8 @@ class RLConfig:
         "use_layer_norm",  # Enable LayerNorm via features extractor
         "hidden_layers_bias",  # Enable bias in hidden layers
         "checkpoint_save_freq",  # Frequency for saving model checkpoints
+        "rl_explore",  # Enable RLeXplore intrinsic rewards
+        "rl_explore_reward_class",  # Class to use for RLeXplore intrinsic rewards
     )
 
     _default_additional_params = {
@@ -91,6 +93,8 @@ class RLConfig:
         "use_layer_norm": False,
         "hidden_layers_bias": True,
         "checkpoint_save_freq": None,  # Will default to n_steps if not specified
+        "rl_explore": False,
+        "rl_explore_reward_class": "E3B",
     }
 
     _params_ppo = _algo_params_ppo + _additional_params

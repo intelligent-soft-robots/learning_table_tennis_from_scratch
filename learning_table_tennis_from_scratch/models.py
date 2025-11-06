@@ -8,6 +8,13 @@ from learning_table_tennis_from_scratch.rl_config import RLConfig
 from learning_table_tennis_from_scratch.rl_config import OpenAIRLConfig
 from learning_table_tennis_from_scratch.hysr_one_ball import HysrOneBallConfig
 from learning_table_tennis_from_scratch.layernorm_extractor import LayerNormFeaturesExtractor
+import torch as th
+from rllte.xplore.reward import (
+    Disagreement, E3B, ICM, NGU,
+    PseudoCounts, RE3, RIDE, RND
+)
+from learning_table_tennis_from_scratch.rl_explore_on_policy import RLeXploreWithOnPolicyRL
+
 
 import gymnasium as gym
 import torch.nn as nn
@@ -214,10 +221,43 @@ def run_stable_baselines(
     #         obs = env.reset()
     #         i+=1
 
+    if rl_config.rl_explore:
+        # Mapping of reward class names to their actual classes
+        reward_classes = {
+            "Disagreement": Disagreement,
+            "E3B": E3B,
+            "ICM": ICM,
+            "NGU": NGU,
+            "PseudoCounts": PseudoCounts,
+            "RE3": RE3,
+            "RIDE": RIDE,
+            "RND": RND
+        }
+
+        # Get the reward class from config
+        reward_class_name = getattr(rl_config, "rl_explore_reward_class", None)
+
+        if reward_class_name not in reward_classes:
+            raise ValueError(f"Unknown reward class '{reward_class_name}'")
+
+        RewardClass = reward_classes[reward_class_name]
+        device = 'cpu'
+        vec_env = model.get_env()
+        irs = RewardClass(vec_env, device=device)
+
+        rl_explore_callback = RLeXploreWithOnPolicyRL(irs=irs, verbose=1)
+
+
     if rl_config.num_timesteps > 0:
+        callbacks = []
+        if checkpoint_callback is not None:
+            callbacks.append(checkpoint_callback)
+        if rl_config.rl_explore:
+            callbacks.append(rl_explore_callback)
+
         model.learn(
         total_timesteps=rl_config.num_timesteps,
-        callback=checkpoint_callback,
+        callback=callbacks if callbacks else None,
         reset_num_timesteps=not continue_training,
         log_interval=1,
     )
