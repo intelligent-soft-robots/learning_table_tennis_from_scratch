@@ -259,23 +259,34 @@ def run_stable_baselines(
             reward_kwargs['update_proportion'] = getattr(rl_config, 'rl_explore_update_proportion', 1.0)
         
         # Add method-specific parameters based on reward class
-        # Methods with k parameter: PseudoCounts, RE3, NGU, RIDE
-        if reward_class_name in ["PseudoCounts", "RE3", "NGU", "RIDE"]:
-            k_values = [5, 16]
-            k_idx = getattr(rl_config, 'rl_explore_method_specific_parameter_index', 0)
-            reward_kwargs['k'] = k_values[k_idx]
+        method_idx = getattr(rl_config, 'rl_explore_method_specific_parameter_index', 0)
         
-        # Method with ensemble_size parameter: Disagreement
+        # Methods with k parameter - different defaults for different algorithms
+        if reward_class_name == "RE3":
+            # RE3 has default k=5
+            k_values = [5, 10]
+            reward_kwargs['k'] = k_values[method_idx]
+        elif reward_class_name in ["PseudoCounts", "NGU", "RIDE"]:
+            # PseudoCounts, NGU, RIDE have default k=10
+            k_values = [10, 5]
+            reward_kwargs['k'] = k_values[method_idx]
+        
+        # Method with ensemble_size parameter: Disagreement (default=4)
         elif reward_class_name == "Disagreement":
-            ensemble_sizes = [3, 5]
-            ensemble_idx = getattr(rl_config, 'rl_explore_method_specific_parameter_index', 0)
-            reward_kwargs['ensemble_size'] = ensemble_sizes[ensemble_idx]
+            ensemble_sizes = [4, 5]
+            reward_kwargs['ensemble_size'] = ensemble_sizes[method_idx]
         
-        # Methods with latent_dim parameter: ICM, RIDE, RND, E3B
-        elif reward_class_name in ["ICM", "RIDE", "RND", "E3B"]:
-            latent_dims = [32, 64]
-            latent_idx = getattr(rl_config, 'rl_explore_method_specific_parameter_index', 0)
-            reward_kwargs['latent_dim'] = latent_dims[latent_idx]
+        # Methods with latent_dim parameter - different defaults
+        elif reward_class_name in ["ICM", "RND", "E3B"]:
+            # E3B, ICM, RND have default latent_dim=128
+            latent_dims = [128, 64]
+            reward_kwargs['latent_dim'] = latent_dims[method_idx]
+        elif reward_class_name == "RIDE":
+            # RIDE has both k and latent_dim parameters
+            k_values = [10, 5]
+            latent_dim = 128
+            reward_kwargs['k'] = k_values[method_idx]
+            reward_kwargs['latent_dim'] = latent_dim
 
         print(reward_kwargs)
 

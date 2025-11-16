@@ -103,7 +103,7 @@ class RLConfig:
         "rl_explore_beta": 1.0,
         "rl_explore_update_proportion": 1.0,
         "rl_explore_reward_norm": True,
-        "rl_explore_obs_norm": True,
+        "rl_explore_obs_norm": False,
         "rl_explore_method_specific_parameter_index": 0,
     }
 
