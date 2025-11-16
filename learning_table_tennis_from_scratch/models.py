@@ -252,8 +252,11 @@ def run_stable_baselines(
             'beta': getattr(rl_config, 'rl_explore_beta', 1.0),
             'rwd_norm_type': 'rms' if getattr(rl_config, 'rl_explore_reward_norm', True) else 'none',
             'obs_norm_type': 'rms' if getattr(rl_config, 'rl_explore_obs_norm', True) else 'none',
-            'update_proportion': getattr(rl_config, 'rl_explore_update_proportion', 1.0),
         }
+        
+        # Add update_proportion for algorithms that support it (all except RE3)
+        if reward_class_name != "RE3":
+            reward_kwargs['update_proportion'] = getattr(rl_config, 'rl_explore_update_proportion', 1.0)
         
         # Add method-specific parameters based on reward class
         # Methods with k parameter: PseudoCounts, RE3, NGU, RIDE
