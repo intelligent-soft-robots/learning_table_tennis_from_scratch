@@ -77,6 +77,11 @@ class RLConfig:
         "checkpoint_save_freq",  # Frequency for saving model checkpoints
         "rl_explore",  # Enable RLeXplore intrinsic rewards
         "rl_explore_reward_class",  # Class to use for RLeXplore intrinsic rewards
+        "rl_explore_beta",  # Beta coefficient for intrinsic rewards
+        "rl_explore_update_proportion",  # Proportion of samples to use for updating intrinsic reward model
+        "rl_explore_reward_norm",  # Enable reward normalization
+        "rl_explore_obs_norm",  # Enable observation normalization
+        "rl_explore_method_specific_parameter_index",  # Index for method-specific parameters
     )
 
     _default_additional_params = {
@@ -95,6 +100,11 @@ class RLConfig:
         "checkpoint_save_freq": None,  # Will default to n_steps if not specified
         "rl_explore": False,
         "rl_explore_reward_class": "E3B",
+        "rl_explore_beta": 1.0,
+        "rl_explore_update_proportion": 1.0,
+        "rl_explore_reward_norm": True,
+        "rl_explore_obs_norm": True,
+        "rl_explore_method_specific_parameter_index": 0,
     }
 
     _params_ppo = _algo_params_ppo + _additional_params

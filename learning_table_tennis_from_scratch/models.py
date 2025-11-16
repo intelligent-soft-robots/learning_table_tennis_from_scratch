@@ -234,6 +234,7 @@ def run_stable_baselines(
             "RND": RND
         }
 
+        
         # Get the reward class from config
         reward_class_name = getattr(rl_config, "rl_explore_reward_class", None)
 
@@ -243,7 +244,40 @@ def run_stable_baselines(
         RewardClass = reward_classes[reward_class_name]
         device = 'cpu'
         vec_env = model.get_env()
-        irs = RewardClass(vec_env, device=device)
+        
+        # Build kwargs for reward class with common parameters
+        reward_kwargs = {
+            'envs': vec_env,
+            'device': device,
+            'beta': getattr(rl_config, 'rl_explore_beta', 1.0),
+            'rwd_norm_type': 'rms' if getattr(rl_config, 'rl_explore_reward_norm', True) else 'none',
+            'obs_norm_type': 'rms' if getattr(rl_config, 'rl_explore_obs_norm', True) else 'none',
+            'update_proportion': getattr(rl_config, 'rl_explore_update_proportion', 1.0),
+        }
+        
+        # Add method-specific parameters based on reward class
+        # Methods with k parameter: PseudoCounts, RE3, NGU, RIDE
+        if reward_class_name in ["PseudoCounts", "RE3", "NGU", "RIDE"]:
+            k_values = [5, 16]
+            k_idx = getattr(rl_config, 'rl_explore_method_specific_parameter_index', 0)
+            reward_kwargs['k'] = k_values[k_idx]
+        
+        # Method with ensemble_size parameter: Disagreement
+        elif reward_class_name == "Disagreement":
+            ensemble_sizes = [3, 5]
+            ensemble_idx = getattr(rl_config, 'rl_explore_method_specific_parameter_index', 0)
+            reward_kwargs['ensemble_size'] = ensemble_sizes[ensemble_idx]
+        
+        # Methods with latent_dim parameter: ICM, RIDE, RND, E3B
+        elif reward_class_name in ["ICM", "RIDE", "RND", "E3B"]:
+            latent_dims = [32, 64]
+            latent_idx = getattr(rl_config, 'rl_explore_method_specific_parameter_index', 0)
+            reward_kwargs['latent_dim'] = latent_dims[latent_idx]
+
+        print(reward_kwargs)
+
+        # Create the reward instance
+        irs = RewardClass(**reward_kwargs)
 
         rl_explore_callback = RLeXploreWithOnPolicyRL(irs=irs, verbose=1)
 
