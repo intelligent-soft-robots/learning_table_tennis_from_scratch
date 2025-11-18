@@ -179,13 +179,15 @@ class JsonReward:
         if reward_function_type == "reward_many_balls_exploration":
 
             from .rewards_many_balls_exploration import ExplorationReward
-            table_bounds = ((0, 2), (0, 1))  # Default values
+            table_bounds = ((0, 2), (0, 1))  # Default values (will be overridden)
             n_buckets_x = 4
             n_buckets_y = 3
             
-            # Default to KNN with k=1
             reward_type = conf.get("exploration_reward_type", ExplorationReward.REWARD_TYPE_BUCKET_J3)
             k_neighbors = conf.get("k_neighbors", 1)
+            n_buckets_x = conf.get("n_buckets_x", 4)
+            n_buckets_y = conf.get("n_buckets_y", 2)
+            give_max_reward = conf.get("give_max_reward", True)
 
             reward_func = ExplorationReward(
                 table_bounds, 
@@ -193,7 +195,7 @@ class JsonReward:
                 n_buckets_y, 
                 reward_type=reward_type,
                 k_neighbors=k_neighbors,
-                give_max_reward=conf.get("give_max_reward", True),
+                give_max_reward=give_max_reward,
             )
             reward_func.reward_function_type = "reward_many_balls_exploration"
             return reward_func
