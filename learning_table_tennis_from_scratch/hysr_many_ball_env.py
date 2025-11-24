@@ -79,7 +79,7 @@ class _ObservationSpace:
         r = np.concatenate(values)
         r = np.array(r, dtype=np.float32)
         return r
-    
+
     def get_start_index(self, name):
         start_idx = 0
         for key, box in self._obs_boxes.items():
@@ -100,7 +100,7 @@ class HysrManyBallEnv(gym.Env):
     ):
         super().__init__()
 
-        
+
         self._logger = logger
         self._stop_new_actions_after_main_ball_hit = stop_new_actions_after_main_ball_hit
 
@@ -137,7 +137,7 @@ class HysrManyBallEnv(gym.Env):
         self._load_hit_indices()
 
         self._obs_boxes = _ObservationSpace()
-        
+
         self.action_space = gym.spaces.Box(
             low=-1.0, high=+1.0, shape=(self._nb_dofs * 2,), dtype=np.float32
         )
@@ -162,7 +162,7 @@ class HysrManyBallEnv(gym.Env):
         if self._goal_in_state:
             self._obs_boxes.add_box("goal", -10.0, +10.0, 3)
 
-        
+
 
         self.observation_space = self._obs_boxes.get_gym_box()
 
@@ -174,6 +174,11 @@ class HysrManyBallEnv(gym.Env):
         self.n_eps = 0
         self.n_steps_on_policy = 0
         self.init_episode()
+
+        self._initial_exploration_steps = hysr_one_ball_config.initial_exploration_steps
+        self._use_initial_exploration_traj = hysr_one_ball_config.use_initial_exploration_traj
+        self._exploration_reset_done = False
+        self._reward_function_type = getattr(reward_function, 'reward_function_type', None)
 
     def _load_hit_indices(self):
         """Load previously hit ball indices from file."""
@@ -228,7 +233,7 @@ class HysrManyBallEnv(gym.Env):
                 dof, False, starting_pressures[dof][1]
             )
         return init_action
-        
+
 
     def _bound_pressure(self, dof, ago, value):
         if ago:
@@ -430,7 +435,7 @@ class HysrManyBallEnv(gym.Env):
                         idx_ball_still_active = idx
                         break
                     idx += 1
-                
+
                 if idx_ball_still_active == -1: # non of the balls can still be hit anymore 
                     if not episode_over and not self._hysr._ball_status.min_distance_ball_racket:
                         return self.step(action_orig)
@@ -532,7 +537,7 @@ class HysrManyBallEnv(gym.Env):
                 infos = {}
 
             self.previous_extra_obs = extra_obs.copy()
-            self.previous_obs = obs = obs.copy()           
+            self.previous_obs = obs = obs.copy()
 
             all_episodes_over = episode_over and all(extra_dones)
 
@@ -573,6 +578,16 @@ class HysrManyBallEnv(gym.Env):
         else:
             self.n_steps_on_policy += 1
 
+            # Check if we should reset exploration reward
+            if (self._initial_exploration_steps > 0 and 
+                self.n_steps_on_policy >= self._initial_exploration_steps and 
+                not self._exploration_reset_done and
+                self._reward_function_type == "reward_many_balls_exploration"):
+
+                print(f"Resetting exploration reward counts at step {self.n_steps_on_policy}")
+                self._hysr._reward_function.reset_counts()
+                self._exploration_reset_done = True
+
         if not all_episodes_over:
             reward = 0
 
@@ -602,27 +617,27 @@ class HysrManyBallEnv(gym.Env):
             final_ball_y = final_observation[ball_pos_start + 1]
             table_center_y = self._hysr._hysr_config.table_position[1]
             ball_reached_other_side = final_ball_y > table_center_y
-            
+
             # Track successful hits - more specific check for landing on table
             if ball_reached_other_side and self.ball_hit:
                 final_ball_x = final_observation[ball_pos_start]
                 table_center_x = self._hysr._hysr_config.table_position[0]
-                
+
                 # Standard table dimensions
                 table_half_width = 0.7625  # Half of 1.525m width
                 table_half_length = 1.37   # Half of 2.74m length
-                
+
                 # Check if ball is within table bounds
                 ball_within_x_bounds = (table_center_x - table_half_width) <= final_ball_x <= (table_center_x + table_half_width)
                 ball_within_y_bounds = table_center_y < final_ball_y <= (table_center_y + table_half_length)
-                
+
                 if ball_within_x_bounds and ball_within_y_bounds:
                     current_traj_index = self._hysr._ball_behavior._random_traj_index
                     if current_traj_index not in self._hit_ball_indices:
                         self._hit_ball_indices.add(current_traj_index)
                         self._save_hit_indices()
                         print(f"New successful hit! Ball index {current_traj_index} landed on table at ({final_ball_x:.3f}, {final_ball_y:.3f}). Total unique hits: {len(self._hit_ball_indices)}")
-            
+
             else:
                 print("x", end="", flush=True)
 
@@ -630,7 +645,13 @@ class HysrManyBallEnv(gym.Env):
                 self._unsuccessful_episode_counter += 1
                 if self._unsuccessful_episode_counter % 100 != 0:
                     return
-        
+
+        # Check if we should save trajectories during initial exploration
+        if (self._initial_exploration_steps > 0 and 
+            self.n_steps_on_policy < self._initial_exploration_steps and 
+            not self._use_initial_exploration_traj):
+            return  # Don't save trajectories during initial exploration
+
         filename = self._save_folder_traj + "ppo" + time.strftime("%Y%m%d-%H%M%S")
         if index is not None:
             filename += "_" + str(index)

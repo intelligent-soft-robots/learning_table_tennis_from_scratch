@@ -74,7 +74,7 @@ class _ObservationSpace:
         r = np.concatenate(values)
         r = np.array(r, dtype=np.float32)
         return r
-    
+
     def get_start_index(self, name):
         start_idx = 0
         for key, box in self._obs_boxes.items():
@@ -96,7 +96,7 @@ class HysrOneBallEnv(gym.Env):
     ):
         super().__init__()
 
-        
+
         self._logger = logger
         self._continue_after_hit = continue_after_hit
         self._continue_after_hit_with_smooth_approximation = continue_after_hit_with_smooth_approximation
@@ -127,7 +127,7 @@ class HysrOneBallEnv(gym.Env):
 
         self._obs_boxes = _ObservationSpace()
 
-        
+
         self.action_space = gym.spaces.Box(
             low=-1.0, high=+1.0, shape=(self._nb_dofs * 2,), dtype=np.float32
         )
@@ -154,7 +154,7 @@ class HysrOneBallEnv(gym.Env):
         if self._goal_in_state:
             self._obs_boxes.add_box("goal", -10.0, +10.0, 3)
 
-        
+
 
         self.observation_space = self._obs_boxes.get_gym_box()
 
@@ -193,7 +193,7 @@ class HysrOneBallEnv(gym.Env):
                 dof, False, starting_pressures[dof][1]
             )
         return init_action
-        
+
 
     def _bound_pressure(self, dof, ago, value):
         if ago:
@@ -319,7 +319,7 @@ class HysrOneBallEnv(gym.Env):
         w1 = change_rate * self.n_steps
 
         w2 = 1 / self.n_steps_motion_change * np.clip(self.n_steps - self.n_steps_motion_change, 0, self.n_steps_hit_motion_steps)
-        
+
         action = \
             np.clip(1-w1, 0, 1) * 2 * np.array([0.2, -0.2, -0.07, 0.07, self.action_dof3, -self.action_dof3,  self.action_dof4,  -self.action_dof4]) + \
             np.clip(w1-w2, 0, 1) * 2 * np.array([-self.action_dof_1 , self.action_dof_1 , 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]) + \
@@ -332,7 +332,7 @@ class HysrOneBallEnv(gym.Env):
         # time.sleep(0.02)
 
         return action
-    
+
     def get_action_test(self):
         if self.n_steps == 0:
             self.n_steps_motion_change = 66
@@ -349,7 +349,7 @@ class HysrOneBallEnv(gym.Env):
         w1 = change_rate * self.n_steps
 
         w2 = 1 / self.n_steps_motion_change * np.clip(self.n_steps - self.n_steps_motion_change, 0, self.n_steps_hit_motion_steps)
-        
+
         action = \
             np.clip(1-w1, 0, 1) * 2 * np.array([0.2, -0.2, -0.07, 0.07, self.action_dof3, -self.action_dof3,  self.action_dof4,  -self.action_dof4]) + \
             np.clip(w1-w2, 0, 1) * 2 * np.array([-self.action_dof_1 , self.action_dof_1 , 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]) + \
@@ -359,7 +359,7 @@ class HysrOneBallEnv(gym.Env):
     # def acquisition_function(params, gp=gp, xi=0.01, kappa=0.01):
     #     params = np.array(params).reshape(1, -1)
     #     mean, std = gp.predict(params, return_std=True)
-        
+
     #     current_best = np.max(y)
 
     #     # Calculate Expected Improvement
@@ -378,7 +378,7 @@ class HysrOneBallEnv(gym.Env):
 
     def perform_bayesian_optimization(self):
         # Reshape and prepare data for Gaussian Process
-        
+
         # first two entries are X, third entry is y
         X = np.array([np.concatenate([Amp, phi]) for Amp, phi, _ in self.opt_data])
         y = np.array([rew for _, _, rew in self.opt_data])
@@ -421,16 +421,16 @@ class HysrOneBallEnv(gym.Env):
             else:
                 if np.random.random() < 0.5:
                     self.Amp, self.phi = self.perform_bayesian_optimization()
-                    
+
                     self.add_noise = np.zeros(8)
                     self.opt_data.append([self.Amp, self.phi])
-                    
+
                 else:
                     # sample from 5% best data
                     best_data = sorted(self.opt_data, key=lambda x: x[2], reverse=True)
                     random_index = np.random.randint(0, int(len(best_data)*0.05))
                     self.Amp, self.phi = best_data[random_index][0], best_data[random_index][1]
-                    
+
                     print("best data: ", best_data[random_index][2], "Amp: ", self.Amp, "phi: ", self.phi)
                     # self.add_noise = np.random.uniform(-self.noise_facor, self.noise_facor, 8)
 
@@ -441,7 +441,7 @@ class HysrOneBallEnv(gym.Env):
                     #     self.noise_facor = max(self.noise_facor, 0.001)
 
                     # print("noise: ", self.noise_facor)
-                    
+
 
         action = np.sin(np.array([self.n_steps * 0.02 + self.phi[i] for i in range(8)])) * self.Amp
 
@@ -449,14 +449,14 @@ class HysrOneBallEnv(gym.Env):
 
         # if len(self.opt_data) > 100:
         #     action += self.add_noise
-        
+
         # action += self.noise
 
         return action
 
 
 
-        
+
     class MotionGenerator:
         def __init__(self, scale=0.5, octaves=1, persistence=0.5, lacunarity=2.0):
             self.scale = scale
@@ -487,44 +487,44 @@ class HysrOneBallEnv(gym.Env):
     def get_continued_action(self, hit_window=10, future_steps=20, method='exp_decay'):
         if self.n_steps <= hit_window:
             return None
-            
+
         # Extract previous actions
         previous_actions = np.array([x[1] for x in self.data_buffer[-hit_window:]])
-        
+
         # Calculate action differences
         action_diffs = np.diff(previous_actions, axis=0)
         last_action = previous_actions[-1]
-        
+
         if method == 'exp_decay':
             # Exponentially decay the action differences
             last_diffs = action_diffs[-3:].mean(axis=0)  # Average of last 3 differences
             decay_rate = 0.85  # Adjust this to control decay speed
-            
+
             # Predict next action with decaying differences
             decay_factor = decay_rate ** (self.n_steps - len(self.data_buffer))
             new_action_diff = last_diffs * decay_factor
-            
+
             # Bound the differences to prevent explosions
             max_diff = np.abs(action_diffs).max(axis=0)
             new_action_diff = np.clip(new_action_diff, -max_diff, max_diff)
-            
+
             new_action = last_action + new_action_diff
 
         elif method == 'spline':
             # Fit a smooth spline to previous actions
             t_prev = np.arange(hit_window)
             t_future = np.arange(hit_window + future_steps)
-            
+
             # Fit separate splines for each dimension
             new_action = np.zeros_like(last_action)
             for dim in range(last_action.shape[0]):
                 spline = make_interp_spline(t_prev, previous_actions[:, dim], k=3)
-                
+
                 # Get the continuation and apply dampening
                 future_values = spline(t_future)
                 dampening = np.exp(-0.1 * (t_future[-1] - t_future[hit_window]))
                 future_values[hit_window:] *= dampening
-                
+
                 new_action[dim] = future_values[hit_window]
 
         elif method == 'damped':
@@ -532,11 +532,11 @@ class HysrOneBallEnv(gym.Env):
             velocity = action_diffs[-1]  # Current velocity (last action difference)
             damping = 0.9  # Damping coefficient
             spring = 0.1   # Spring coefficient
-            
+
             # Update velocity and position using damped oscillator equations
             new_velocity = velocity * damping - spring * (last_action - previous_actions[-2])
             new_action = last_action + new_velocity
-            
+
         # Bound the final actions to the historical range
         action_min = np.min(previous_actions, axis=0)
         action_max = np.max(previous_actions, axis=0)
@@ -544,7 +544,7 @@ class HysrOneBallEnv(gym.Env):
         new_action = np.clip(new_action, 
                             action_min - margin,
                             action_max + margin)
-        
+
         return new_action
 
 
@@ -592,7 +592,7 @@ class HysrOneBallEnv(gym.Env):
         # performing a step
         for _ in range(self._action_repeat_counter):
             observation, reward, episode_over = self._hysr.step(list(action))
-            
+
 
             # formatting observation in a format suitable for gym
             observation = self._convert_observation(observation, action_casted)
@@ -656,7 +656,7 @@ class HysrOneBallEnv(gym.Env):
             if episode_over:
                 break
 
-            
+
 
             if self._continue_after_hit_with_smooth_approximation and not episode_over and not self._hysr._ball_status.min_distance_ball_racket:
                 new_action_orig = self.get_continued_action(
@@ -709,12 +709,12 @@ class HysrOneBallEnv(gym.Env):
             final_ball_y = final_observation[ball_pos_start + 1]
             table_center_y = self._hysr._hysr_config.table_position[1]
             ball_reached_other_side = final_ball_y > table_center_y
-            
+
             if not ball_reached_other_side:
                 self._unsuccessful_episode_counter += 1
                 if self._unsuccessful_episode_counter % 100 != 0:
                     return
-        
+
         # Dump full trajectory
         filename_full = os.path.join(
             self._save_folder_traj,

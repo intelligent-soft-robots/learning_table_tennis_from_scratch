@@ -77,7 +77,7 @@ class _ObservationSpace:
         r = np.concatenate(values)
         r = np.array(r, dtype=np.float32)
         return r
-    
+
     def get_start_index(self, name):
         start_idx = 0
         for key, box in self._obs_boxes.items():
@@ -98,7 +98,7 @@ class HysrGoalEnv(gym_robotics.GoalEnv):
 
         super().__init__()
 
-        
+
         self._logger = logger
 
         hysr_one_ball_config = HysrOneBallConfig.from_json(hysr_one_ball_config_file)
@@ -207,7 +207,7 @@ class HysrGoalEnv(gym_robotics.GoalEnv):
                 dof, False, starting_pressures[dof][1]
             )
         return init_action
-    
+
 
     def _bound_pressure(self, dof, ago, value):
         if ago:
@@ -290,10 +290,10 @@ class HysrGoalEnv(gym_robotics.GoalEnv):
         #     min_distance_ball_racket = 0.0
         # self._goal_boxes.set_values_non_norm(
         #     "reward_info", [min_distance_ball_racket, done*1.0])
-        
+
         return self._goal_boxes.get_normalized_values()
 
-    
+
     def set_ball_id(self, ball_id, extra_balls=False):
         self._hysr.set_ball_id(ball_id, extra_balls)
 
@@ -304,7 +304,7 @@ class HysrGoalEnv(gym_robotics.GoalEnv):
         self._hysr.set_goal(goal)
 
     def _convert_desired_goal(self):
-        
+
         self._goal_boxes.set_values_non_norm(
             "ball_position", self._hysr._ball_status.target_position
         )
@@ -313,7 +313,7 @@ class HysrGoalEnv(gym_robotics.GoalEnv):
         # )
         return self._goal_boxes.get_normalized_values()
 
-    
+
 
     def _get_obs(self, observation, action_casted, done) -> Dict[str, Union[int, np.ndarray]]:
         """
@@ -361,7 +361,7 @@ class HysrGoalEnv(gym_robotics.GoalEnv):
         else:
             reward = 0
         return reward
-    
+
     def compute_single_reward_ball_binary(self, achieved_goal, desired_goal):
         pos_x, pos_y, pos_z = achieved_goal
         pos_x_des, pos_y_des, pos_z_des = desired_goal
@@ -377,7 +377,7 @@ class HysrGoalEnv(gym_robotics.GoalEnv):
                     min_distance_ball_target_final_pos,
                     0,
                 )
-        
+
         return reward
 
 
@@ -425,15 +425,15 @@ class HysrGoalEnv(gym_robotics.GoalEnv):
         # performing a step
         for _ in range(self._action_repeat_counter):
             observation, reward, episode_over = self._hysr.step(list(action))
-            
+
             # formatting observation in a format suitable for gym
             obs = self._get_obs(observation, action_casted, episode_over)
-            
+
             # if episode_over:
             #     break
 
 
-        
+
 
             # imposing frequency to learning agent
             if not self._accelerated_time:
@@ -472,7 +472,7 @@ class HysrGoalEnv(gym_robotics.GoalEnv):
 
         if episode_over:
             if self._log_episodes:
-                self.dump_data(self.data_buffer)    
+                self.dump_data(self.data_buffer)
             self.n_eps += 1
             if self._logger:
                 self._logger.record("eprew", reward)
@@ -508,12 +508,12 @@ class HysrGoalEnv(gym_robotics.GoalEnv):
             final_ball_y = final_observation[ball_pos_start + 1]
             table_center_y = self._hysr._hysr_config.table_position[1]
             ball_reached_other_side = final_ball_y > table_center_y
-            
+
             if not ball_reached_other_side:
                 self._unsuccessful_episode_counter += 1
                 if self._unsuccessful_episode_counter % 100 != 0:
                     return
-        
+
         filename = os.path.join(
             self._save_folder_traj,
             "traj_{}_{}.json".format(self.n_eps, time.strftime("%Y-%m-%d_%H-%M-%S")),

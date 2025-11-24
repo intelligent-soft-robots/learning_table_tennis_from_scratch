@@ -182,7 +182,7 @@ class JsonReward:
             table_bounds = ((0, 2), (0, 1))  # Default values (will be overridden)
             n_buckets_x = 4
             n_buckets_y = 3
-            
+
             reward_type = conf.get("exploration_reward_type", ExplorationReward.REWARD_TYPE_BUCKET_J3)
             k_neighbors = conf.get("k_neighbors", 1)
             n_buckets_x = conf.get("n_buckets_x", 4)
@@ -210,7 +210,7 @@ class JsonReward:
         distance_exponent = conf["distance_exponent"]
         sparse_reward_racket_hit = conf["sparse_reward_racket_hit"]
         config = RewardConfig(normalization_constant, rtt_cap, binary, sparse, bin_spa_radius, distance_exponent, sparse_reward_racket_hit)
-        
+
         reward_func = SmashReward(config) if smash else Reward(config)
         reward_func.reward_function_type = "one_ball_reward"
         return reward_func

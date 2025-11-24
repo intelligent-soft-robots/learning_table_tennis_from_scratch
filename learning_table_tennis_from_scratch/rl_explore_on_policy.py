@@ -46,7 +46,7 @@ class RLeXploreWithOnPolicyRL(BaseCallback):
         actions = th.as_tensor(self.buffer.actions)           # (n_steps, n_envs, act_dim)
         rewards = th.as_tensor(self.buffer.rewards)           # (n_steps, n_envs)
         dones = th.as_tensor(self.buffer.episode_starts)      # (n_steps, n_envs)
-        
+
         intrinsic_rewards = self.irs.compute(
             samples=dict(
                 observations=obs,

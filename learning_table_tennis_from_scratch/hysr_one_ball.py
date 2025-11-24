@@ -47,7 +47,7 @@ def _to_robot_type(robot_type: str) -> pam_mujoco.RobotType:
             "'pamy1' or 'pamy2' (entered value: {})"
         ).format(robot_type)
         raise ValueError(error)
-    
+
 def _velocity_norm(velocity):
     return math.sqrt(sum([v ** 2 for v in velocity]))
 
@@ -71,11 +71,11 @@ def _sample_point_fixed(center):
     # Define the discrete offsets from the center
     x_offsets = [-0.38125, 0, 0.38125]
     y_offsets = [-0.3425, 0, 0.3425]
-    
+
     # Randomly select one offset for x and y
     x_offset = random.choice(x_offsets)
     y_offset = random.choice(y_offsets)
-    
+
     return [center[0] + x_offset, center[1] + y_offset, center[2]]
 
 def velocity_norm(velocity):
@@ -172,6 +172,12 @@ class HysrOneBallConfig:
 
     graphics: bool = oc.MISSING
     xterms: bool = oc.MISSING
+
+    initial_exploration_steps: int = 0
+    """Number of steps before resetting exploration reward counts."""
+
+    use_initial_exploration_traj: bool = False
+    """Whether to collect trajectories during initial exploration phase."""
 
     # implement __{get,set}item__ to add dictionary-like access
     def __getitem__(self, key: str) -> t.Any:
@@ -295,7 +301,7 @@ class _BallBehavior:
                 "_BallBehavior: the classmethod read_trajectories(group:str) "
                 "has to be called before the constructor"
             )
-        
+
         not_false = [a for a in (line, index) if a is not None and a is not False] + ([random] if random else [])
 
         if len(not_false) == 0:
@@ -350,8 +356,8 @@ class _BallBehavior:
 
     def get(self):
         return self.value
-    
-    
+
+
 
 
 class _ExtraBall:
@@ -958,7 +964,7 @@ class HysrOneBall:
             # configuration for real time
             if not self._accelerated_time:
                 frequency_manager = o80.FrequencyManager(1.0 / TIME_STEP)
-            
+
             # starting position
             _, _, q_current, _ = self._pressure_commands.read()
 
@@ -1040,7 +1046,7 @@ class HysrOneBall:
                         frequency_manager.wait()
                     else:
                         self._pressure_commands.set(pressures, burst=NB_ROBOT_BURSTS)
-                
+
             error = control()
             its=0
             while  max([abs(i/math.pi*180) for i in error]) > 10 :
@@ -1129,7 +1135,7 @@ class HysrOneBall:
         # going to starting pressure
         self._move_to_pressure(self._hysr_config.starting_pressures)
 
-        
+
 
         # setting the ball behavior
         self.load_ball()
@@ -1228,7 +1234,7 @@ class HysrOneBall:
 
             #returning with extra transitions
             return observation, extra_observations
-        
+
         return observation, []
 
 
@@ -1262,24 +1268,24 @@ class HysrOneBall:
             v0 = ball_status.ball_velocity[2]
             y0 = ball_status.ball_position[2]
             target_height = 0.75
-            
+
             # Quadratic equation: y = y0 + v0*t + 0.5*g*t^2
             # Solve for t when y = target_height
             # Use the smaller positive time solution
             a = 0.5 * g
             b = v0
             c = y0 - target_height
-            
+
             discriminant = b*b - 4*a*c
             if discriminant < 0:
                 return True
-                
+
             t1 = (-b + math.sqrt(discriminant)) / (2*a)
             t2 = (-b - math.sqrt(discriminant)) / (2*a)
-            
+
             # keep t with smaller absolute value
             t = min(t1, t2, key=abs)
-            
+
             # Calculate x, y positions considering gravity only affects z
             hitting_point = [
                 ball_status.ball_position[0] + ball_status.ball_velocity[0] * t,
@@ -1348,7 +1354,7 @@ class HysrOneBall:
         # getting information about simulated ball
         _, ball_position, ball_velocity = self._ball_communication.get()
 
-        
+
 
         # convert action [ago1,antago1,ago2] to list suitable for
         # o80 ([(ago1,antago1),(),...])
@@ -1446,7 +1452,7 @@ class HysrOneBall:
 
             extra_dones =  [self._episode_over(ball.ball_status, joint_positions) for ball in self._extra_balls]
             extra_dones = [self.extra_dones_before[index] or extra_dones[index] for index in range(nb_balls)]
-                        
+
             self.extra_dones_before = extra_dones.copy()
 
             self.extra_ball_positions = extra_ball_positions
@@ -1503,7 +1509,7 @@ class HysrOneBall:
                             "min_distance_ball_racket": self._ball_status.min_distance_ball_racket,
                             "landing_position": None
                         })
-                    
+
                     # Add all extra balls (both landed and not landed)
                     for idx in range(1, len(self.ball_landing_data)):
                         if self.ball_landing_data[idx]["landing_position"] is not None:
@@ -1530,7 +1536,7 @@ class HysrOneBall:
                                 "min_distance_ball_racket": 1.0,
                                 "landing_position": None
                             })
-                    
+
                     reward = self._reward_function(ball_data)
                 else:
                     # Standard reward function

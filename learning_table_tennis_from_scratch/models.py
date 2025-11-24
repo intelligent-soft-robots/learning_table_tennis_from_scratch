@@ -61,7 +61,7 @@ def run_stable_baselines(
             save_path=pathlib.Path(rl_config.log_path) / "checkpoints",
         )
 
-    
+
 
     if env_type in [HysrOneBallEnv, HysrGoalEnv, HysrManyBallEnv]:
         env_config = {
@@ -101,7 +101,7 @@ def run_stable_baselines(
                 policy_kwargs = {
                     "net_arch": [rl_config.num_hidden] * rl_config.num_layers
                 }
-            
+
             model = model_type[algorithm](
                     "MlpPolicy",
                     env,
@@ -192,7 +192,7 @@ def run_stable_baselines(
 
     # set custom logger, so we also get CSV output
     model.set_logger(tensorboard_logger)
-    
+
     if rl_config.load_path:
         del model
         print("loading policy from", rl_config.load_path)
@@ -234,7 +234,7 @@ def run_stable_baselines(
             "RND": RND
         }
 
-        
+
         # Get the reward class from config
         reward_class_name = getattr(rl_config, "rl_explore_reward_class", None)
 
@@ -244,7 +244,7 @@ def run_stable_baselines(
         RewardClass = reward_classes[reward_class_name]
         device = 'cpu'
         vec_env = model.get_env()
-        
+
         # Build kwargs for reward class with common parameters
         reward_kwargs = {
             'envs': vec_env,
@@ -253,14 +253,14 @@ def run_stable_baselines(
             'rwd_norm_type': 'rms' if getattr(rl_config, 'rl_explore_reward_norm', True) else 'none',
             'obs_norm_type': 'rms' if getattr(rl_config, 'rl_explore_obs_norm', True) else 'none',
         }
-        
+
         # Add update_proportion for algorithms that support it (all except RE3)
         if reward_class_name != "RE3":
             reward_kwargs['update_proportion'] = getattr(rl_config, 'rl_explore_update_proportion', 1.0)
-        
+
         # Add method-specific parameters based on reward class
         method_idx = getattr(rl_config, 'rl_explore_method_specific_parameter_index', 0)
-        
+
         # Methods with k parameter - different defaults for different algorithms
         if reward_class_name == "RE3":
             # RE3 has default k=5
@@ -270,12 +270,12 @@ def run_stable_baselines(
             # PseudoCounts, NGU, RIDE have default k=10
             k_values = [10, 5]
             reward_kwargs['k'] = k_values[method_idx]
-        
+
         # Method with ensemble_size parameter: Disagreement (default=4)
         elif reward_class_name == "Disagreement":
             ensemble_sizes = [4, 5]
             reward_kwargs['ensemble_size'] = ensemble_sizes[method_idx]
-        
+
         # Methods with latent_dim parameter - different defaults
         elif reward_class_name in ["ICM", "RND", "E3B"]:
             # E3B, ICM, RND have default latent_dim=128
@@ -309,7 +309,7 @@ def run_stable_baselines(
         reset_num_timesteps=not continue_training,
         log_interval=1,
     )
-        
+
         if rl_config.save_path:
             model.save(rl_config.save_path)
             print("policy saved to", rl_config.save_path)

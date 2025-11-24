@@ -49,6 +49,8 @@ class ExplorationReward:
     # ------------------------------------------------------------------
     # bookkeeping / reset
     def reset_counts(self):
+        print(f"--- Resetting reward counts ---")
+
         # ball ↦ scalar counters
         self.ball_total_hits = {}
         self.ball_off_table_counts = {}
@@ -401,7 +403,7 @@ if __name__ == "__main__":
         print(f"\nStep {step+1}:")
         reward = reward_fn(balls)
         print(f"  Reward: {reward:.4f}")
-        
+
     # Test with bucket reward
     print("\n\nTesting with bucket-based reward:")
     reward_fn = ExplorationReward(
@@ -410,15 +412,15 @@ if __name__ == "__main__":
         n_buckets_y, 
         reward_type=ExplorationReward.REWARD_TYPE_BUCKET
     )
-    
+
     # Reset for a new test
     reward_fn.reset_counts()
-    
+
     for step, balls in enumerate(hits_sequence):
         print(f"\nStep {step+1}:")
         reward = reward_fn(balls)
         print(f"  Reward: {reward:.4f}")
-        
+
     # Test with entropy-based reward
     print("\n\nTesting with entropy-based reward:")
     reward_fn = ExplorationReward(
@@ -427,15 +429,15 @@ if __name__ == "__main__":
         n_buckets_y, 
         reward_type=ExplorationReward.REWARD_TYPE_ENTROPY
     )
-    
+
     # Reset for a new test
     reward_fn.reset_counts()
-    
+
     for step, balls in enumerate(hits_sequence):
         print(f"\nStep {step+1}:")
         reward = reward_fn(balls)
         print(f"  Reward: {reward:.4f}")
-        
+
     # Test with KNN joint reward
     print("\n\nTesting with KNN joint reward:")
     reward_fn = ExplorationReward(
@@ -445,10 +447,10 @@ if __name__ == "__main__":
         reward_type=ExplorationReward.REWARD_TYPE_KNN_JOINT,
         k_neighbors=2
     )
-    
+
     # Reset for a new test
     reward_fn.reset_counts()
-    
+
     # Add robot joint positions to the test data
     i=0
     for ball_set in hits_sequence:
@@ -456,7 +458,7 @@ if __name__ == "__main__":
         for ball in ball_set:
             if ball.get("min_distance_ball_racket", 1.0) == 0:
                 ball["robot_joint_positions"] = [0.1, 0.2, 0.3, 0.1 * i]
-    
+
     for step, balls in enumerate(hits_sequence):
         print(f"\nStep {step+1}:")
         reward = reward_fn(balls)

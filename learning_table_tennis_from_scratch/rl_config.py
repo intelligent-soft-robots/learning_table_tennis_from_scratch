@@ -82,6 +82,8 @@ class RLConfig:
         "rl_explore_reward_norm",  # Enable reward normalization
         "rl_explore_obs_norm",  # Enable observation normalization
         "rl_explore_method_specific_parameter_index",  # Index for method-specific parameters
+        "initial_exploration_steps",  # Number of steps before resetting exploration reward
+        "use_initial_exploration_traj",  # Whether to collect trajectories during initial exploration
     )
 
     _default_additional_params = {
@@ -105,6 +107,8 @@ class RLConfig:
         "rl_explore_reward_norm": True,
         "rl_explore_obs_norm": False,
         "rl_explore_method_specific_parameter_index": 0,
+        "initial_exploration_steps": 0,
+        "use_initial_exploration_traj": False,
     }
 
     _params_ppo = _algo_params_ppo + _additional_params
@@ -184,12 +188,12 @@ class RLConfig:
                     raise ValueError(
                         "failed to find the attribute {} " "in {}".format(s, jsonpath)
                     )
-        
+
         # Set checkpoint_save_freq to n_steps if not specified
         if instance.checkpoint_save_freq is None and hasattr(instance, 'n_steps') and instance.n_steps is not None:
             instance.checkpoint_save_freq = instance.n_steps
             print("Using n_steps value '{}' for checkpoint_save_freq parameter.".format(instance.n_steps))
-        
+
         return instance
 
     # FIXME Is this used anywhere?
