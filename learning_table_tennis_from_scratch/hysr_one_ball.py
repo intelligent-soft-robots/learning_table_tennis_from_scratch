@@ -174,10 +174,21 @@ class HysrOneBallConfig:
     xterms: bool = oc.MISSING
 
     initial_exploration_steps: int = 0
-    """Number of steps before resetting exploration reward counts."""
 
     use_initial_exploration_traj: bool = False
     """Whether to collect trajectories during initial exploration phase."""
+
+    reset_exploration_reward: bool = False
+    """Whether to reset exploration reward counts after initial exploration."""
+
+    reset_value_function: bool = False
+    """Whether to reset value function after initial exploration."""
+
+    reset_last_layer_policy: bool = False
+    """Whether to reset last layer of policy after initial exploration."""
+
+    reset_policy: bool = False
+    """Whether to reset entire policy network after initial exploration."""
 
     # implement __{get,set}item__ to add dictionary-like access
     def __getitem__(self, key: str) -> t.Any:
@@ -457,12 +468,9 @@ class HysrOneBall:
     def __init__(self, hysr_config, reward_function):
         self._hysr_config = hysr_config
 
-        # we will track the episode number
         self._episode_number = -1
-
-        # we will track the step number (reset at the start
-        # of each episode)
         self._step_number = -1
+        self._total_step_number = 0
 
         # we end an episode after a fixed number of steps
         self._nb_steps_per_episode = hysr_config.nb_steps_per_episode
@@ -1213,6 +1221,22 @@ class HysrOneBall:
         self._episode_number += 1
         self._share_episode_number(self._episode_number)
 
+        if (self._hysr_config.initial_exploration_steps > 0 and 
+            self._total_step_number >= self._hysr_config.initial_exploration_steps and
+            not hasattr(self, '_reset_performed')):
+            print(f"\n=== Initial exploration phase completed at step {self._total_step_number} (episode {self._episode_number}) ===")
+
+            if self._hysr_config.reset_exploration_reward and hasattr(self._reward_function, 'reset_counts'):
+                self._reward_function.reset_counts()
+                print(f"Reset exploration reward counts")
+
+            self._reset_requested = True
+            self._reset_performed = True
+            print(f"Reset flags: VF={self._hysr_config.reset_value_function}, Last_layer={self._hysr_config.reset_last_layer_policy}, Policy={self._hysr_config.reset_policy}")
+        else:
+            if not hasattr(self, '_reset_requested'):
+                self._reset_requested = False
+
         self.linear_approx_hitting_point_set = False
 
         # returning an observation
@@ -1567,6 +1591,7 @@ class HysrOneBall:
 
         # this step is done
         self._step_number += 1
+        self._total_step_number += 1
         self._share_step_number(self._step_number)
 
         # setting extra transitions
@@ -1593,6 +1618,24 @@ class HysrOneBall:
             return observation, reward, episode_over, extra_transitions
         else:
             return observation, reward, episode_over
+
+    def is_reset_requested(self):
+        return getattr(self, '_reset_requested', False)
+
+    def get_reset_config(self):
+        """Get the reset configuration flags."""
+        return {
+            'reset_exploration_reward': self._hysr_config.reset_exploration_reward,
+            'reset_value_function': self._hysr_config.reset_value_function,
+            'reset_last_layer_policy': self._hysr_config.reset_last_layer_policy,
+            'reset_policy': self._hysr_config.reset_policy,
+            'episode_number': self._episode_number,
+            'total_steps': self._total_step_number
+        }
+
+    def clear_reset_request(self):
+        """Clear the reset request flag after it has been handled."""
+        self._reset_requested = False
 
     def close(self):
         if self._robot_integrity is not None:

@@ -97,6 +97,7 @@ class RLConfig:
         "log_path": "",
         "eval": False,
         "eval_episodes": 100,
+        "log_std_init": 0.0,
         "use_layer_norm": False,
         "hidden_layers_bias": True,
         "checkpoint_save_freq": None,  # Will default to n_steps if not specified

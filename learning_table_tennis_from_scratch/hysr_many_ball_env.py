@@ -177,7 +177,6 @@ class HysrManyBallEnv(gym.Env):
 
         self._initial_exploration_steps = hysr_one_ball_config.initial_exploration_steps
         self._use_initial_exploration_traj = hysr_one_ball_config.use_initial_exploration_traj
-        self._exploration_reset_done = False
         self._reward_function_type = getattr(reward_function, 'reward_function_type', None)
 
     def _load_hit_indices(self):
@@ -577,16 +576,6 @@ class HysrManyBallEnv(gym.Env):
             # reward = 0 #extra_rewards[idx_ball_still_active]
         else:
             self.n_steps_on_policy += 1
-
-            # Check if we should reset exploration reward
-            if (self._initial_exploration_steps > 0 and 
-                self.n_steps_on_policy >= self._initial_exploration_steps and 
-                not self._exploration_reset_done and
-                self._reward_function_type == "reward_many_balls_exploration"):
-
-                print(f"Resetting exploration reward counts at step {self.n_steps_on_policy}")
-                self._hysr._reward_function.reset_counts()
-                self._exploration_reset_done = True
 
         if not all_episodes_over:
             reward = 0

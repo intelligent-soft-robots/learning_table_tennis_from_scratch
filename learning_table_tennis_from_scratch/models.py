@@ -18,6 +18,78 @@ from learning_table_tennis_from_scratch.rl_explore_on_policy import RLeXploreWit
 
 import gymnasium as gym
 import torch.nn as nn
+from stable_baselines3.common.callbacks import BaseCallback
+
+
+class ResetCallback(BaseCallback):
+    """
+    Custom callback to handle reset requests from the environment.
+    Checks if initial exploration steps have been reached and resets
+    the exploration reward, value function, and/or policy as configured.
+    """
+    def __init__(self, env, verbose=0):
+        super(ResetCallback, self).__init__(verbose)
+        self.env = env
+        self.reset_done = False
+
+    def _on_step(self) -> bool:
+        base_env = self.env.envs[0].unwrapped if hasattr(self.env, 'envs') else self.env
+        hysr = base_env._hysr
+
+        if hysr.is_reset_requested() and not self.reset_done:
+            reset_config = hysr.get_reset_config()
+            print(f"\n=== Reset requested at step {reset_config.get('total_steps', 'N/A')} (episode {reset_config['episode_number']}) ===")
+
+            if reset_config['reset_value_function']:
+                self._reset_value_function()
+                print("Reset value function")
+
+            if reset_config['reset_last_layer_policy']:
+                self._reset_last_layer_policy()
+                print("Reset last layer of policy")
+
+            if reset_config['reset_policy']:
+                self._reset_policy()
+                print("Reset entire policy")
+
+            hysr.clear_reset_request()
+            self.reset_done = True
+
+        return True
+
+    def _reset_value_function(self):
+        """Reset the value function head."""
+        policy = self.model.policy
+        policy.value_net.reset_parameters()
+
+    def _reset_last_layer_policy(self):
+        """Reset the last layer of the policy network."""
+        policy = self.model.policy
+        policy.action_net.reset_parameters()
+
+    def _reset_policy(self):
+        """Reset the entire policy network."""
+        policy = self.model.policy
+        # Reset features extractor
+        for module in policy.features_extractor.modules():
+            if hasattr(module, 'reset_parameters'):
+                module.reset_parameters()
+                print(f"Reset module: {module}")
+        # Reset MLP extractor networks
+        if hasattr(policy, 'mlp_extractor'):
+            # MlpExtractor has policy_net and value_net directly
+            for module in policy.mlp_extractor.policy_net.modules():
+                if hasattr(module, 'reset_parameters'):
+                    module.reset_parameters()
+                    print(f"Reset module: {module}")
+            for module in policy.mlp_extractor.value_net.modules():
+                if hasattr(module, 'reset_parameters'):
+                    module.reset_parameters()
+                    print(f"Reset module: {module}")
+        # Reset output heads
+        policy.action_net.reset_parameters()
+        policy.value_net.reset_parameters()
+
 
 def run_stable_baselines(
     reward_config_file,
@@ -95,12 +167,16 @@ def run_stable_baselines(
                     },
                     "net_arch": []  # Empty since features extractor handles the network
                 }
+                if algorithm == "ppo" and hasattr(rl_config, 'log_std_init'):
+                    policy_kwargs["log_std_init"] = rl_config.log_std_init
             else:
                 assert rl_config.hidden_layers_bias, "hidden layers bias must be set to True for standard architecture"
                 # Standard MlpPolicy
                 policy_kwargs = {
                     "net_arch": [rl_config.num_hidden] * rl_config.num_layers
                 }
+                if algorithm == "ppo" and hasattr(rl_config, 'log_std_init'):
+                    policy_kwargs["log_std_init"] = rl_config.log_std_init
 
             model = model_type[algorithm](
                     "MlpPolicy",
@@ -302,6 +378,12 @@ def run_stable_baselines(
             callbacks.append(checkpoint_callback)
         if rl_config.rl_explore:
             callbacks.append(rl_explore_callback)
+
+        if hysr_config.initial_exploration_steps > 0:
+            print(f"Creating ResetCallback for initial_exploration_steps={hysr_config.initial_exploration_steps}")
+            reset_callback = ResetCallback(env, verbose=1)
+            callbacks.append(reset_callback)
+            print(f"Total callbacks: {len(callbacks)}")
 
         model.learn(
         total_timesteps=rl_config.num_timesteps,
