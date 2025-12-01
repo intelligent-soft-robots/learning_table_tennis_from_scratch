@@ -42,6 +42,13 @@ if not gcsl_config_path or not os.path.exists(gcsl_config_path):
 with open(gcsl_config_path, 'r') as f:
     gcsl_config = json.load(f)
 
+# === Set Random Seed ===
+random_seed = gcsl_config.get('random_seed', None)
+if random_seed is not None:
+    np.random.seed(random_seed)
+    torch.manual_seed(random_seed)
+    print(f"Random seed set to: {random_seed}")
+
 # === Configurations ===
 reward_config_file = main_config.get("reward_config")
 hysr_one_ball_config_file = main_config.get("hysr_config")
@@ -395,15 +402,11 @@ def load_trajectories(data_paths: Union[str, List[str]],
                       first_fraction=1.0,
                       validation_split=0.1,
                       traj_type = None,
-                      random_seed=None,
                       action_repeat_counter=2,
                       mode=Mode.TRAINING):
     # --- Existing code for finding files ---
     if isinstance(data_paths, str):
         data_paths = [data_paths]
-
-    if random_seed is not None:
-        np.random.seed(random_seed)
 
     all_files = []
     for data_path in data_paths:
@@ -1290,7 +1293,6 @@ class ExperimentSetting(Enum):
 class DatasetConfig:
     folders: List[str]  # List of folders containing trajectory data
     max_trajectories: Optional[int] = None  # Maximum number of trajectories to use (None for all)
-    random_seed: Optional[int] = None  # Seed for reproducibility
     filter_type: Optional[str] = None  # Type of filtering to apply ("first_percent", "last_percent", "ball_id", "goal_radius")
     filter_value: Optional[Any] = None  # Value for filtering (percentage, ball_id, or goal position)
 
@@ -1812,7 +1814,6 @@ class ExperimentRunner:
                 dataset_buffer, _ = load_trajectories(
                     dataset_config.folders,
                     max_files=dataset_config.max_trajectories,
-                    random_seed=dataset_config.random_seed,
                     traj_type=config.dataset_type,
                     action_repeat_counter=2
                 )
@@ -2099,7 +2100,6 @@ def dataset_experiments(env, output_folder, gcsl_config: Dict, mode: Mode = Mode
                     max_files=max_files_for_mode,
                     first_fraction=1.0, # Load all files from this folder
                     validation_split=gcsl_config['data_loading']['validation_split'],
-                    random_seed=42,
                     action_repeat_counter=action_repeat_counter,
                     mode=mode,
                 )
@@ -2121,7 +2121,6 @@ def dataset_experiments(env, output_folder, gcsl_config: Dict, mode: Mode = Mode
                 dataset_config = DatasetConfig(
                     folders=[folder_path], # Reflects the single folder used
                     max_trajectories=None,
-                    random_seed=42,
                     filter_type=current_config_params.pop("filter_type"),
                     filter_value=current_config_params.pop("filter_value")
                 )
