@@ -459,7 +459,7 @@ def load_trajectories(data_paths: Union[str, List[str]],
     for filename in all_filenames:
         n_checked += 1
         # show progress every 1% of files
-        if n_checked % (total_files // 100) == 0:
+        if total_files >= 100 and n_checked % (total_files // 100) == 0:
             print(".", end="", flush=True)
         if isinstance(max_files, int):
             if n_found >= max_files:
