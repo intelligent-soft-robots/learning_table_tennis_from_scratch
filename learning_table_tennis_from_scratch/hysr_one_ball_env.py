@@ -4,7 +4,8 @@ import time
 import os
 from collections import OrderedDict
 
-import gymnasium as gym
+import gym
+# import gymnasium as gym
 import numpy as np
 import o80
 import pam_interface

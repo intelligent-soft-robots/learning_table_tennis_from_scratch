@@ -1,7 +1,7 @@
 import torch.nn as nn
 from stable_baselines3.common.torch_layers import BaseFeaturesExtractor, create_mlp
 from typing import Dict
-import gymnasium as gym
+from .compat import gym
 
 
 class LayerNormFeaturesExtractor(BaseFeaturesExtractor):

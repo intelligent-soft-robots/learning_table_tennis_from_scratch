@@ -5,13 +5,13 @@ import os
 from collections import OrderedDict
 from typing import Dict, Union
 
-import gymnasium as gym
 import numpy as np
 import o80
 import pam_interface
 
 from .hysr_one_ball import HysrOneBall, HysrOneBallConfig
 from .rewards import JsonReward
+from .compat import gym, get_observation_space, make_obs, make_obs_list, get_obs_array, make_step_return, make_reset_return
 
 from scipy.interpolate import make_interp_spline
 
@@ -164,7 +164,7 @@ class HysrManyBallEnv(gym.Env):
 
 
 
-        self.observation_space = self._obs_boxes.get_gym_box()
+        self.observation_space = get_observation_space(self._obs_boxes.get_gym_box())
 
         if not self._accelerated_time:
             self._frequency_manager = o80.FrequencyManager(
@@ -313,33 +313,11 @@ class HysrManyBallEnv(gym.Env):
     def set_goal(self, goal):
         self._hysr.set_goal(goal)
 
-    def _get_obs(self, state) -> Dict[str, Union[int, np.ndarray]]:
-            """
-            Helper to create the observation.
+    def _get_obs(self, state):
+            return make_obs(self._convert_observation(state))
 
-            :return: The current observation.
-            """
-            # return OrderedDict(
-            #     [
-            #         ("observation", self._convert_observation(state)),
-            #     ]
-            # )
-            return self._convert_observation(state)
-
-    def _get_extra_obs(self, extra_states) -> Dict[str, Union[int, np.ndarray]]:
-            """
-            Helper to create the observation.
-
-            :return: The current observation.
-            """
-            # return [OrderedDict(
-            #     [
-            #         ("observation", self._convert_observation(extra_state) ),
-            #     ]
-            # )
-            #     for extra_state in extra_states
-            # ]
-            return [self._convert_observation(extra_state) for extra_state in extra_states]
+    def _get_extra_obs(self, extra_states):
+            return make_obs_list([self._convert_observation(s) for s in extra_states])
 
 
     # remove transitions between the ball hitting the racket and the ball hitting the table as well as transitions after the end of the episode
@@ -580,7 +558,9 @@ class HysrManyBallEnv(gym.Env):
         if not all_episodes_over:
             reward = 0
 
-        return obs, reward, all_episodes_over, False, infos
+        if all_episodes_over:
+            print("episode over after {} policy steps, reward: {:.3f}".format(self.n_steps_on_policy, reward))
+        return make_step_return(obs, reward, all_episodes_over, infos)
 
     def seed(self, seed=None):
         if seed is not None:
@@ -597,11 +577,11 @@ class HysrManyBallEnv(gym.Env):
             self._frequency_manager = None
         self.previous_extra_obs = extra_obs.copy()
         self.previous_obs = obs.copy()
-        return obs, {}
+        return make_reset_return(obs)
 
     def dump_data(self, data_buffer, index=None):
         if len(data_buffer) > 0:
-            final_observation = data_buffer[-1][7]  # next_ob is at index 7
+            final_observation = get_obs_array(data_buffer[-1][7])  # next_ob is at index 7
             ball_pos_start = self._obs_boxes.get_start_index("ball_position")
             final_ball_y = final_observation[ball_pos_start + 1]
             table_center_y = self._hysr._hysr_config.table_position[1]
@@ -647,8 +627,8 @@ class HysrManyBallEnv(gym.Env):
         filename += "_" + str(np.random.randint(10000)) + ".json"
         dict_data_full = dict()
         with open(filename, "w") as json_data:
-            dict_data_full["ob"] = [x[0].tolist() for x in data_buffer]
-            dict_data_full["next_ob"] = [x[7].tolist() for x in data_buffer]
+            dict_data_full["ob"] = [get_obs_array(x[0]).tolist() for x in data_buffer]
+            dict_data_full["next_ob"] = [get_obs_array(x[7]).tolist() for x in data_buffer]
             dict_data_full["action_orig"] = [x[1].tolist() for x in data_buffer]
             dict_data_full["action_casted"] = [x[2] for x in data_buffer]
             dict_data_full["prdes"] = [x[3] for x in data_buffer]

@@ -16,7 +16,7 @@ from rllte.xplore.reward import (
 from learning_table_tennis_from_scratch.rl_explore_on_policy import RLeXploreWithOnPolicyRL
 
 
-import gymnasium as gym
+from learning_table_tennis_from_scratch.compat import gym
 import torch.nn as nn
 from stable_baselines3.common.callbacks import BaseCallback
 
@@ -366,10 +366,13 @@ def run_stable_baselines(
 
         print(reward_kwargs)
 
-        # Create the reward instance
-        irs = RewardClass(**reward_kwargs)
+        # Create the reward instance if rl explore is enabled
 
-        rl_explore_callback = RLeXploreWithOnPolicyRL(irs=irs, verbose=1)
+        if rl_config.rl_explore:
+            print(f"Using exploration reward: {reward_class_name}")
+            irs = RewardClass(**reward_kwargs)
+
+            rl_explore_callback = RLeXploreWithOnPolicyRL(irs=irs, verbose=1)
 
 
     if rl_config.num_timesteps > 0:
