@@ -22,16 +22,23 @@ class ExplorationReward:
 
     # ---------------------------------------------------------------------
     def __init__(self, table_bounds, n_buckets_x=4, n_buckets_y=2,
-                 reward_type="knn", epsilon=3e-2, k_neighbors=1, give_max_reward=False):
+                 reward_type="knn", epsilon=3e-2, k_neighbors=1, give_max_reward=False,
+                 j3_n_bins=30, j3_dead_zone=0.1, j3_weight=1.0,
+                 off_table_norm=1.5):
 
         self.table_bounds = table_bounds
         self.n_buckets_x = n_buckets_x
         self.n_buckets_y = n_buckets_y
         self.epsilon = epsilon
-        self.normalization_constant = 1.5
+        self.off_table_norm = off_table_norm
         self.reward_type = reward_type
         self.k_neighbors = k_neighbors
         self.give_max_reward = give_max_reward
+
+        # Joint-3 parameters for bucket_j3 reward type
+        self.j3_n_bins = j3_n_bins
+        self.j3_dead_zone = j3_dead_zone  # fraction of π
+        self.j3_weight = j3_weight
 
         self.reset_counts()  # initialise all per‑ball stores
 
@@ -43,6 +50,8 @@ class ExplorationReward:
         print(f" reward_type: {self.reward_type}")
         print(f" k_neighbors: {self.k_neighbors}")
         print(f" give_max_reward: {self.give_max_reward}")
+        print(f" j3_n_bins: {self.j3_n_bins}, j3_dead_zone: {self.j3_dead_zone}π, j3_weight: {self.j3_weight}")
+        print(f" off_table_norm: {self.off_table_norm}")
         print("--------------------------------------------------")
 
 
@@ -95,10 +104,9 @@ class ExplorationReward:
         return max(0, min(i, self.n_buckets_x - 1)), max(0, min(j, self.n_buckets_y - 1))
 
     # bucket index for joint‑3 (angle ∈ [‑π, π])
-    @staticmethod
-    def get_joint3_bucket_index(angle_rad):
-        idx = int((angle_rad + math.pi) / (2 * math.pi) * 30)
-        return max(0, min(idx, 29))
+    def get_joint3_bucket_index(self, angle_rad):
+        idx = int((angle_rad + math.pi) / (2 * math.pi) * self.j3_n_bins)
+        return max(0, min(idx, self.j3_n_bins - 1))
 
     # ------------------------------------------------------------------
     # KD‑tree helpers
@@ -192,7 +200,7 @@ class ExplorationReward:
             self.ball_off_table_counts[ball_id] = 0
             self.ball_landing_positions[ball_id] = []
             self.ball_joint_positions[ball_id] = []
-            self.ball_joint3_bucket_counts[ball_id] = [0] * 30
+            self.ball_joint3_bucket_counts[ball_id] = [0] * self.j3_n_bins
             self.kd_trees_xy[ball_id] = None
             self.kd_trees_joint[ball_id] = None
             self.kd_trees_xy_dirty[ball_id] = True
@@ -244,32 +252,32 @@ class ExplorationReward:
             bucket_r = (1 / math.sqrt(self.ball_on_table_counts[ball_id][i][j]) if on_table
                         else 1 / math.sqrt(self.ball_total_hits[ball_id]))
 
-            # (b) bucket reward for joint‑3 angle (‑π .. π divided into 30)
+            # (b) bucket reward for joint‑3 angle (‑π .. π divided into j3_n_bins)
             j3_r = 0.0
             if robot_joint_positions is not None and len(robot_joint_positions) >= 3 and on_table:
                 idx_j3 = self.get_joint3_bucket_index(robot_joint_positions[2])
                 self.ball_joint3_bucket_counts[ball_id][idx_j3] += 1
                 j3_r = 1 / math.sqrt(self.ball_joint3_bucket_counts[ball_id][idx_j3])
 
-            # (c) joint reward is zero when angle between -pi * 0.1 and pi * 0.1
-            if j3_r > 0.0 and abs(robot_joint_positions[2]) < 0.1 * math.pi:
+            # (c) joint reward is zero when angle within dead zone around zero
+            if j3_r > 0.0 and abs(robot_joint_positions[2]) < self.j3_dead_zone * math.pi:
                 j3_r = 0.0
 
-            # (d) combine the two rewards
+            # (d) combine the two rewards with configurable weight for j3
             total_p_reward = bucket_r
             total_j_reward = j3_r
-            reward = (bucket_r + j3_r) * 1.5
+            reward = (bucket_r + self.j3_weight * j3_r) * 1.5
 
         # ------------------------------------------------------------------
         # off‑table penalty (same logic for all bucket‑style rewards)
         if not on_table and landing_position is not None:
             dist = self.min_distance_to_table(landing_position)
             if self.reward_type in (self.REWARD_TYPE_KNN, self.REWARD_TYPE_KNN_JOINT):
-                proximity = max(0.0, (self.normalization_constant - dist) / self.normalization_constant)
+                proximity = max(0.0, (self.off_table_norm - dist) / self.off_table_norm)
                 reward = (0.3 + reward) * proximity
                 reward /= math.sqrt(self.ball_total_hits[ball_id] - self.ball_off_table_counts[ball_id])
             else:
-                reward *= (self.normalization_constant - dist) / self.normalization_constant
+                reward *= (self.off_table_norm - dist) / self.off_table_norm
             reward = max(0.0, reward)
 
         # ------------------------------------------------------------------

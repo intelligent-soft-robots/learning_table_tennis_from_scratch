@@ -665,7 +665,6 @@ def train_agent(env, agent, buffer, validation_buffer=None, num_episodes=10, bat
             batch_states = []
             batch_goals = []
             batch_actions = []
-            batch_horizons = []
             
             # Batch sampling
             for _ in range(batch_size):
@@ -678,15 +677,12 @@ def train_agent(env, agent, buffer, validation_buffer=None, num_episodes=10, bat
                         print('----- Using extra buffer ----')
 
                 t1 = np.random.randint(0, len(trajectory['actions']))
-                # horizon = steps until episode ends
-                horizon = len(trajectory['actions']) - t1
                 s = trajectory['states'][t1]['observation']
                 a = trajectory['actions'][t1]
                 g = trajectory['desired_goal']
                 batch_states.append(s)
                 batch_goals.append(g)
                 batch_actions.append(a)
-                batch_horizons.append(horizon)
                 
             # Normalization
             batch_states = np.array(batch_states)
@@ -699,7 +695,6 @@ def train_agent(env, agent, buffer, validation_buffer=None, num_episodes=10, bat
             goals_tensor = torch.tensor(batch_goals, dtype=torch.float32)
             horizons_tensor = torch.zeros((batch_size, 1), dtype=torch.float32)
             actions_tensor = torch.tensor(batch_actions, dtype=torch.float32)
-            horizons_tensor = torch.tensor(batch_horizons, dtype=torch.float32).unsqueeze(-1)
             
             
             if agent.__class__.__name__ == "NNAgentDeterministic":

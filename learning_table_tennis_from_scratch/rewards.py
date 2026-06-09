@@ -188,14 +188,22 @@ class JsonReward:
             n_buckets_x = conf.get("n_buckets_x", 4)
             n_buckets_y = conf.get("n_buckets_y", 2)
             give_max_reward = conf.get("give_max_reward", True)
+            j3_n_bins = conf.get("j3_n_bins", 30)
+            j3_dead_zone = conf.get("j3_dead_zone", 0.1)
+            j3_weight = conf.get("j3_weight", 1.0)
+            off_table_norm = conf.get("exploration_off_table_norm", 1.5)
 
             reward_func = ExplorationReward(
-                table_bounds, 
-                n_buckets_x, 
-                n_buckets_y, 
+                table_bounds,
+                n_buckets_x,
+                n_buckets_y,
                 reward_type=reward_type,
                 k_neighbors=k_neighbors,
                 give_max_reward=give_max_reward,
+                j3_n_bins=j3_n_bins,
+                j3_dead_zone=j3_dead_zone,
+                j3_weight=j3_weight,
+                off_table_norm=off_table_norm,
             )
             reward_func.reward_function_type = "reward_many_balls_exploration"
             return reward_func
