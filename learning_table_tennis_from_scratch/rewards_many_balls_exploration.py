@@ -31,6 +31,7 @@ class ExplorationReward:
         self.n_buckets_y = n_buckets_y
         self.epsilon = epsilon
         self.off_table_norm = off_table_norm
+        self.normalization_constant = 3.0
         self.reward_type = reward_type
         self.k_neighbors = k_neighbors
         self.give_max_reward = give_max_reward
