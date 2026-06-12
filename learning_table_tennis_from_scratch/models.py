@@ -142,6 +142,9 @@ def run_stable_baselines(
         "log_episodes": log_episodes,
         "logger": tensorboard_logger,
     }
+    if env_type is HysrManyBallEnv and algorithm in ["sac_her", "sac_hsm", "sac_hsm_her"]:
+        # the custom HER/HSM replay buffer expects {"observation": array} observations
+        env_config["dict_obs"] = True
     env = make_vec_env(env_type, env_kwargs=env_config, seed=seed)
 
     model_type = {"ppo": PPO, "sac": SAC, "sac_her": SAC, "sac_hsm": SAC, "sac_hsm_her": SAC}

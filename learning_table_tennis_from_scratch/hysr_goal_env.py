@@ -4,9 +4,6 @@ import time
 from typing import Dict, Union
 from collections import OrderedDict
 
-import gym
-# import gymnasium as gym
-import gymnasium_robotics as gym_robotics
 import numpy as np
 import o80
 import pam_interface
@@ -15,6 +12,13 @@ import os
 
 from .hysr_one_ball import HysrOneBall, HysrOneBallConfig
 from .rewards import JsonReward
+from .compat import gym, USE_GYMNASIUM, make_step_return, make_reset_return
+
+if USE_GYMNASIUM:
+    from gymnasium_robotics import GoalEnv
+else:
+    # the gym 0.21 stack provides GoalEnv directly
+    GoalEnv = gym.GoalEnv
 
 
 def _distance(p1, p2):
@@ -88,7 +92,7 @@ class _ObservationSpace:
         raise KeyError(f"Box '{name}' not found")
 
 
-class HysrGoalEnv(gym_robotics.GoalEnv):
+class HysrGoalEnv(GoalEnv):
     def __init__(
         self,
         reward_config_file=None,
@@ -489,9 +493,9 @@ class HysrGoalEnv(gym_robotics.GoalEnv):
         self.action_orig = action_orig.copy()
 
         # formatting observation in a format suitable for gym goal env
-        return obs, reward, episode_over, False, {}
+        return make_step_return(obs, reward, episode_over, {})
 
-    def reset(self):
+    def reset(self, *, seed=None, options=None):
         self.init_episode()
         observation, _ = self._hysr.reset()
         if not self._accelerated_time:
@@ -500,7 +504,7 @@ class HysrGoalEnv(gym_robotics.GoalEnv):
         self.previous_obs = obs.copy()
         self.episode_over = False
         self.action_orig = None
-        return obs, {}
+        return make_reset_return(obs)
 
     def dump_data(self, data_buffer):
         if len(data_buffer) > 0:

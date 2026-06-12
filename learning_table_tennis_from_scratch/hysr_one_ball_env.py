@@ -4,14 +4,13 @@ import time
 import os
 from collections import OrderedDict
 
-import gym
-# import gymnasium as gym
 import numpy as np
 import o80
 import pam_interface
 
 from .hysr_one_ball import HysrOneBall, HysrOneBallConfig
 from .rewards import JsonReward
+from .compat import gym, make_step_return, make_reset_return
 
 from sklearn.gaussian_process import GaussianProcessRegressor
 from sklearn.gaussian_process.kernels import Matern
@@ -689,7 +688,7 @@ class HysrOneBallEnv(gym.Env):
                 # self._logger.dump()
 
 
-        return observation, reward, episode_over, False, {}
+        return make_step_return(observation, reward, episode_over, {})
 
     def reset(self, *, seed=None, options=None):
         if seed is not None:
@@ -701,7 +700,7 @@ class HysrOneBallEnv(gym.Env):
             self._frequency_manager = None
 
         self.previous_observation = observation.copy()
-        return observation, {}
+        return make_reset_return(observation)
 
     def dump_data(self, data_buffer, data_buffer_short=None):
         if len(data_buffer) > 0:

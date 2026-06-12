@@ -11,7 +11,7 @@ import pam_interface
 
 from .hysr_one_ball import HysrOneBall, HysrOneBallConfig
 from .rewards import JsonReward
-from .compat import gym, get_observation_space, make_obs, make_obs_list, get_obs_array, make_step_return, make_reset_return
+from .compat import gym, get_obs_array, make_step_return, make_reset_return
 
 from scipy.interpolate import make_interp_spline
 
@@ -97,8 +97,13 @@ class HysrManyBallEnv(gym.Env):
         log_episodes=False,
         logger=None,
         stop_new_actions_after_main_ball_hit=True,
+        dict_obs=False,
     ):
         super().__init__()
+
+        # wrap observations as {"observation": array}, required by the
+        # custom HER/HSM replay buffer (sac_her / sac_hsm)
+        self._dict_obs = dict_obs
 
 
         self._logger = logger
@@ -164,7 +169,12 @@ class HysrManyBallEnv(gym.Env):
 
 
 
-        self.observation_space = get_observation_space(self._obs_boxes.get_gym_box())
+        if self._dict_obs:
+            self.observation_space = gym.spaces.Dict(
+                {"observation": self._obs_boxes.get_gym_box()}
+            )
+        else:
+            self.observation_space = self._obs_boxes.get_gym_box()
 
         if not self._accelerated_time:
             self._frequency_manager = o80.FrequencyManager(
@@ -314,10 +324,13 @@ class HysrManyBallEnv(gym.Env):
         self._hysr.set_goal(goal)
 
     def _get_obs(self, state):
-            return make_obs(self._convert_observation(state))
+            obs = self._convert_observation(state)
+            if self._dict_obs:
+                return OrderedDict([("observation", obs)])
+            return obs
 
     def _get_extra_obs(self, extra_states):
-            return make_obs_list([self._convert_observation(s) for s in extra_states])
+            return [self._get_obs(s) for s in extra_states]
 
 
     # remove transitions between the ball hitting the racket and the ball hitting the table as well as transitions after the end of the episode

@@ -14,27 +14,6 @@ else:
     import gym
 
 
-def get_observation_space(base_box):
-    if USE_GYMNASIUM:
-        return base_box
-    else:
-        return gym.spaces.Dict({"observation": base_box})
-
-
-def make_obs(observation):
-    if USE_GYMNASIUM:
-        return observation
-    else:
-        return OrderedDict([("observation", observation)])
-
-
-def make_obs_list(observations):
-    if USE_GYMNASIUM:
-        return observations
-    else:
-        return [OrderedDict([("observation", obs)]) for obs in observations]
-
-
 def get_obs_array(obs):
     if isinstance(obs, (dict, OrderedDict)):
         return obs["observation"]
