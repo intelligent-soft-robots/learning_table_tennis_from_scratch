@@ -17,8 +17,11 @@ from .compat import gym, USE_GYMNASIUM, make_step_return, make_reset_return
 if USE_GYMNASIUM:
     from gymnasium_robotics import GoalEnv
 else:
-    # the gym 0.21 stack provides GoalEnv directly
-    GoalEnv = gym.GoalEnv
+    try:
+        from gym_robotics import GoalEnv
+    except ImportError:
+        # gym <= 0.21 provides GoalEnv directly
+        GoalEnv = gym.GoalEnv
 
 
 def _distance(p1, p2):
