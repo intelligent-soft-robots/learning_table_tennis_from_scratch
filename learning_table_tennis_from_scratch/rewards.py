@@ -191,6 +191,7 @@ class JsonReward:
             j3_n_bins = conf.get("j3_n_bins", 30)
             j3_dead_zone = conf.get("j3_dead_zone", 0.1)
             j3_weight = conf.get("j3_weight", 1.0)
+            bucket_weight = conf.get("bucket_weight", 1.0)
             off_table_norm = conf.get("exploration_off_table_norm", 1.5)
 
             reward_func = ExplorationReward(
@@ -203,6 +204,7 @@ class JsonReward:
                 j3_n_bins=j3_n_bins,
                 j3_dead_zone=j3_dead_zone,
                 j3_weight=j3_weight,
+                bucket_weight=bucket_weight,
                 off_table_norm=off_table_norm,
             )
             reward_func.reward_function_type = "reward_many_balls_exploration"

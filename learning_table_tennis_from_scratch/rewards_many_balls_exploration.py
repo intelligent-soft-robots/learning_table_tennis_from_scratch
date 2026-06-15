@@ -23,7 +23,7 @@ class ExplorationReward:
     # ---------------------------------------------------------------------
     def __init__(self, table_bounds, n_buckets_x=4, n_buckets_y=2,
                  reward_type="knn", epsilon=3e-2, k_neighbors=1, give_max_reward=False,
-                 j3_n_bins=30, j3_dead_zone=0.1, j3_weight=1.0,
+                 j3_n_bins=30, j3_dead_zone=0.1, j3_weight=1.0, bucket_weight=1.0,
                  off_table_norm=1.5):
 
         self.table_bounds = table_bounds
@@ -40,6 +40,7 @@ class ExplorationReward:
         self.j3_n_bins = j3_n_bins
         self.j3_dead_zone = j3_dead_zone  # fraction of π
         self.j3_weight = j3_weight
+        self.bucket_weight = bucket_weight
 
         self.reset_counts()  # initialise all per‑ball stores
 
@@ -51,7 +52,7 @@ class ExplorationReward:
         print(f" reward_type: {self.reward_type}")
         print(f" k_neighbors: {self.k_neighbors}")
         print(f" give_max_reward: {self.give_max_reward}")
-        print(f" j3_n_bins: {self.j3_n_bins}, j3_dead_zone: {self.j3_dead_zone}π, j3_weight: {self.j3_weight}")
+        print(f" j3_n_bins: {self.j3_n_bins}, j3_dead_zone: {self.j3_dead_zone}π, j3_weight: {self.j3_weight}, bucket_weight: {self.bucket_weight}")
         print(f" off_table_norm: {self.off_table_norm}")
         print("--------------------------------------------------")
 
@@ -264,10 +265,10 @@ class ExplorationReward:
             if j3_r > 0.0 and abs(robot_joint_positions[2]) < self.j3_dead_zone * math.pi:
                 j3_r = 0.0
 
-            # (d) combine the two rewards with configurable weight for j3
+            # (d) combine the two rewards with configurable weights
             total_p_reward = bucket_r
             total_j_reward = j3_r
-            reward = (bucket_r + self.j3_weight * j3_r) * 1.5
+            reward = (self.bucket_weight * bucket_r + self.j3_weight * j3_r) * 1.5
 
         # ------------------------------------------------------------------
         # off‑table penalty (same logic for all bucket‑style rewards)
