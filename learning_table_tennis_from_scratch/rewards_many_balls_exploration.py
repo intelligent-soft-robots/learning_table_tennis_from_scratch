@@ -23,7 +23,11 @@ class ExplorationReward:
     # ---------------------------------------------------------------------
     def __init__(self, table_bounds, n_buckets_x=4, n_buckets_y=2,
                  reward_type="knn", epsilon=3e-2, k_neighbors=1, give_max_reward=False,
-                 j3_n_bins=30, j3_dead_zone=0.1, j3_weight=1.0, bucket_weight=1.0,
+                 j1_n_bins=30, j1_dead_zone=0.0, j1_weight=1.0,
+                 j2_n_bins=30, j2_dead_zone=0.1, j2_weight=1.0,
+                 j3_n_bins=30, j3_dead_zone=0.1, j3_weight=1.0,
+                 j4_n_bins=30, j4_dead_zone=0.1, j4_weight=1.0,
+                 bucket_weight=1.0,
                  off_table_norm=1.5):
 
         self.table_bounds = table_bounds
@@ -36,10 +40,10 @@ class ExplorationReward:
         self.k_neighbors = k_neighbors
         self.give_max_reward = give_max_reward
 
-        # Joint-3 parameters for bucket_j3 reward type
-        self.j3_n_bins = j3_n_bins
-        self.j3_dead_zone = j3_dead_zone  # fraction of π
-        self.j3_weight = j3_weight
+        # Joint parameters for bucket_j3 reward type (indexed 0-3 for joints 1-4)
+        self.j_n_bins = [j1_n_bins, j2_n_bins, j3_n_bins, j4_n_bins]
+        self.j_dead_zone = [j1_dead_zone, j2_dead_zone, j3_dead_zone, j4_dead_zone]  # fraction of π
+        self.j_weight = [j1_weight, j2_weight, j3_weight, j4_weight]
         self.bucket_weight = bucket_weight
 
         self.reset_counts()  # initialise all per‑ball stores
@@ -52,7 +56,9 @@ class ExplorationReward:
         print(f" reward_type: {self.reward_type}")
         print(f" k_neighbors: {self.k_neighbors}")
         print(f" give_max_reward: {self.give_max_reward}")
-        print(f" j3_n_bins: {self.j3_n_bins}, j3_dead_zone: {self.j3_dead_zone}π, j3_weight: {self.j3_weight}, bucket_weight: {self.bucket_weight}")
+        print(f" bucket_weight: {self.bucket_weight}")
+        for ji in range(4):
+            print(f" j{ji+1}: n_bins={self.j_n_bins[ji]}, dead_zone={self.j_dead_zone[ji]}π, weight={self.j_weight[ji]}")
         print(f" off_table_norm: {self.off_table_norm}")
         print("--------------------------------------------------")
 
@@ -73,8 +79,8 @@ class ExplorationReward:
         self.ball_landing_positions = {}
         self.ball_joint_positions = {}
 
-        # ball ↦ 1‑D buckets for joint‑3 (30 bins)
-        self.ball_joint3_bucket_counts = {}
+        # ball ↦ list of 1‑D buckets for each joint (4 joints)
+        self.ball_joint_bucket_counts = {}  # ball_id -> [j1_counts, j2_counts, j3_counts, j4_counts]
 
         # KD‑tree caches
         self.kd_trees_xy = {}
@@ -105,10 +111,10 @@ class ExplorationReward:
         j = int((y - min_y) / (max_y - min_y) * self.n_buckets_y)
         return max(0, min(i, self.n_buckets_x - 1)), max(0, min(j, self.n_buckets_y - 1))
 
-    # bucket index for joint‑3 (angle ∈ [‑π, π])
-    def get_joint3_bucket_index(self, angle_rad):
-        idx = int((angle_rad + math.pi) / (2 * math.pi) * self.j3_n_bins)
-        return max(0, min(idx, self.j3_n_bins - 1))
+    # bucket index for joint angle (angle ∈ [‑π, π])
+    def get_joint_bucket_index(self, angle_rad, n_bins):
+        idx = int((angle_rad + math.pi) / (2 * math.pi) * n_bins)
+        return max(0, min(idx, n_bins - 1))
 
     # ------------------------------------------------------------------
     # KD‑tree helpers
@@ -202,7 +208,7 @@ class ExplorationReward:
             self.ball_off_table_counts[ball_id] = 0
             self.ball_landing_positions[ball_id] = []
             self.ball_joint_positions[ball_id] = []
-            self.ball_joint3_bucket_counts[ball_id] = [0] * self.j3_n_bins
+            self.ball_joint_bucket_counts[ball_id] = [[0] * self.j_n_bins[ji] for ji in range(4)]
             self.kd_trees_xy[ball_id] = None
             self.kd_trees_joint[ball_id] = None
             self.kd_trees_xy_dirty[ball_id] = True
@@ -248,27 +254,37 @@ class ExplorationReward:
             total_p_reward = pos_r
             total_j_reward = joint_r
 
-        # ---------------- bucket_j3 ----------------
+        # ---------------- bucket_j3 (now supports all joints) ----------------
         elif self.reward_type == self.REWARD_TYPE_BUCKET_J3:
             # (a) normal bucket reward for the landing position
             bucket_r = (1 / math.sqrt(self.ball_on_table_counts[ball_id][i][j]) if on_table
                         else 1 / math.sqrt(self.ball_total_hits[ball_id]))
 
-            # (b) bucket reward for joint‑3 angle (‑π .. π divided into j3_n_bins)
-            j3_r = 0.0
-            if robot_joint_positions is not None and len(robot_joint_positions) >= 3 and on_table:
-                idx_j3 = self.get_joint3_bucket_index(robot_joint_positions[2])
-                self.ball_joint3_bucket_counts[ball_id][idx_j3] += 1
-                j3_r = 1 / math.sqrt(self.ball_joint3_bucket_counts[ball_id][idx_j3])
+            # (b) bucket reward for each joint angle (‑π .. π divided into n_bins)
+            joint_r_total = 0.0
+            if robot_joint_positions is not None and on_table:
+                for ji in range(min(4, len(robot_joint_positions))):
+                    if self.j_weight[ji] == 0.0:
+                        continue  # skip joints with zero weight
 
-            # (c) joint reward is zero when angle within dead zone around zero
-            if j3_r > 0.0 and abs(robot_joint_positions[2]) < self.j3_dead_zone * math.pi:
-                j3_r = 0.0
+                    angle = robot_joint_positions[ji]
+                    n_bins = self.j_n_bins[ji]
+                    dead_zone = self.j_dead_zone[ji]
+                    weight = self.j_weight[ji]
 
-            # (d) combine the two rewards with configurable weights
+                    # skip if angle within dead zone around zero
+                    if abs(angle) < dead_zone * math.pi:
+                        continue
+
+                    idx = self.get_joint_bucket_index(angle, n_bins)
+                    self.ball_joint_bucket_counts[ball_id][ji][idx] += 1
+                    j_r = 1 / math.sqrt(self.ball_joint_bucket_counts[ball_id][ji][idx])
+                    joint_r_total += weight * j_r
+
+            # (c) combine the two rewards
             total_p_reward = bucket_r
-            total_j_reward = j3_r
-            reward = (self.bucket_weight * bucket_r + self.j3_weight * j3_r) * 1.5
+            total_j_reward = joint_r_total
+            reward = (self.bucket_weight * bucket_r + joint_r_total) * 1.5
 
         # ------------------------------------------------------------------
         # off‑table penalty (same logic for all bucket‑style rewards)
@@ -345,7 +361,8 @@ class ExplorationReward:
         if self.reward_type == self.REWARD_TYPE_ENTROPY:
             dist["ball_entropies"] = {bid: self.compute_entropy_for_ball_id(bid) for bid in self.ball_total_hits}
         if self.reward_type == self.REWARD_TYPE_BUCKET_J3:
-            dist["ball_joint3_buckets"] = self.ball_joint3_bucket_counts.copy()
+            dist["ball_joint_buckets"] = {bid: [counts[:] for counts in joint_counts]
+                                          for bid, joint_counts in self.ball_joint_bucket_counts.items()}
         return dist
 
 

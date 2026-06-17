@@ -188,9 +188,19 @@ class JsonReward:
             n_buckets_x = conf.get("n_buckets_x", 4)
             n_buckets_y = conf.get("n_buckets_y", 2)
             give_max_reward = conf.get("give_max_reward", True)
+            # Joint parameters (j1, j2, j3, j4)
+            j1_n_bins = conf.get("j1_n_bins", 30)
+            j1_dead_zone = conf.get("j1_dead_zone", 0.0)
+            j1_weight = conf.get("j1_weight", 1.0)
+            j2_n_bins = conf.get("j2_n_bins", 30)
+            j2_dead_zone = conf.get("j2_dead_zone", 0.1)
+            j2_weight = conf.get("j2_weight", 1.0)
             j3_n_bins = conf.get("j3_n_bins", 30)
             j3_dead_zone = conf.get("j3_dead_zone", 0.1)
             j3_weight = conf.get("j3_weight", 1.0)
+            j4_n_bins = conf.get("j4_n_bins", 30)
+            j4_dead_zone = conf.get("j4_dead_zone", 0.1)
+            j4_weight = conf.get("j4_weight", 1.0)
             bucket_weight = conf.get("bucket_weight", 1.0)
             off_table_norm = conf.get("exploration_off_table_norm", 1.5)
 
@@ -201,9 +211,10 @@ class JsonReward:
                 reward_type=reward_type,
                 k_neighbors=k_neighbors,
                 give_max_reward=give_max_reward,
-                j3_n_bins=j3_n_bins,
-                j3_dead_zone=j3_dead_zone,
-                j3_weight=j3_weight,
+                j1_n_bins=j1_n_bins, j1_dead_zone=j1_dead_zone, j1_weight=j1_weight,
+                j2_n_bins=j2_n_bins, j2_dead_zone=j2_dead_zone, j2_weight=j2_weight,
+                j3_n_bins=j3_n_bins, j3_dead_zone=j3_dead_zone, j3_weight=j3_weight,
+                j4_n_bins=j4_n_bins, j4_dead_zone=j4_dead_zone, j4_weight=j4_weight,
                 bucket_weight=bucket_weight,
                 off_table_norm=off_table_norm,
             )
