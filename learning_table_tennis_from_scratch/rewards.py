@@ -183,7 +183,7 @@ class JsonReward:
             n_buckets_x = 4
             n_buckets_y = 3
 
-            reward_type = conf.get("exploration_reward_type", ExplorationReward.REWARD_TYPE_BUCKET_J3)
+            reward_type = conf.get("exploration_reward_type", ExplorationReward.REWARD_TYPE_BUCKET_J)
             k_neighbors = conf.get("k_neighbors", 1)
             n_buckets_x = conf.get("n_buckets_x", 4)
             n_buckets_y = conf.get("n_buckets_y", 2)

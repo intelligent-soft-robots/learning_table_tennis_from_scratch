@@ -10,15 +10,15 @@ class ExplorationReward:
     * **Bucket**  – encourage visiting rarely‑hit XY buckets.
     * **KNN**     – reward proportional to distance to previous landings (XY).
     * **KNN‑Joint** – as above + distance in robot joint space.
-    * **Bucket‑J3** – rare‑bucket bonus for the 3rd robot joint (‑π..π) in
-      30 uniform bins, summed with the normal "bucket" ball reward.
+    * **Bucket‑J** – rare‑bucket bonus for robot joints (‑π..π) in
+      configurable bins, summed with the normal "bucket" ball reward.
     """
 
     REWARD_TYPE_ENTROPY = "entropy"
     REWARD_TYPE_BUCKET = "bucket"
     REWARD_TYPE_KNN = "knn"
     REWARD_TYPE_KNN_JOINT = "knn_joint"
-    REWARD_TYPE_BUCKET_J3 = "bucket_j3"
+    REWARD_TYPE_BUCKET_J = "bucket_j"
 
     # ---------------------------------------------------------------------
     def __init__(self, table_bounds, n_buckets_x=4, n_buckets_y=2,
@@ -254,8 +254,8 @@ class ExplorationReward:
             total_p_reward = pos_r
             total_j_reward = joint_r
 
-        # ---------------- bucket_j3 (now supports all joints) ----------------
-        elif self.reward_type == self.REWARD_TYPE_BUCKET_J3:
+        # ---------------- bucket_j ----------------
+        elif self.reward_type == self.REWARD_TYPE_BUCKET_J:
             # (a) normal bucket reward for the landing position
             bucket_r = (1 / math.sqrt(self.ball_on_table_counts[ball_id][i][j]) if on_table
                         else 1 / math.sqrt(self.ball_total_hits[ball_id]))
@@ -335,7 +335,7 @@ class ExplorationReward:
             total_j_reward += j_r
             max_reward = max(max_reward, ball_r)
 
-        if self.reward_type == self.REWARD_TYPE_KNN_JOINT or self.reward_type == self.REWARD_TYPE_BUCKET_J3:
+        if self.reward_type == self.REWARD_TYPE_KNN_JOINT or self.reward_type == self.REWARD_TYPE_BUCKET_J:
             print(f"  pr: {total_p_reward:.2f}, jr: {total_j_reward:.2f} ", end="")
 
         print("   ", end="")
@@ -360,7 +360,7 @@ class ExplorationReward:
         }
         if self.reward_type == self.REWARD_TYPE_ENTROPY:
             dist["ball_entropies"] = {bid: self.compute_entropy_for_ball_id(bid) for bid in self.ball_total_hits}
-        if self.reward_type == self.REWARD_TYPE_BUCKET_J3:
+        if self.reward_type == self.REWARD_TYPE_BUCKET_J:
             dist["ball_joint_buckets"] = {bid: [counts[:] for counts in joint_counts]
                                           for bid, joint_counts in self.ball_joint_bucket_counts.items()}
         return dist
@@ -498,7 +498,7 @@ if __name__ == "__main__":
         table_bounds, 
         n_buckets_x, 
         n_buckets_y, 
-        reward_type=ExplorationReward.REWARD_TYPE_BUCKET_J3
+        reward_type=ExplorationReward.REWARD_TYPE_BUCKET_J
     )
 
     # Reset for a new test
