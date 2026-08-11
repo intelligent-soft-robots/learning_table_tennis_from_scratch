@@ -4,6 +4,7 @@ import os
 from learning_table_tennis_from_scratch.hysr_one_ball_env import HysrOneBallEnv
 from learning_table_tennis_from_scratch.hysr_many_ball_env import HysrManyBallEnv
 from learning_table_tennis_from_scratch.hysr_goal_env import HysrGoalEnv
+from learning_table_tennis_from_scratch.hysr_discover_env import HysrDiscoverEnv
 from learning_table_tennis_from_scratch.rl_config import RLConfig
 from learning_table_tennis_from_scratch.rl_config import OpenAIRLConfig
 from learning_table_tennis_from_scratch.hysr_one_ball import HysrOneBallConfig
@@ -135,7 +136,7 @@ def run_stable_baselines(
 
 
 
-    if env_type in [HysrOneBallEnv, HysrGoalEnv, HysrManyBallEnv]:
+    if env_type in [HysrOneBallEnv, HysrGoalEnv, HysrManyBallEnv, HysrDiscoverEnv]:
         env_config = {
         "reward_config_file": reward_config_file,
         "hysr_one_ball_config_file": hysr_one_ball_config_file,
@@ -384,6 +385,21 @@ def run_stable_baselines(
             callbacks.append(checkpoint_callback)
         if rl_config.rl_explore:
             callbacks.append(rl_explore_callback)
+
+        if env_type is HysrDiscoverEnv:
+            from learning_table_tennis_from_scratch.discover import DiscoverCallback
+
+            discover_selector = env.get_attr("discover_selector")[0]
+            discover_callback = DiscoverCallback(
+                discover_selector,
+                ensemble_arch=dict(
+                    num_hidden=rl_config.num_hidden,
+                    num_layers=rl_config.num_layers,
+                    use_layer_norm=getattr(rl_config, "use_layer_norm", False),
+                    hidden_layers_bias=getattr(rl_config, "hidden_layers_bias", True),
+                ),
+            )
+            callbacks.append(discover_callback)
 
         if hysr_config.initial_exploration_steps > 0:
             print(f"Creating ResetCallback for initial_exploration_steps={hysr_config.initial_exploration_steps}")
