@@ -13,6 +13,7 @@ from learning_table_tennis_from_scratch.jsonconfig import get_json_config
 from learning_table_tennis_from_scratch.hysr_one_ball_env import HysrOneBallEnv
 from learning_table_tennis_from_scratch.hysr_many_ball_env import HysrManyBallEnv
 from learning_table_tennis_from_scratch.hysr_goal_env import HysrGoalEnv
+from learning_table_tennis_from_scratch.hysr_discover_env import HysrDiscoverEnv
 
 def _read_rl_common_config(jsonpath):
 
@@ -59,8 +60,8 @@ def _execute(
     print("Use random seed %d" % seed)
 
     env_name = common_conf["environment"]
-    if env_name in ["HysrOneBallEnv", "HysrManyBallEnv", "HysrGoalEnv"]:
-        env_type = {"HysrOneBallEnv": HysrOneBallEnv, "HysrManyBallEnv": HysrManyBallEnv, "HysrGoalEnv": HysrGoalEnv}
+    if env_name in ["HysrOneBallEnv", "HysrManyBallEnv", "HysrGoalEnv", "HysrDiscoverEnv"]:
+        env_type = {"HysrOneBallEnv": HysrOneBallEnv, "HysrManyBallEnv": HysrManyBallEnv, "HysrGoalEnv": HysrGoalEnv, "HysrDiscoverEnv": HysrDiscoverEnv}
         env = env_type[env_name]
     else:
         env = env_name

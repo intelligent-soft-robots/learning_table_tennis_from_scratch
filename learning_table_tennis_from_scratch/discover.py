@@ -265,9 +265,12 @@ class DiscoverGoalSelector:
     def _rng(self):
         if self._rng_obj is None:
             seed = self.config.seed
-            if seed is None:
+            # null or a negative value: derive from the (already seeded)
+            # global numpy rng, i.e. from the run seed. (negative sentinel
+            # exists because cluster_utils grids cannot express null)
+            if seed is None or (isinstance(seed, (int, float)) and seed < 0):
                 seed = int(np.random.randint(0, 2**31 - 1))
-            self._rng_obj = np.random.default_rng(seed)
+            self._rng_obj = np.random.default_rng(int(seed))
         return self._rng_obj
 
     # ------------------------------------------------------------------
