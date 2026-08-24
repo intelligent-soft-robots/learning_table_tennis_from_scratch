@@ -64,9 +64,19 @@ class DiscoverConfig:
         "ensemble_batch_size": 256,
         # fraction of the fit data each head sees (bootstrap, for diversity)
         "ensemble_bootstrap_fraction": 0.8,
-        # ring buffer of past rollout data used for fitting (0: current rollout only)
+        # randomized prior networks (Osband et al.): each head predicts
+        # trainable(x) + scale * frozen_prior(x), giving persistent epistemic
+        # diversity that per-round bootstrap resampling cannot provide.
+        # 0 disables the priors.
+        "ensemble_prior_scale": 1.0,
+        # "episode_starts": fit only on episode-start observations with the
+        # episode return as target -- the literal V(s0, g) DISCOVER queries,
+        # avoiding the mid-episode/reset-state distribution shift.
+        # "all": legacy, fit on all rollout timesteps.
+        "fit_on": "episode_starts",
+        # ring buffer of past fit samples (0: current rollout only)
         "fit_replay_size": 20000,
-        "min_fit_samples": 400,
+        "min_fit_samples": 64,
         "device": "cpu",
         # --- candidate goals ---
         "n_candidates": 500,
@@ -86,20 +96,37 @@ class DiscoverConfig:
         "standardize_scores": True,
         "w_achievability_init": 0.5,
         "w_novelty": 1.0,
-        # --- online adaptation (DISCOVER Eq. 4 / adapt_ucb_params "simple") ---
+        # --- online adaptation of the achievability weight ---
+        # "continuous": paper form (DISCOVER Eq. 4), w += lr * (p* - p_t),
+        # no deadband, so the weight regulates instead of railing at the cap.
+        # "deadband": legacy variant mirroring the official implementation
+        # (adapt_ucb_params "simple": +-deadband around p*, fixed step).
         "adapt_achievability": True,
+        "adaptation_mode": "continuous",
+        "adaptation_lr": 0.01,
         "target_achievement_rate": 0.5,
         "adaptation_deadband": 0.2,
         "adaptation_rate": 100,
         "achievement_window": 20,
-        # commanded goal counts as achieved if min distance ball/target <= eps
+        # commanded goal counts as achieved if the achievement distance <= eps
         "achievement_eps": 0.7,
         # additional thresholds tracked for logging/calibration only
-        "achievement_eps_log": [0.3, 0.5, 0.7, 1.0],
+        "achievement_eps_log": [0.3, 0.5, 0.7, 1.0, 1.3],
+        # "landing": achieved only if the main ball's projected landing is on
+        # the goal region within eps of the commanded goal (recommended; this
+        # is the quantity that predicts offline GCSL performance).
+        # "min_distance": legacy slab-crossing distance, which cannot
+        # distinguish an on-table landing from an overshoot past the table.
+        "achievement_metric": "landing",
         # if true, only ball-hit episodes enter the achievement statistics
         # (whiffed balls say nothing about the goal choice). false = faithful
         # to the official DISCOVER implementation, which counts all episodes.
         "achievement_hit_episodes_only": False,
+        # "all_balls": the achieved-goal pool is fed by the projected
+        # landings of ALL hit balls (main + extras), matching DISCOVER's
+        # G_ach sampled from the full replay buffer (~20x faster pool
+        # growth). "main_ball": legacy, main ball's closest-approach point.
+        "pool_source": "all_balls",
         # --- warmup: uniform goal sampling (= existing baseline behavior) ---
         "warmup_episodes": 50,
         "seed": None,
@@ -152,10 +179,12 @@ class ValueEnsemble(nn.Module):
         use_layer_norm=False,
         hidden_layers_bias=True,
         lr=3e-4,
+        prior_scale=1.0,
         device="cpu",
     ):
         super().__init__()
         self.device = torch.device(device)
+        self.prior_scale = prior_scale
         self.heads = nn.ModuleList(
             [
                 self._make_head(
@@ -164,10 +193,38 @@ class ValueEnsemble(nn.Module):
                 for _ in range(ensemble_size)
             ]
         )
+        # frozen randomized prior networks (Osband et al., 2018): persistent
+        # per-head diversity independent of the (shared) training data
+        if prior_scale > 0:
+            self.priors = nn.ModuleList(
+                [
+                    self._make_head(
+                        obs_dim,
+                        num_hidden,
+                        num_layers,
+                        use_layer_norm,
+                        hidden_layers_bias,
+                    )
+                    for _ in range(ensemble_size)
+                ]
+            )
+            for prior in self.priors:
+                for param in prior.parameters():
+                    param.requires_grad_(False)
+        else:
+            self.priors = None
         self.to(self.device)
         self.optimizers = [
             torch.optim.Adam(head.parameters(), lr=lr) for head in self.heads
         ]
+
+    def _head_output(self, index, obs_t):
+        out = self.heads[index](obs_t).squeeze(-1)
+        if self.priors is not None:
+            with torch.no_grad():
+                prior_out = self.priors[index](obs_t).squeeze(-1)
+            out = out + self.prior_scale * prior_out
+        return out
 
     @staticmethod
     def _make_head(obs_dim, num_hidden, num_layers, use_layer_norm, hidden_layers_bias):
@@ -186,20 +243,26 @@ class ValueEnsemble(nn.Module):
     def predict(self, obs):
         """Returns (mean, std) over ensemble heads, both shape (n,)."""
         obs_t = torch.as_tensor(obs, dtype=torch.float32, device=self.device)
-        values = torch.stack([head(obs_t).squeeze(-1) for head in self.heads])
+        values = torch.stack(
+            [self._head_output(i, obs_t) for i in range(len(self.heads))]
+        )
         return (
             values.mean(dim=0).cpu().numpy(),
             values.std(dim=0).cpu().numpy(),
         )
 
     def fit(self, obs, targets, epochs, batch_size, bootstrap_fraction, rng):
-        """One fitting round on (obs, targets); returns mean MSE loss."""
+        """One fitting round on (obs, targets); returns mean MSE loss.
+
+        With priors enabled, each trainable head learns the residual
+        target - prior, so heads keep disagreeing where data is scarce.
+        """
         obs_t = torch.as_tensor(obs, dtype=torch.float32, device=self.device)
         targets_t = torch.as_tensor(targets, dtype=torch.float32, device=self.device)
         n = len(obs_t)
         n_boot = max(1, int(n * bootstrap_fraction))
         losses = []
-        for head, optimizer in zip(self.heads, self.optimizers):
+        for i, (head, optimizer) in enumerate(zip(self.heads, self.optimizers)):
             boot_idx = torch.as_tensor(
                 rng.choice(n, size=n_boot, replace=True), device=self.device
             )
@@ -208,6 +271,10 @@ class ValueEnsemble(nn.Module):
                 for start in range(0, n_boot, batch_size):
                     idx = perm[start : start + batch_size]
                     pred = head(obs_t[idx]).squeeze(-1)
+                    if self.priors is not None:
+                        with torch.no_grad():
+                            prior_out = self.priors[i](obs_t[idx]).squeeze(-1)
+                        pred = pred + self.prior_scale * prior_out
                     loss = nn.functional.mse_loss(pred, targets_t[idx])
                     optimizer.zero_grad()
                     loss.backward()
@@ -291,6 +358,7 @@ class DiscoverGoalSelector:
                 use_layer_norm=use_layer_norm,
                 hidden_layers_bias=hidden_layers_bias,
                 lr=self.config.ensemble_lr,
+                prior_scale=self.config.ensemble_prior_scale,
                 device=self.config.device,
             )
         return self.ensemble
@@ -401,29 +469,62 @@ class DiscoverGoalSelector:
 
     # ------------------------------------------------------------------
     # outcome reporting and adaptation
+    def _in_goal_region(self, position, margin=0.1):
+        (x_min, x_max), (y_min, y_max) = self.goal_bounds
+        return (
+            x_min - margin <= position[0] <= x_max + margin
+            and y_min - margin <= position[1] <= y_max + margin
+        )
+
     def report_outcome(
-        self, commanded_goal, min_distance_ball_target, achieved_position=None
+        self, commanded_goal, ball_hit, landing_position, min_distance_ball_target=None
     ):
-        """Report the previous episode's outcome.
+        """Report the previous episode's main-ball outcome.
 
         :param commanded_goal: goal that was commanded for the episode
-        :param min_distance_ball_target: minimum distance between ball
-            (post contact) and commanded goal; None if the ball was not hit
-        :param achieved_position: ball position at that minimum distance
-            (proxy for the achieved landing), None if not available
+        :param ball_hit: whether the racket made contact with the main ball
+        :param landing_position: projected landing point of the main ball
+            (ball_landing_data), None if unavailable
+        :param min_distance_ball_target: legacy slab-crossing distance to the
+            commanded goal (may be +inf if the ball never crossed the table
+            plane near target height); used for achievement_metric
+            "min_distance" only
+
+        Note: this only tracks achievement and drives the adaptation. Pool
+        feeding is separate (``report_landings``).
         """
         self.n_outcomes += 1
-        hit = min_distance_ball_target is not None
-        distance = float(min_distance_ball_target) if hit else float("inf")
-        if hit or not self.config.achievement_hit_episodes_only:
+
+        distance = float("inf")
+        if ball_hit:
+            if self.config.achievement_metric == "landing":
+                if landing_position is not None and self._in_goal_region(
+                    landing_position
+                ):
+                    distance = float(
+                        np.hypot(
+                            landing_position[0] - commanded_goal[0],
+                            landing_position[1] - commanded_goal[1],
+                        )
+                    )
+            else:  # "min_distance" (legacy)
+                if min_distance_ball_target is not None and np.isfinite(
+                    min_distance_ball_target
+                ):
+                    distance = float(min_distance_ball_target)
+
+        if ball_hit or not self.config.achievement_hit_episodes_only:
             for eps, window in self._recent_by_eps.items():
                 window.append(distance <= eps)
 
-        if hit and achieved_position is not None:
-            self._add_to_pool(np.asarray(achieved_position, dtype=float))
-
         if self.config.adapt_achievability:
             self._adapt()
+
+    def report_landings(self, positions):
+        """Feed achieved landings (any balls, hit episodes only) to the pool."""
+        for position in positions:
+            if position is not None:
+                self._add_to_pool(np.asarray(position, dtype=float))
 
     def _add_to_pool(self, position):
         # only positions on (or very near) the goal region qualify as
@@ -453,12 +554,19 @@ class DiscoverGoalSelector:
         if len(window) < window.maxlen:
             return
         rate = float(np.mean(window))
-        # cf. adapt_ucb_params ("simple"): achieving too many -> less weight on
-        # achievability (harder goals); too few -> more weight (easier goals)
-        if rate > cfg.target_achievement_rate + cfg.adaptation_deadband:
-            self.w_achievability -= self._w_step
-        elif rate < cfg.target_achievement_rate - cfg.adaptation_deadband:
-            self.w_achievability += self._w_step
+        if cfg.adaptation_mode == "continuous":
+            # paper form (DISCOVER Eq. 4): under-achieving -> more weight on
+            # achievability (easier goals), over-achieving -> less. No
+            # deadband, so the weight regulates around the target instead of
+            # railing at the cap after an early low-achievement phase.
+            self.w_achievability += cfg.adaptation_lr * (
+                cfg.target_achievement_rate - rate
+            )
+        else:  # "deadband" (legacy, mirrors official adapt_ucb_params "simple")
+            if rate > cfg.target_achievement_rate + cfg.adaptation_deadband:
+                self.w_achievability -= self._w_step
+            elif rate < cfg.target_achievement_rate - cfg.adaptation_deadband:
+                self.w_achievability += self._w_step
         self.w_achievability = float(
             np.clip(self.w_achievability, 0.0, 2.0 * self._w_mid)
         )
@@ -503,6 +611,15 @@ class DiscoverCallback(BaseCallback):
         buffer = self.model.rollout_buffer
         obs = np.asarray(buffer.observations).reshape(-1, self.selector.obs_dim)
         returns = np.asarray(buffer.returns).reshape(-1)
+
+        if self.selector.config.fit_on == "episode_starts":
+            # fit only on (s0, episode return) pairs: the literal V(s0, g)
+            # that goal selection queries, avoiding the mid-episode/reset
+            # distribution shift
+            starts = np.asarray(buffer.episode_starts).reshape(-1).astype(bool)
+            if starts.any():
+                obs = obs[starts]
+                returns = returns[starts]
 
         replay_size = self.selector.config.fit_replay_size
         if replay_size > 0:

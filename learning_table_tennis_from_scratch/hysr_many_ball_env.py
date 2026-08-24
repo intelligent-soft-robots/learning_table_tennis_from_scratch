@@ -137,6 +137,7 @@ class HysrManyBallEnv(gym.Env):
 
         self._hysr = HysrOneBall(hysr_one_ball_config, reward_function)
         self._unsuccessful_episode_counter = 0  # Counter for unsuccessful episodes
+        self.n_dumped_files = 0  # episode files written for offline training
         self._hit_ball_indices = set()  # Track all hit ball indices that reached other side
         self._hit_indices_file = os.path.join(self._save_folder_traj, "hit_ball_indices.json") if self._save_folder_traj else None
         self._load_hit_indices()
@@ -558,6 +559,7 @@ class HysrManyBallEnv(gym.Env):
                         self._hysr._ball_status.min_distance_ball_target or self.normalization_constant,
                         self.normalization_constant))
                 self._logger.record("max_ball_velocity", self._hysr._ball_status.max_ball_velocity)
+                self._logger.record("n_dumped_files", self.n_dumped_files)
                 # self._logger.dump()
             self.n_eps += 1
 
@@ -650,6 +652,7 @@ class HysrManyBallEnv(gym.Env):
             dict_data_full["fk"] = [x[6] for x in data_buffer]
             dict_data_full["random_traj_index"] = self._hysr._ball_behavior._random_traj_index
             json.dump(dict_data_full, json_data)
+        self.n_dumped_files += 1
 
     def get_hit_indices_stats(self):
         """Get statistics about hit ball indices."""

@@ -19,14 +19,14 @@ import typing
 from pathlib import Path, PurePath
 
 import numpy as np
-import cluster
+import cluster_utils as cluster
 import smart_settings.param_classes
 
 from utils import RestartInfo
 
 
 # Max. number of attempts.  If it fails this many times, do not try again.
-DEFAULT_MAX_ATTEMPTS = 3
+DEFAULT_MAX_ATTEMPTS = 10
 DEFAULT_LEARNING_RUNS_PER_JOB = 3
 DEFAULT_TRAINING_ITERATIONS = 1
 RESTART_INFO_FILENAME = "restarts.json"
@@ -121,6 +121,7 @@ def prepare_config_file(
 
     # check if all provided parameter updates correspond to existing parameters
     for param in parameter_updates:
+
         # if parameter name ends with ":#", this indicates the #-th index of a parameter
         # whose value is a list
         m = re.match(r"(.*):([0-9])+$", param)
@@ -198,6 +199,9 @@ def setup_config(working_dir: Path, run_data_dir: Path, params: dict) -> Path:
     """
     logger = get_logger()
 
+    with open(params["config_templates"], "r") as f:
+        config_file_templates = json.load(f)
+
     base_config = {
         "reward_config": str(run_data_dir / "./config/reward_config.json"),
         "hysr_config": str(run_data_dir / "./config/hysr_config.json"),
@@ -206,6 +210,14 @@ def setup_config(working_dir: Path, run_data_dir: Path, params: dict) -> Path:
         "rl_common_config": str(run_data_dir / "./config/rl_common_config.json"),
     }
 
+    # optional config files: only used if listed in the config templates file
+    # (e.g. "discover_config" for HysrDiscoverEnv goal selection)
+    for optional_name in ("discover_config",):
+        if optional_name in config_file_templates:
+            base_config[optional_name] = str(
+                run_data_dir / "./config/{}.json".format(optional_name)
+            )
+
     # raise error if there is any unexpected value in the config
     valid_param_keys = list(base_config.keys()) + ["config_templates"]
     for key in params.keys():
@@ -213,9 +225,6 @@ def setup_config(working_dir: Path, run_data_dir: Path, params: dict) -> Path:
             raise KeyError("Unexpected key '{}' in params".format(key))
 
     main_config_file = working_dir / "config.json"
-
-    with open(params["config_templates"], "r") as f:
-        config_file_templates = json.load(f)
 
     config_dir = run_data_dir / "config"
     config_dir.mkdir(exist_ok=True, parents=True)
@@ -334,10 +343,15 @@ class Runner:
         Raises:
             subprocess.CalledProcessError: if one of the processes fails.
         """
+
         logger = get_logger()
+
+        print("start learning")
 
         self.start_backend()
         self.start_learning()
+
+        print("started..")
 
         # monitor processes
         self.monitor_processes()
@@ -353,10 +367,16 @@ class Runner:
 
 
 def main() -> int:
+
     logger = get_logger()
 
     # get parameters (make mutable so defaults can easily be set later)
-    params = cluster.read_params_from_cmdline(make_immutable=False)
+    print(sys.argv)
+    print(len(sys.argv))
+    cmd_line = sys.argv[-2:]
+    print(cmd_line)
+    print(len(cmd_line))
+    params = cluster.read_params_from_cmdline(cmd_line=cmd_line,make_immutable=False)
 
     working_dir = Path(params.working_dir)
     restart_info_file = working_dir / RESTART_INFO_FILENAME
@@ -371,6 +391,10 @@ def main() -> int:
 
     run_data_dir = working_dir / f"run_{run_id}"
     training_log_dir = run_data_dir / "training_logs"
+    model_save_path = os.fspath(run_data_dir / "model")
+
+    base_traj_folder = params["config"]["hysr_config"]["save_folder_traj"]
+    params["config"]["hysr_config"]["save_folder_traj"] = base_traj_folder.format(run_id=f"{working_dir.name}_{restart_info.finished_trainigs}.{restart_info.training_continuation_counter}-{restart_info.failed_attempts}")
 
     # Overwrite some values from the config templates to disable any graphical
     # interfaces and to save the model in working_dir (unless a different value
@@ -383,7 +407,7 @@ def main() -> int:
             },
             "rl_config": {
                 "load_path": restart_info.unfinished_model,
-                "save_path": os.fspath(working_dir / "model"),
+                "save_path": model_save_path,
                 "log_path": os.fspath(training_log_dir),
             },
         },
@@ -419,7 +443,8 @@ def main() -> int:
         restart_info.mark_attempt_failed()
 
     finally:
-        runner.stop_backend()
+        logger.info("Not calling hysr_stop explicitly...")
+        # runner.stop_backend()
 
     # store the restart info
     restart_info.save()

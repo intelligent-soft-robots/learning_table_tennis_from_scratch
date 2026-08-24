@@ -127,12 +127,39 @@ class HysrDiscoverEnv(HysrManyBallEnv):
         self._last_reported_episode = self.n_eps
 
         ball_status = self._hysr._ball_status
-        min_distance = ball_status.min_distance_ball_target
-        achieved_position = ball_status.min_position_ball_target
+        landing_data = getattr(self._hysr, "ball_landing_data", {}) or {}
+
+        # main ball: achievement tracking + adaptation.
+        # BallStatus semantics: min_distance_ball_racket is None iff the
+        # racket made contact; min_distance_ball_target is +inf (not None)
+        # when the ball never crossed the table plane near target height.
+        main = landing_data.get(0, {})
+        main_hit = ball_status.min_distance_ball_racket is None
+        main_landing = main.get("landing_position")
         self.discover_selector.report_outcome(
             np.asarray(ball_status.target_position, dtype=float),
-            min_distance,
-            np.asarray(achieved_position, dtype=float)
-            if achieved_position is not None
+            ball_hit=main_hit,
+            landing_position=np.asarray(main_landing, dtype=float)
+            if main_landing is not None
             else None,
+            min_distance_ball_target=ball_status.min_distance_ball_target,
         )
+
+        # achieved-goal pool feeding
+        if self.discover_selector.config.pool_source == "all_balls":
+            # projected landings of every ball whose episode involved a
+            # racket hit (min_distance_ball_racket None <=> contact);
+            # unhit replayed balls also get a landing projection and must
+            # be excluded (they are incoming-trajectory landings)
+            landings = [
+                data["landing_position"]
+                for data in landing_data.values()
+                if data.get("landing_position") is not None
+                and data.get("min_distance_ball_racket") is None
+            ]
+            self.discover_selector.report_landings(landings)
+        else:  # "main_ball" (legacy): closest-approach point of the main ball
+            if main_hit and ball_status.min_position_ball_target is not None:
+                self.discover_selector.report_landings(
+                    [ball_status.min_position_ball_target]
+                )
