@@ -840,7 +840,7 @@ def evaluate_agent(env, agent, random_ball=True, random_goal=True, ball_id=0, go
     all_rewards = []
     scenarios = []
     for _ in range(n_runs):
-        ball_id = np.random.randint(1, 106) if random_ball else ball_id
+        ball_id = np.random.randint(0, env.get_num_ball_trajectories()) if random_ball else ball_id
         # sample goal randomly on the opponent side
         goal = [tc[0] - hts[0] + np.random.rand() * 2 * hts[0], 
                 tc[1] - hts[1] + np.random.rand() * 2 * hts[1], 
@@ -865,7 +865,7 @@ def evaluate_agent(env, agent, random_ball=True, random_goal=True, ball_id=0, go
     return {'distances': all_distances, 'rewards': all_rewards, 'success_rates': success_rates, 'hit_rates': hit_rates}
 
 def set_env_to_random_ball_and_random_goal(env):
-    ball_id = np.random.randint(1, 106)
+    ball_id = np.random.randint(0, env.get_num_ball_trajectories())
     goal = [tc[0] - hts[0] + np.random.rand() * 2 * hts[0], tc[1] - hts[1] + np.random.rand() * 2 * hts[1], tc[2]]
     env.set_ball_id(ball_id)
     env.set_goal(goal)
@@ -967,7 +967,7 @@ def save_plot_formats(fig, base_path, prefix='', formats=[]):
 def plot_trajectories(env, agent, ball_id=-1, step=0, goal=center_goal, dataset_traj_idx=None, buffer=None, experiment_name='', output_dir=None, plot_diff_also=False, save_json=False, k_step_noise = 0, noise_k_step = 0):
     colors = setup_plot_style()
     if ball_id == -1 or ball_id is None:
-        ball_id = np.random.randint(1, 106)
+        ball_id = np.random.randint(0, env.get_num_ball_trajectories())
     env.set_ball_id(ball_id)
     if goal is None:
         goal = center_goal

@@ -302,6 +302,9 @@ class HysrGoalEnv(GoalEnv):
         return self._goal_boxes.get_normalized_values()
 
 
+    def get_num_ball_trajectories(self):
+        return self._hysr.get_num_ball_trajectories()
+
     def set_ball_id(self, ball_id, extra_balls=False):
         self._hysr.set_ball_id(ball_id, extra_balls)
 

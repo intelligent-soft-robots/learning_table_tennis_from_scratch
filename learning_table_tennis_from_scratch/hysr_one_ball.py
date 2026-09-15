@@ -1089,6 +1089,9 @@ class HysrOneBall:
         else:
             return self._target_position
 
+    def get_num_ball_trajectories(self):
+        return self._trajectory_reader.size()
+
     def set_ball_id(self, ball_id, extra_balls=False):
         self.set_ball_behavior(index=ball_id)
         if extra_balls:
